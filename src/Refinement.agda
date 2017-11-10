@@ -40,8 +40,7 @@ module Maybe where
 
   _⊑_ : {a b : Set} ->
     (f g : a -> Maybe b) -> Set₁
-  _⊑_ {a = a} {b = b} f g =
-    (P : b -> Set) -> (x : a) -> wp f P x -> wp g P x
+  f ⊑ g = ∀ P x -> wp f P x -> wp g P x
 
   LT : ∀ {a b} (f g : a -> Maybe b) -> Set
   LT {a} {b} f g = (x : a) ->

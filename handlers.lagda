@@ -18,7 +18,10 @@
 \email{w.s.swierstra@@uu.nl}
 
 \begin{abstract}
-Insert abstract here.
+  Pure functions are relatively easy to verify, yet it is much harder
+  to reason about programs using effects. In this paper, we present a
+  general framework based on predicate transformer semantics for
+  specifying and calculating correct effectful programs.
 \end{abstract}
 
 %include ccs.tex
@@ -28,57 +31,73 @@ Insert abstract here.
 \section{Introduction}
 \label{sec:intro}
 
-Pure functional programs are good for reasoning. But real programs use
-effects. Recently, algebraic effects have arisen as a way to embed
-effectful operations in a purely functional language.
+One of the virtues of pure functional programming is that programs are
+relatively easy to verify. Referential transparency---the ability to
+freely substitute equals for equals---enables us to employ equational
+reasoning to prove two expressions equal~\cite{wadler-critique}. This
+has resulted in a rich field of program calculation in the
+Bird-Meertens style~\citep*{algebra-of-programming, pearls}.
+%\todo{more citations}.
 
-How can we reason about programs with algebraic effects? What is the
-specification of a program written using algebraic effects?  How can
-we show that a program satisfies a specification? Or indeed derive a
-program from its specification?
+Many programs, however, are \emph{not} pure, but instead rely on a
+variety of effects, such as mutable state, exceptions,
+non-termination, or non-determinism. Unfortunately, it is not clear
+how to reason about impure programs in a modular fashion, when we can
+no longer exploit referential transparency to reason about
+subexpressions irregardless of their context.
 
-This paper attempts to answer these questions by presenting a general
-framework for deriving a verified effectful program from its
-specification. The key techniques developed herein are:
+In recent years, \emph{algebraic effects} have emerged as a technique
+to embed effectful operations in a purely functional
+language. Algebraic effects clearly separate the syntax of effectful
+operations and their semantics, described by \emph{effect
+  handlers}. In contrast to existing approaches such as monad
+transformers, different effects may be processed in any given order
+using a series of handlers.
+
+This paper explores how we to reason about programs written using
+algebraic effects.
+It presents a general framework for deriving a verified effectful
+program from its specification. We will sketch the key techniques
+developed herein, before illustrating them with numerous examples:
+
+% What is the specification of a program written using algebraic
+% effects?  How can we show that a program satisfies a specification? Or
+% indeed derive a program from its specification?
+
 
 \begin{itemize}
-\item We show how the syntax of effects may be given by a free monad
-  (arising from command-response pair or interaction structure). The
-  semantics are given by a \emph{handler} -- or some form of
-  interpretation of these effects. Typically, such handlers run the
-  associated computation and produce some result. We show how we can
-  also describe the behaviour of a program more abstractly by writing
-  handlers that compute a \emph{proposition}. By proving a soundness
-  result, we can relate this proposition is to a given handler. These
-  propositional handlers show how to lift any predicate on the result
+\item We show how the syntax of effects may be given by a free
+  monad. The semantics of these effects are given by a \emph{handler},
+  that assigns meaning to the syntactic operations exposed by the free
+  monad. Such handlers typically execute the effects to produce some
+  \emph{result value}. We show how we can also describe the behaviour
+  of a program more abstractly by writing handlers that compute a
+  \emph{proposition}, capturing the expected behaviour without having
+  to execute the corresponding effects. These \emph{propositional
+    handlers} may then be used to lift predicates on the result values
   of an effectful computation to a predicate on the entire
   computation.
 \item Next we show how to assign \emph{predicate transformer
-    semantics} to (Kleisli) arrows. Together with the propositional
-  handlers, this gives us the machinery to specify the desired outcome
-  of an effectful computation and assign it a weakest precondition
-  semantics.
+    semantics} to computations arising from Kleisli arrows. Together
+  with a propositional handler, this gives us the machinery to specify
+  the desired outcome of an effectful computation and assign it a
+  weakest precondition semantics.
 \item These weakest precondition semantics give rise to a notion of
-  refinement on computations using algebraic effects. The resulting
-  refinements that arise in this fashion are familiar for a wide range
-  of example effects studied in this paper. This provides further
-  evidence that the techniques presented here provide a unified
-  framework for specifying and reasoning about impure computations.
+  \emph{refinement} on computations using algebraic effects. Using
+  such refinements, we can derive a correct effectful program from its
+  specification.
 \end{itemize}
 
-The examples, theorems and proofs have all been formally verified in
-the dependently typed programming language Agda\todo{citation}. The
-sources associated withour our development are available\todo{here}.
+We have applied these techniques to a range of example effects and
+used the corresponding refinement relation to \todo{do something
+  interesting}.
 
-% \item Where free monad describes the \emph{syntax} of operations,
-%   their meaning is given by a separate interpretation or
-%   \emph{handler}. To talk about the correctness of a program written
-%   using free monads therefore must always be with respect to a certain
-%   handler. To do so, we show how to compute propositional values that
-%   are sound with respect to a given handler. Using such handlers, we
-%   can define traditional \emph{predicate transformer semantics} for a
-%   variety of algebraic effects.
-  
+The examples, theorems and proofs have all been formally verified in
+the dependently typed programming language Agda~\cite{agda}, but they
+techniques translate readily to other proof assistants based on
+dependent types such as Idris or Coq~\todo{citations}. The sources
+associated with our our development are available~\todo{here}.
+
 % \item Using such predicate transformer semantics, we can define a
 %   generic notion of \emph{program refinement}, allowing the
 %   calculation of (effectful) programs from their specification. The
@@ -115,8 +134,8 @@ module Free where
 %endif
 
 We begin by defining a data type for free monads in Agda in the style
-of Hancock and Setzer:
-
+of Hancock and Setzer~\citeyear{hancock-setzer-I,
+  hancock-setzer-II}:
 \begin{code}
   data Free (C : Set) (R : C -> Set) (a : Set) : Set where
     Pure : a -> Free C R a
@@ -132,8 +151,8 @@ after receiving a response of type |R c|. It is straightforward to
 show that the |Free| data type is indeed a monad:
 \begin{code}
   fmap : (Forall (C R a b)) (a -> b) -> Free C R a -> Free C R b
-  fmap f (Pure x) = Pure (f x)
-  fmap f (Step c k) = Step c (\ r -> fmap f (k r)) 
+  fmap f (Pure x)    = Pure (f x)
+  fmap f (Step c k)  = Step c (\ r -> fmap f (k r)) 
 
   return : (Forall (C R a)) a -> Free C R a
   return = Pure
@@ -191,7 +210,7 @@ computations of type |Maybe a|:
 \end{code}
 Alternatively, we could
 have defined |lift| using our |fold| function, mapping |Nothing| to
-bottom:
+the empty type:
 \begin{spec}
   lift = fold (\ { Nothing x → ⊥ })
 \end{spec}
@@ -236,21 +255,21 @@ How can we reason about our evaluator?  Or specify its intended
 behaviour? Using our |lift| function, we can lift any predicate on
 |Nat| to a predicate on expressions as follows:
 \begin{code}
-  wp : (Nat -> Set) -> (Expr -> Set)
-  wp P = \ e -> lift P ⟦ e ⟧
+  wpEval : (Nat -> Set) -> (Expr -> Set)
+  wpEval P = \ e -> lift P ⟦ e ⟧
 \end{code}
-As the name suggests, |wp| computes the \emph{weakest precondition} on
-the input expression |e| that must hold to ensure that the result of
-evaluating |e| satisfies |lift P|.
+As the name suggests, |wpEval| computes the \emph{weakest
+  precondition} on the input expression |e| that must hold to ensure
+that the result of evaluating |e| satisfies |lift P|.
 
-For example, we specify the domain of our semantics |⟦_⟧| by
+For example, we specify the domain of evaluation function by
 instantiating |P| to be the trivial predicate:
 \begin{code}
   dom : Expr -> Set
-  dom = wp (\ _ -> top)
+  dom = wpEval (\ _ -> top)
 \end{code}
 
-Using our |dom| predicate, it is easy to check that:
+Using this |dom| predicate, it is easy to check that:
 
 \begin{code}
   test1 : dom (Val 3) == top
@@ -266,9 +285,12 @@ Using our |dom| predicate, it is easy to check that:
 
 \paragraph{Soundness}
 
-Our |lift| function computes a predicate on computations of type
-|Maybe a| -- how can we know that this predicate is well-behaved with
-respect to the intended semantics of our monad?
+The |lift| function computes a predicate on computations of type
+|Maybe a|. Yet how can we know that this predicate is meaningful in
+any way? The type of the |lift| function alone does not guarantee
+anything about its behaviour. To relate the predicate being computed,
+we therefore need to show that the our propositional handler is
+\emph{sound}.
 
 Consider the usual `handler' for |Maybe| that returns a default
 value when encountering a failure:
@@ -284,7 +306,34 @@ handler amounts to proving:
   soundness : (Forall(a)) (d : a) (P : a -> Set) (m : Maybe a) -> lift P m -> P (run d m)
 \end{spec}
 The proof of this result follows trivially after pattern matching on
-|m|.
+the monadic computation |m|. Of course, there may be alternative
+definitions of |lift| that are sound with respect to some other
+handler---but this depends on the intended semantics of the algebraic
+effects involved. The crucial observation, however, is that soundness
+of propositional handlers are always relative to another semantics.
+
+
+\paragraph{Refinement}
+
+We can generalize our |wpEval| function to work over \emph{any}
+Kleisli arrow in the |Maybe| monad:
+\begin{code}
+  wp : (f : a -> Maybe b) -> (b -> Set) -> (a -> Set)
+  wp f P x = lift P (f x)
+\end{code}
+This gives a general \emph{weakest precondition semantics} to such
+computations.
+
+Using this notion of |wp|, we can define the notion of refinement:
+
+\begin{code}
+  _⊑_ : (f g : a -> Maybe b) -> Set₁
+  f ⊑ g = ∀ P x -> wp f P x -> wp g P x
+\end{code}
+
+We can furthermore show that this notion of refinement is familiar: |f
+⊑ g| holds if and only if |f x == g x| for all points |x elem
+dom(f)|.
 
 \paragraph{Intermezzo: types, specifications, and predicate transformers}
 
@@ -617,7 +666,7 @@ of our |quickSort| function
 \item How can we reason about compound computations built with |>>=|
   and |>>|?  There must be some 'law of consequence' that we can
   derive for specific handlers/effects -- is there a more general
-  form?
+  form? What about loops/if?
 
 \item  What is a specification of a program with effects? Can we define
   generalized refinement rules?
@@ -625,8 +674,21 @@ of our |quickSort| function
 \item Relation with equations/equational part of algebraic effects?
 
 \item Connection with relational specifications
+
+\item wp (s,q) or wp (s,p) implies wp(s,q or p) -- but not the other
+  way around. The implication in the other direction only holds when
+  the program is deterministic.
+
   
 \end{itemize}
+
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Related work}
+\label{sec:related-work}
+
+Just do it
 
 
 \begin{acks}
@@ -634,7 +696,8 @@ I would like to thank my fans.
 \end{acks}
 
 \nocite{*}
-\bibliography{handlers.bib}
+\DeclareRobustCommand{\tussenvoegsel}[2]{#2}
+\bibliography{handlers}
 
 
 \end{document}

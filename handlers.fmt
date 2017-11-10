@@ -10,6 +10,8 @@
 %format top = "\top"
 %format refines = "\sqsubseteq"
 %format subset = "\subseteq"
+%format elem = "\in"
+%format wpEval = wp "_{\llbracket\_\rrbracket}"
 %else
 %format (Forall (a)) = "forall { " a " } -> "
 %format (implicit(a)) = "{" a "} ->"

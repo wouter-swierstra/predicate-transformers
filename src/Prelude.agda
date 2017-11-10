@@ -97,6 +97,9 @@ data ⊤ : Set where
 
 data ⊥ : Set where
 
+magic : ∀ {l} {a : Set l} -> ⊥ -> a
+magic ()
+
 So : Bool -> Set
 So True = ⊤
 So False = ⊥

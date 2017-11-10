@@ -25,5 +25,17 @@
 \bibliographystyle{ACM-Reference-Format}
 \citestyle{acmauthoryear}
 
-\newcommand{\todo}[1]{\textbf{TODO: #1}}
+\usepackage{xcolor}
+\newcommand\todo[1]{\textcolor{red}{#1}}
+
+%Hack to ensure tussenvoegsels are capitalized correctly in bibtex
+\DeclareRobustCommand{\tussenvoegsel}[2]{#1}
+
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: "handlers.lagda"
+%%% TeX-command-default: "lagda2pdf"
+%%% End: 
+
 
