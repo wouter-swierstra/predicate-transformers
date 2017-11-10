@@ -3,6 +3,25 @@ module Logic where
 open import Prelude
 open import Level
 
+module Relations where
+
+  _⊆_ : {l : Level} {a b : Set l} ->
+    (R1 R2 : a -> b -> Set l) -> Set l
+  _⊆_ {a = a} {b = b} R1 R2 =
+    (x : a) -> (y : b) -> R1 x y -> R2 x y 
+
+  wp : {l : Level} {a b : Set l} -> (R : a -> b -> Set l) -> (b -> Set l) -> (a -> Set l)
+  wp {b = b} R Q = λ x → Sigma b (\y -> R x y)
+
+  isExec : {l : Level} {a b : Set l} -> (R : a -> b -> Set l) -> Set l
+  isExec {a = a} {b = b} R = (x : a) -> Sigma b (\y -> R x y)
+
+  extract : {l : Level} {a b : Set l} -> (R : a -> b -> Set l) -> isExec R -> a -> b
+  extract R p x = Sigma.fst (p x)
+
+  _⊑_ : {l : Level} -> {a b : Set l} -> (R R' : a -> b -> Set l) -> Set (suc l)
+  _⊑_ {l} {a = a} {b = b} R R' = (P : b -> Set l) -> (x : a) -> wp R P x -> wp R' P x
+  
 module Free where
 
   data Free (C : Set) (R : C -> Set) (a : Set) : Set where
@@ -27,8 +46,8 @@ module Free where
   fold alg pure (Pure x) = pure x
   fold alg pure (Step c k) = alg c (\r -> fold alg pure (k r))
 
-  wp : ∀ {a : Set} {b C R} -> (((c : C) -> (R c -> Set) -> Set)) -> (a -> Free C R b) -> (a -> b -> Set) -> (a -> Set)
-  wp alg f pre x = fold alg (pre x) (f x)
+--  wp : ∀ {a : Set} {b C R} -> (((c : C) -> (R c -> Set) -> Set)) -> (a -> Free C R b) -> (a -> b -> Set) -> (a -> Set)
+--  wp alg f pre x = fold alg (pre x) (f x)
 
 
 module Maybe where
@@ -64,8 +83,8 @@ module Maybe where
   wpMaybe : ∀ {a b : Set} -> (a -> Maybe b) -> (a -> b -> Set) -> (a -> Set)
   wpMaybe f pre x = handle (pre x) (f x)
 
-  wpMaybe' : ∀ {a b : Set} -> (a -> Maybe b) -> (a -> b -> Set) -> (a -> Set)
-  wpMaybe' = wp ((λ { Nothing x → ⊥ }))
+--  wpMaybe' : ∀ {a b : Set} -> (a -> Maybe b) -> (a -> b -> Set) -> (a -> Set)
+--  wpMaybe' = wp ((λ { Nothing x → ⊥ }))
 
   -- Example
   divExample : Pair Nat Nat -> Maybe (Pair Nat Nat)
@@ -85,6 +104,45 @@ module Maybe where
   handleDefault : ∀ {a} -> (d : a) -> (P : a -> Set) -> Maybe a -> Set
   handleDefault d P (Pure x) = P x
   handleDefault d P (Step Nothing x) = P d
+
+  soundness : ∀ {a} -> (d : a) (P : a -> Set) (m : Maybe a) ->
+    handle P m -> P (default d m)
+  soundness d P (Pure x) x₁ = x₁
+  soundness d P (Step Nothing x) ()
+
+  completeness : ∀ {a} -> (d : a) (P : a -> Set) (m : Maybe a) ->
+    P (default d m) -> handle P m
+  completeness d P (Pure x) x₁ = x₁
+  completeness d P (Step Nothing x) x₁ = {!!}
+
+  -- Rule of consequence
+  >>-property : ∀ {a b} -> (c : Maybe a) -> (f : a -> Maybe b) ->
+    (P : a -> Set) -> (Q : b -> Set) ->
+      handle P c ->
+      ((x : a) -> P x -> handle Q (f x)) ->
+      handle Q (c >>= f)
+  >>-property (Pure x) f P Q p q = q x p
+  >>-property (Step Nothing x) f P Q () q
+
+  >>-property' : ∀ {a b} -> (c : Maybe a) -> (f : a -> Maybe b) ->
+    (P : a -> Set) -> (Q : a -> b -> Set) ->
+      handle P c ->
+      ((x : a) -> P x -> wpMaybe f Q x) ->
+      handle {!!} (c >>= f)
+  >>-property' c f P Q p q = {!!}
+
+  -- wp(s1;s2,R) = wp(s1,wp(s2,R))
+  >>-wp-left :  ∀ {a b} -> (c : Maybe a) -> (f : a -> Maybe b) ->
+    (Q : b -> Set) ->
+    handle Q (c >>= f) -> handle (\x -> handle Q (f x)) c
+  >>-wp-left (Pure x) f Q H = H
+  >>-wp-left (Step Nothing x) f Q H = H
+
+  >>-wp-right :  ∀ {a b} -> (c : Maybe a) -> (f : a -> Maybe b) ->
+    (Q : b -> Set) ->
+    handle (\x -> handle Q (f x)) c -> handle Q (c >>= f)
+  >>-wp-right (Pure x) f Q H = H
+  >>-wp-right (Step Nothing x) f Q H = H
 
   -- Another example
   fastProduct : List Nat -> Maybe Nat
@@ -118,24 +176,22 @@ module Maybe where
     Val : Nat -> Expr
     Div : Expr -> Expr -> Expr
 
-  Q = Pair Nat Nat
-
-  toQ : Nat -> Q
-  toQ n = (n , 1)
-
-  div : Q -> Q -> Maybe (Q)
-  div (fst , snd) (Zero , snd') = nothing
-  div (fst , snd) (Succ fst' , snd') =
-    return ((fst * snd') , (snd * (Succ fst')))
+  div : Nat -> Nat -> Maybe (Nat)
+  div n k = {!!}
   
-  ⟦_⟧ : Expr -> Maybe Q
-  ⟦ Val x ⟧ = return (x , (Succ Zero))
+  ⟦_⟧ : Expr -> Maybe Nat
+  ⟦ Val x ⟧ = return x
   ⟦ Div e e' ⟧ =  ⟦ e ⟧ >>= \x ->
                  ⟦ e' ⟧ >>= \y ->
                  div x y
 
-  mywp : (Q -> Set) -> (Expr -> Set)
+  mywp : (Nat -> Set) -> (Expr -> Set)
   mywp P e = handle P ⟦ e ⟧
+
+  atLeast3 : (e : Expr) -> handle (\n -> 1 < n) ⟦ e ⟧
+  atLeast3 (Val x) = {!!}
+  atLeast3 (Div e e₁) = {!!}
+
 
 module Nondeterminism where
 
@@ -187,8 +243,8 @@ module Nondeterminism where
   wpAny : ∀ {a b : Set} -> (a -> ND b) -> (a -> b -> Set) -> (a -> Set)
   wpAny f pre x = Any (pre x) (f x)
 
-  wpAll' :  ∀ {a b : Set} -> (a -> ND b) -> (a -> b -> Set) -> (a -> Set)
-  wpAll' = wp ((λ { Fail _ → ⊤ ; Choice k → Pair (k True) (k False) }))
+--  wpAll' :  ∀ {a b : Set} -> (a -> ND b) -> (a -> b -> Set) -> (a -> Set)
+--  wpAll' = wp ((λ { Fail _ → ⊤ ; Choice k → Pair (k True) (k False) }))
   
   -- Example
 
@@ -221,34 +277,125 @@ module State (s : Set) where
   handle (Step Get k) s = handle (k s) s
   handle (Step (Put x) k) s = handle (k tt) x 
 
-  handleAlg : ∀ {a} -> (c : C) -> (R c -> s -> Pair a s) -> s -> Pair a s
-  handleAlg Get alg = \s -> alg s s
-  handleAlg (Put x) alg = \_ -> alg tt x
-
-  -- Define a propositional handler using handle
-  wp0 : {a : Set} -> State a -> (s -> a -> s -> Set) -> (s -> Set)
-  wp0 c P s = let x , s' = handle c s in P s x s'
-
-  -- Define a propositional handler directly. This is harder to use:
-  --  we want a relational spec between result & input-output states.
-  wp' : {a : Set} -> (P : a -> Set) -> State a -> (s -> Set)
-  wp' P (Pure x) s = P x
-  wp' P (Step Get k) s = wp' P (k s) s
-  wp' P (Step (Put s') k) s = wp' P (k tt) s'
-
   -- Folding the definitions together
-  wp'' : {a : Set} -> (P : s -> a -> s -> Set) -> State a -> (s -> Set)
-  wp'' P (Pure x) s = P s x s
-  wp'' P (Step Get k) s = wp'' P (k s) s
-  wp'' P (Step (Put s') k) s = wp'' P (k tt) s'
+  wp : {a : Set} -> (P : Pair a s -> Set) -> State a -> (s -> Set)
+  wp P (Pure x) s = P (x , s)
+  wp P (Step Get k) s = wp P (k s) s
+  wp P (Step (Put s') k) s = wp P (k tt) s'
 
-  wpFold : {a : Set} -> (P : s -> a -> s -> Set) -> State a -> (s -> Set)
-  wpFold P c s =
-    fold (\ { Get r → r s
-          ; (Put x) r → r tt })
-          (λ x → P s x {!!})
-          c
+  sound :  {a : Set} -> (P : Pair a s -> Set) -> (c : State a) ->
+             (i : s) -> wp P c i ->
+             P (handle c i)
+  sound P (Pure x) i p = p
+  sound P (Step Get x) i wp = sound P (x i) i wp
+  sound P (Step (Put x) k) i wp with sound P (k tt)
+  ... | ih = ih x wp             
 
+  -- The relational variation
+  wpR : {a : Set} -> (P : s -> a -> s -> Set) -> State a -> (s -> Set)
+  wpR P c s = wp (uncurry (P s)) c s
+  
+  soundR :  {a : Set} -> (P : s -> a -> s -> Set) -> (c : State a) ->
+             (i : s) -> wpR P c i ->
+             uncurry (P i) (handle c i)
+  soundR P c i p = sound (uncurry (P i)) c i p
+
+module Trees where
+
+  open Free
+  open State(Nat)
+
+  data Tree (a : Set) : Set where
+    Leaf : a -> Tree a
+    Node : (l : Tree a) -> (r : Tree a) -> Tree a
+
+  size : ∀ {a} -> Tree a -> Nat
+  size (Leaf x) = 1
+  size (Node l r) = size l + size r
+
+  seq : Nat -> Nat -> List Nat
+  seq Zero k = Nil
+  seq (Succ n) k = Cons k (seq n (Succ k))
+
+  flatten : ∀ {a} -> Tree a -> List a
+  flatten (Leaf x) = [ x ]
+  flatten (Node l r) = flatten l ++ flatten r
+
+  relabel : ∀ {a} -> Tree a -> State (Tree Nat)
+  relabel (Leaf x) =
+    get >>= \s ->
+    put (Succ s) >>
+    return (Leaf s) 
+  relabel (Node l r) =
+    relabel l >>= \l' ->
+    relabel r >>= \r' ->
+    return (Node l' r')
+
+  relabelSpec : Nat -> Tree Nat -> Nat -> Set
+  relabelSpec i t f = f == (i + size t)
+
+  correctness : ∀ {a} -> Tree a -> Nat -> Set
+  correctness t i = wpR relabelSpec (relabel t) i
+
+  correctnessHolds : ∀ {a} -> (t : Tree a) -> wpR relabelSpec (relabel t) Zero
+  correctnessHolds (Leaf x) = Refl
+  correctnessHolds (Node l r) with correctnessHolds l | correctnessHolds r
+  ... | p | q = {!!}
+
+module Totally (I : Set) (O : Set) where
+
+  open Free
+
+  data C : Set where
+    Call : I -> C
+
+  R : C -> Set
+  R (Call x) = O -- could be made dependent
+
+  Rec : Set -> Set
+  Rec = Free C R
+
+  call : I -> Rec O
+  call i = Step (Call i) Pure
+
+  handle : (Inv : I -> O -> Set) (P : O -> Set) -> Rec O -> Set
+  handle Inv P (Pure x) = P x
+  handle Inv P (Step (Call x) k) =
+    (o : O) -> Inv x o -> handle Inv P (k o)
+
+module QS where
+  open Free
+  open Totally (Pair (Nat -> Bool) (List Nat)) (List Nat)
+
+  myfilter : {a : Set} (p : a -> Bool) (xs : List a) -> Sigma (List a) (all p)
+  myfilter p Nil = Nil , tt
+  myfilter p (Cons x xs) with inspect (p x) | myfilter p xs
+  myfilter p (Cons x xs) | True with-≡ eq | ys , yps =
+    Cons x ys , (lemma (p x) eq , yps)
+    where
+      lemma : (b : Bool) -> b == True -> So b
+      lemma True p = tt
+      lemma False ()
+  myfilter p (Cons x xs) | False with-≡ eq | ys , yps =
+    ys , yps
+
+  qs : List Nat -> Rec (List Nat)
+  qs Nil = return Nil
+  qs (Cons x xs) =
+     call (<=-dec x , filter (<=-dec x) xs) >>= \lts ->
+     call (>-dec x , filter (>-dec x) xs) >>= \gts ->
+     return (lts ++ ([ x ] ++ gts))
+
+  data IsSorted : List Nat -> Set where
+    Base : IsSorted Nil
+    Single : ∀ {x} -> IsSorted ([ x ])
+    Step : ∀ {x y ys} -> So (<=-dec x y) -> IsSorted (Cons y ys) ->
+      IsSorted (Cons x (Cons y ys))
+
+  correct : (xs : List Nat) ->
+    handle (\ { (p , is) o → Pair (IsSorted o) (all p o) }) IsSorted (qs xs)
+  correct Nil = Base
+  correct (Cons x xs) sxs (fst , snd) sys (fst₁ , snd₁) = {!!}
 {-
 
 * Can we give (propositional) semantics independently of a particular
@@ -267,5 +414,8 @@ monad or equations between them?
 
 * What is a specification of a program with effects? Can we define
   generalized refinement rules?
+
+* What about the equations that we expect our handlers/algebraic
+  effects to satisfy?
 
 -}

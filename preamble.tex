@@ -1,16 +1,29 @@
-%Set custom footer
-\fancyfoot[RO,LE]{\footnotesize Unpublished manuscript}
-\fancyhead{}
-%Remove ACM headers
-\settopmatter{printacmref=false, printfolios=false}
+
+
+% \SetAlFnt{\small}
+% \SetAlCapFnt{\small}
+% \SetAlCapNameFnt{\small}
+% \SetAlCapHSkip{0pt}
+% \IncMargin{-\parindent}
+
+
+%Metadata Information
+\acmJournal{PACMPL}
+\acmVolume{1}
+\acmNumber{ICFP}
+\acmArticle{1}
+\acmYear{2018}
+\acmMonth{1}
+\startPage{1}
+
+
+%Copyright
 \setcopyright{none}
-%\include{ccs}%
-%\keywords{datatype generic programming, dependent types}
-% Note: acmart.cls has been modified to strip footers
-% grep for 'Wouter' to restore defaults 
-\acmPrice{}
-\acmYear{}
-%%END
+%DOI
+\acmDOI{}
+
+\bibliographystyle{ACM-Reference-Format}
+\citestyle{acmauthoryear}
 
 \newcommand{\todo}[1]{\textbf{TODO: #1}}
 

@@ -1,0 +1,18 @@
+
+%if style == poly
+%format (Forall (a)) = "\!"
+%format (implicit(a)) = "\!"
+%format N = "\mathbb{N}"
+%format e1 = e "_1"
+%format e2 = e "_2"
+%format v1 = v "_1"
+%format v2 = v "_2"
+%format top = "\top"
+%format refines = "\sqsubseteq"
+%format subset = "\subseteq"
+%else
+%format (Forall (a)) = "forall { " a " } -> "
+%format (implicit(a)) = "{" a "} ->"
+%format N = "Nat"
+%format top = "⊤"
+%endif
