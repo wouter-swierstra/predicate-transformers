@@ -4,3 +4,6 @@ handlers.out
 handlers.pdf
 handlers.ptb
 handlers.tex
+handlers.bbl
+handlers.blg
+*.agdai
