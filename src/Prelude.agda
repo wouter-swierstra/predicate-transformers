@@ -18,7 +18,6 @@ data _==_ {l : Level} {a : Set l} (x : a) : a -> Set l where
   Refl : x == x
 
 {-# BUILTIN EQUALITY _==_ #-}
-{-# BUILTIN REFL Refl #-}
 
 trans : {a : Set} {x y z : a} -> x == y -> y == z -> x == z
 trans Refl p = p

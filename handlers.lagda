@@ -44,7 +44,8 @@ variety of effects, such as mutable state, exceptions,
 non-termination, or non-determinism. Unfortunately, it is not clear
 how to reason about impure programs in a modular fashion, when we can
 no longer exploit referential transparency to reason about
-subexpressions irregardless of their context.
+subexpressions irregardless of their context. \todo{Maybe focus more
+  on program derivation?}
 
 In recent years, \emph{algebraic effects} have emerged as a technique
 to embed effectful operations in a purely functional
@@ -218,6 +219,7 @@ For any predicate |P : a -> Set|, the statement |lift P| specifies
 when a computation of type |Maybe a| will successfully return a value
 of type |a| satisfying |P|.
 
+
 \subsection*{Example: evaluation}
 \label{sec:evaluation}
 
@@ -241,22 +243,21 @@ numbers and division:
 When evaluating these expressions, we may encounter division by zero
 errors. Our evaluator therefore returns a value of |Maybe Nat|:
 \begin{code}
-  ⟦_⟧ : Expr -> Maybe Nat
-  ⟦ Val x ⟧      =  return x
-  ⟦ Div e1 e2 ⟧  =  ⟦ e1 ⟧ >>= \ v1 ->
-                    ⟦ e2 ⟧ >>= \ v2 ->
-                    div v1 v2
+  eval : Expr -> Maybe Nat
+  eval (Val x)      =  return x
+  eval (Div e1 e2)  =  eval e1 >>= \ v1 ->
+                       eval e2 >>= \ v2 ->
+                       div v1 v2
 \end{code}
-Here we assume an auxiliary function |div : Nat -> Nat -> Maybe Nat|,
-that can be used to compute the integer division of two natural
-numbers.
+Here we use an auxiliary function |div : Nat -> Nat -> Maybe Nat| that
+computes the integer division of two natural numbers.
 
 How can we reason about our evaluator?  Or specify its intended
 behaviour? Using our |lift| function, we can lift any predicate on
 |Nat| to a predicate on expressions as follows:
 \begin{code}
   wpEval : (Nat -> Set) -> (Expr -> Set)
-  wpEval P = \ e -> lift P ⟦ e ⟧
+  wpEval P = \ e -> lift P (eval e)
 \end{code}
 As the name suggests, |wpEval| computes the \emph{weakest
   precondition} on the input expression |e| that must hold to ensure
@@ -282,6 +283,32 @@ Using this |dom| predicate, it is easy to check that:
   test2 = Refl
 \end{code}
 %endif
+
+
+
+\paragraph{Weakest preconditions}
+
+We can generalize our |wpEval| function to work over \emph{any}
+Kleisli arrow in the |Maybe| monad:
+\begin{code}
+  wp : (f : a -> Maybe b) -> (b -> Set) -> (a -> Set)
+  wp f P x = lift P (f x)
+\end{code}
+This gives a general \emph{weakest precondition semantics} to such
+computations.
+
+
+
+Using this notion of |wp|, we can define the notion of refinement:
+
+\begin{code}
+  _⊑_ : (f g : a -> Maybe b) -> Set₁
+  f ⊑ g = ∀ P x -> wp f P x -> wp g P x
+\end{code}
+
+We can furthermore show that this notion of refinement is familiar: |f
+⊑ g| holds if and only if |f x == g x| for all points |x elem
+dom(f)|.
 
 \paragraph{Soundness}
 
@@ -312,28 +339,6 @@ handler---but this depends on the intended semantics of the algebraic
 effects involved. The crucial observation, however, is that soundness
 of propositional handlers are always relative to another semantics.
 
-
-\paragraph{Refinement}
-
-We can generalize our |wpEval| function to work over \emph{any}
-Kleisli arrow in the |Maybe| monad:
-\begin{code}
-  wp : (f : a -> Maybe b) -> (b -> Set) -> (a -> Set)
-  wp f P x = lift P (f x)
-\end{code}
-This gives a general \emph{weakest precondition semantics} to such
-computations.
-
-Using this notion of |wp|, we can define the notion of refinement:
-
-\begin{code}
-  _⊑_ : (f g : a -> Maybe b) -> Set₁
-  f ⊑ g = ∀ P x -> wp f P x -> wp g P x
-\end{code}
-
-We can furthermore show that this notion of refinement is familiar: |f
-⊑ g| holds if and only if |f x == g x| for all points |x elem
-dom(f)|.
 
 \paragraph{Intermezzo: types, specifications, and predicate transformers}
 
@@ -690,6 +695,9 @@ of our |quickSort| function
 
 Just do it
 
+Examples:
+- Dutch National Flag (with recursion)
+- Goat/Wolf/Bridge crossing
 
 \begin{acks}
 I would like to thank my fans.  

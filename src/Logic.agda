@@ -162,7 +162,7 @@ module Maybe where
   fastSpec xs n = listProduct xs == n
 
   correctness : (xs : List Nat) ->
-    wpProduct Zero fastProduct fastSpec xs
+    handleDefault Zero (fastSpec xs) (fastProduct xs)
   correctness Nil = Refl
   correctness (Cons Zero xs) = Refl
   correctness (Cons (Succ k) xs)
