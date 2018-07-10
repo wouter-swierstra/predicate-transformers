@@ -1,5 +1,5 @@
-\documentclass[acmsmall, anonymous, review=false]{acmart}
-\settopmatter{printfolios=true,printccs=false,printacmref=false}
+\documentclass[acmsmall, nonacm]{acmart}
+\settopmatter{printfolios=false,printccs=false,printacmref=false}
 
 %include polycode.fmt
 %include agda.fmt
@@ -20,8 +20,9 @@
 \begin{abstract}
   Pure functions are relatively easy to verify, yet it is much harder
   to reason about programs using effects. In this paper, we present a
-  general framework based on predicate transformer semantics for
-  specifying and calculating correct effectful programs.
+  general framework, based on predicate transformer semantics, for
+  specifying and calculating effectful programs from their
+  specification.
 \end{abstract}
 
 %include ccs.tex
@@ -31,35 +32,38 @@
 \section{Introduction}
 \label{sec:intro}
 
-One of the virtues of pure functional programming is that programs are
-relatively easy to verify. Referential transparency---the ability to
-freely substitute equals for equals---enables us to employ equational
-reasoning to prove two expressions equal~\cite{wadler-critique}. This
-has resulted in a rich field of program calculation in the
-Bird-Meertens style~\citep*{algebra-of-programming, pearls}.
-%\todo{more citations}.
+One of the key advantages of pure functional programming is
+\emph{compositionality}. Pure programs may be tested in isolation;
+referential transparency---the ability to freely substitute equals for
+equals---enables us to employ equational reasoning to prove two
+expressions equal~\cite{wadler-critique}. This has resulted in a rich
+field of program calculation in the Bird-Meertens
+style~\citep*{algebra-of-programming, pearls}.
 
 Many programs, however, are \emph{not} pure, but instead rely on a
 variety of effects, such as mutable state, exceptions,
-non-termination, or non-determinism. Unfortunately, it is not clear
-how to reason about impure programs in a modular fashion, when we can
+non-termination, or non-determinism. Unfortunately, it is less clear
+how to reason about impure programs in a compositional fashion, as we can
 no longer exploit referential transparency to reason about
-subexpressions irregardless of their context. \todo{Maybe focus more
-  on program derivation?}
+subexpressions regardless of their context.
+
+% \todo{Maybe focus more on program derivation?}
 
 In recent years, \emph{algebraic effects} have emerged as a technique
-to embed effectful operations in a purely functional
-language. Algebraic effects clearly separate the syntax of effectful
-operations and their semantics, described by \emph{effect
-  handlers}. In contrast to existing approaches such as monad
-transformers, different effects may be processed in any given order
-using a series of handlers.
+to incorporate effectful operations in a purely functional
+language.
+%\todo{Citations}
+Algebraic effects clearly separate the
+syntax of effectful operations and their semantics, described by
+\emph{effect handlers}. In contrast to existing approaches such as
+monad transformers, different effects may be processed in any given
+order using a series of handlers.
 
-This paper explores how we to reason about programs written using
-algebraic effects.
-It presents a general framework for deriving a verified effectful
-program from its specification. We will sketch the key techniques
-developed herein, before illustrating them with numerous examples:
+This paper explores how to reason about programs written using
+algebraic effects using predicate transformers. It presents a general
+framework for deriving a verified effectful program from its
+specification. We will sketch the key techniques developed herein,
+before illustrating them with numerous examples:
 
 % What is the specification of a program written using algebraic
 % effects?  How can we show that a program satisfies a specification? Or
@@ -67,26 +71,28 @@ developed herein, before illustrating them with numerous examples:
 
 
 \begin{itemize}
-\item We show how the syntax of effects may be given by a free
-  monad. The semantics of these effects are given by a \emph{handler},
-  that assigns meaning to the syntactic operations exposed by the free
-  monad. Such handlers typically execute the effects to produce some
-  \emph{result value}. We show how we can also describe the behaviour
-  of a program more abstractly by writing handlers that compute a
-  \emph{proposition}, capturing the expected behaviour without having
-  to execute the corresponding effects. These \emph{propositional
-    handlers} may then be used to lift predicates on the result values
-  of an effectful computation to a predicate on the entire
-  computation.
+\item We show how the syntax of effects may be given by a free monad
+  in type theory. The semantics of these effects are given by a
+  \emph{handler}, that assigns meaning to the syntactic operations
+  provided by the free monad. Such handlers typically execute the
+  effects to produce some \emph{result value}. We show how we can also
+  describe the behaviour of a program more abstractly by writing
+  handlers that compute a \emph{proposition}, capturing the expected
+  behaviour without having to execute the corresponding effects. These
+  \emph{propositional handlers} may then be used to transform
+  predicates on the result values of an effectful computation to a
+  predicate on the entire computation.
 \item Next we show how to assign \emph{predicate transformer
-    semantics} to computations arising from Kleisli arrows. Together
-  with a propositional handler, this gives us the machinery to specify
-  the desired outcome of an effectful computation and assign it a
-  weakest precondition semantics.
-\item These weakest precondition semantics give rise to a notion of
-  \emph{refinement} on computations using algebraic effects. Using
-  such refinements, we can derive a correct effectful program from its
-  specification.
+    semantics} to computations arising from Kleisli arrows on such
+  free monads. Together with a propositional handler, this gives us
+  the machinery to specify the desired outcome of an effectful
+  computation and assign it a weakest precondition semantics.
+\item Using these weakest precondition semantics, we can define a
+  notion of \emph{refinement} on computations using algebraic
+  effects. By further extending our free monad with
+  \emph{propositions}, mixing specifications and programs, we can use
+  this refinement relation to derive a correct effectful program from
+  its specification.
 \end{itemize}
 
 We have applied these techniques to a range of example effects and
@@ -95,9 +101,10 @@ used the corresponding refinement relation to \todo{do something
 
 The examples, theorems and proofs have all been formally verified in
 the dependently typed programming language Agda~\cite{agda}, but they
-techniques translate readily to other proof assistants based on
-dependent types such as Idris or Coq~\todo{citations}. The sources
-associated with our our development are available~\todo{here}.
+techniques translate readily to other proof assistants based no
+dependent types such as Idris~\cite{brady} or Coq~\cite{coq}. The sources
+associated with our our development are available
+online.\footnote{\url{https://github.com/wouter-swierstra/handlers}}
 
 % \item Using such predicate transformer semantics, we can define a
 %   generic notion of \emph{program refinement}, allowing the
@@ -169,7 +176,7 @@ using the following recursion principle:
   fold alg pure (Step c k) = alg c (\ r -> fold alg pure (k r))
 \end{code}
 
-\section{Maybe}
+\section{Partiality}
 \label{sec:maybe}
 %if style == newcode
 \begin{code}
@@ -179,185 +186,294 @@ module Maybe where
 \end{code}
 %endif
 
-We can define the familiar |Maybe| monad by making the following
-choice for |C| and |R|:
+We can define the data type for |Partial| computations, corresponding
+to |Maybe| monad, by making the following choice for |C| and |R|:
 \begin{code}
   data C : Set where
-    Nothing : C
+    Abort : C
 
   R : C -> Set
-  R Nothing = ⊥
+  R Abort = ⊥
 
-  Maybe : Set -> Set
-  Maybe = Free C R
+  Partial : Set -> Set
+  Partial = Free C R
 \end{code}
-It is sometimes convenient to define the familiar constructors of the
-|Maybe| type
+There is a single command, |Abort|; there is no continuation after
+issuing this command, hence the type of valid responses is empty. It is
+sometimes convenient to define a smart constructor for failure:
 \begin{code}
-  just     : (Forall(a)) a -> Maybe a
-  just     = Pure
+  abort  : (Forall(a)) Partial a
+  abort  = Step Abort (\ ())
+\end{code}
+A computation of type |Partial a| will either return a value of type |a|
+or fail, issuing the |abort| command.
 
-  nothing  : (Forall(a)) Maybe a
-  nothing  = Step Nothing (\ ())
-\end{code}
-A computation of type |Maybe a| will either return a value of type |a|
-or fail (and return |nothing|).  One way to define a specification for
-such computations, is by \emph{lifting} a predicate |P : a -> Set| to
-computations of type |Maybe a|:
+\subsection*{Example: fast multiplication}
+
+Suppose have a function that computes the product of the numbers
+stored in a list:
+
 \begin{code}
-  lift : (Forall(a)) (P : a -> Set) -> Maybe a -> Set
-  lift P (Pure x)          = P x
-  lift P (Step Nothing _)  = ⊥
+  product : List Nat -> Nat
+  product = foldr 1 _*_
 \end{code}
-Alternatively, we could
-have defined |lift| using our |fold| function, mapping |Nothing| to
-the empty type:
+
+If this list contains a zero, however, we can short circuit the
+computation and return zero immediately. To do so, we define the
+following computation:
+
+\begin{code}
+  fastProduct : List Nat -> Partial Nat
+  fastProduct Nil                 = return 1
+  fastProduct (Cons Zero xs)      = abort
+  fastProduct (Cons (Succ k) xs)  = fmap (\ n -> Succ k * n) (fastProduct xs)
+\end{code}
+To run this computation, we provide a handler that maps |abort| to
+the default value |0|:
+\begin{code}
+  zeroHandler : Partial Nat -> Nat
+  zeroHandler (Pure x)          = x
+  zeroHandler (Step Abort _)    = 0
+\end{code}
+
+We would like to validate that the |product| and composition of
+|zeroHandler| |fastproduct| always compute the same result. We can
+do so directly by proving the following statement:
+
 \begin{spec}
-  lift = fold (\ { Nothing x → ⊥ })
+  correctness : ∀ xs -> handle Zero (fastProduct xs) == product xs
 \end{spec}
-For any predicate |P : a -> Set|, the statement |lift P| specifies
-when a computation of type |Maybe a| will successfully return a value
-of type |a| satisfying |P|.
+To illustrate the approach we will take in this paper, however, we
+will explore a slightly more roundabout route. To begin, we can define
+the following predicate transformer, that, given a predicate |P : Nat ->
+Set|, maps this to a predicate on |Partial Nat|:
+\begin{code}
+  zeroPT : (P : Nat -> Set) -> Partial Nat -> Set
+  zeroPT d P (Pure x)          = P x
+  zeroPT d P (Step Abort _)    = P 0
+\end{code}
+This handler is slightly different from typical handlers that aim to
+run a computation written using algebraic effects, as it
+returns returns a \emph{proposition} rather than a \emph{value}. We can now
+reformulate our correctness property in terms of this handler as follows:
+\begin{code}
+  spec : List Nat -> Nat -> Set
+  spec xs n = product xs == n
 
+  correctness : ∀ xs -> zeroPT (spec xs) (fastProduct xs)
+\end{code}
+Given the specification of our computation, expressed as a relation
+between inputs and outputs, proving this correctness statement shows
+|fastProduct| satisfies its specification.
 
-\subsection*{Example: evaluation}
-\label{sec:evaluation}
+At this point, however, there is no guarantee that the
+\emph{proposition} computed by the propositional handler
+|zeroPT| is related in any way to the result returned by our
+|zeroHandler| function. To ensure that |zeroHandler . fastproduct| does indeed
+behave as we expect, we should additionally prove that our
+propositional handler is sound with respect to the |zeroHandler|:
 
-We can define a small expression language consisting of natural
-numbers and division:
+\begin{spec}
+  soundness : (c : Partial Nat) (P : Nat -> Set) -> zeroPT P c -> P (zeroHandler c) 
+\end{spec}
+
+This example illustrates some of the key techniques used throughout
+this paper: the |zeroHandler| handles effectful computations; the
+|zeroPT| handler assigns meaning to these computations without
+executing them; the a |soundness| guarantees that it suffices to work
+with the propositions computed by the |zeroPT| handler, rather than
+reason about |zeroHandler| directly.
+
+Unlike many effectful programs, however, this example is \emph{total}
+and only uses the short-circuiting behaviour of |Partial| for
+efficiency. Let us now consider another example, where we truly want
+to reason about partial functions.
+
+\subsection*{Example: division}
+
+We begin by defining a small expression language, closed under
+division and natural numbers:
 
 \begin{code}
   data Expr : Set where
-    Val : N -> Expr
+    Val : Nat -> Expr
     Div : Expr -> Expr -> Expr
 \end{code}
 
-%if style == newcode
-\begin{code}
-  div : Nat -> Nat -> Maybe Nat
-  div n Zero = nothing
-  div n (Succ k) = return n
-\end{code}
-%endif
-
-When evaluating these expressions, we may encounter division by zero
-errors. Our evaluator therefore returns a value of |Maybe Nat|:
-\begin{code}
-  eval : Expr -> Maybe Nat
-  eval (Val x)      =  return x
-  eval (Div e1 e2)  =  eval e1 >>= \ v1 ->
-                       eval e2 >>= \ v2 ->
-                       div v1 v2
-\end{code}
-Here we use an auxiliary function |div : Nat -> Nat -> Maybe Nat| that
-computes the integer division of two natural numbers.
-
-How can we reason about our evaluator?  Or specify its intended
-behaviour? Using our |lift| function, we can lift any predicate on
-|Nat| to a predicate on expressions as follows:
-\begin{code}
-  wpEval : (Nat -> Set) -> (Expr -> Set)
-  wpEval P = \ e -> lift P (eval e)
-\end{code}
-As the name suggests, |wpEval| computes the \emph{weakest
-  precondition} on the input expression |e| that must hold to ensure
-that the result of evaluating |e| satisfies |lift P|.
-
-For example, we specify the domain of evaluation function by
-instantiating |P| to be the trivial predicate:
-\begin{code}
-  dom : Expr -> Set
-  dom = wpEval (\ _ -> top)
-\end{code}
-
-Using this |dom| predicate, it is easy to check that:
+To evaluate these expressions, we can define a \emph{monadic}
+interpreter, using the |Partialg| monad to handle division-by-zero
+errors:
 
 \begin{code}
-  test1 : dom (Val 3) == top
-  test2 : dom (Div (Val 1) (Val 0)) == ⊥
+  ⟦_⟧ : Expr -> Partial Nat
+  ⟦ Val x ⟧      =  return x
+  ⟦ Div e1 e2 ⟧  =  ⟦ e1 ⟧ >>= \ v1 ->
+                    ⟦ e2 ⟧ >>= \ v2 ->
+                    div v1 v2
+                      where
+                      div : Nat -> Nat -> Partial Nat
+                      div n Zero      = Abort
+                      div n (Succ k)  = n ÷ (Succ k)
 \end{code}
+The division operator (|_÷_|) requires an (implicit) proof that the
+divisor is non-zero.
 
-%if style == newcode
-\begin{code}
-  test1 = Refl
-  test2 = Refl
-\end{code}
-%endif
-
-
-
-\paragraph{Weakest preconditions}
-
-We can generalize our |wpEval| function to work over \emph{any}
-Kleisli arrow in the |Maybe| monad:
-\begin{code}
-  wp : (f : a -> Maybe b) -> (b -> Set) -> (a -> Set)
-  wp f P x = lift P (f x)
-\end{code}
-This gives a general \emph{weakest precondition semantics} to such
-computations.
-
-
-
-Using this notion of |wp|, we can define the notion of refinement:
+Alternatively, we can specify the semantics of our language using a
+\emph{relation}:
 
 \begin{code}
-  _⊑_ : (f g : a -> Maybe b) -> Set₁
-  f ⊑ g = ∀ P x -> wp f P x -> wp g P x
+  data _⇓_ : Expr -> Nat -> Set where
+    Base : (Forall(x)) Val x ⇓ x
+    Step : (Forall(l r x y)) l ⇓ v1 -> r ⇓ (Succ v2) -> Div l r ⇓ (v1 ÷ (Succ v2))
+\end{code}
+In this definition, we rule out erroneous results by asserting that
+the divisor always evaluates to a non-zero value.
+
+How can we relate these two definitions? We start by defining a
+propositional handler, \emph{transforming} a predicate |P : a -> Set| to
+computations of type |Partial a|:
+\begin{code}
+  mustPT : (Forall(a)) (P : a -> Set) -> Partial a -> Set
+  mustPT P (Pure x)          = P x
+  mustPT P (Step Abort _)  = ⊥
+\end{code}
+For any predicate |P : a -> Set|, the statement |mustPT P c| holds
+when a computation |c| of type |Partial a| successfully returns a value
+of type |a| that satisfies |P|.
+
+We can define the following predicate characterizing when evaluating
+an expression will produce a result:
+\begin{code}
+  SafeDiv : Expr -> Set
+  SafeDiv (Val x)       = (Val x ⇓ Zero) -> ⊥
+  SafeDiv (Div e1 e2)   = (e2 ⇓ Zero -> ⊥) × SafeDiv e1 × SafeDiv e2
+\end{code}
+We can use this predicate to prove the following correctness result:
+\begin{code}
+  correct : (e : Expr) -> SafeDiv e -> mustPT (e ⇓_) ⟦ e ⟧    
+\end{code}
+This pattern of transforming a predicate over partial computation, as we do
+in the expression |mustPT (e ⇓_) ⟦ e ⟧|, invites the following definition:
+\begin{code}
+  wp : (Forall(a b)) (a -> Partial b) -> (b -> Set) -> (a -> Set)
+  wp f P = mustPT P . f
+\end{code}
+That is, we can \emph{compute} the weakest precondition |wp f P x|
+that guarantees that a partial computation, |f x|, returns a result
+satisfying |P|. This |wp| function assigns a \emph{predicate
+  transformer semantics} to Kleisli arrows.
+We can use this definition to reformulate our correctness proof as
+follows:
+\begin{code}
+  correct : (e : Expr) -> SafeDiv e -> wp ⟦_⟧ (e ⇓_) e
 \end{code}
 
-We can furthermore show that this notion of refinement is familiar: |f
-⊑ g| holds if and only if |f x == g x| for all points |x elem
-dom(f)|.
 
-\paragraph{Soundness}
 
-The |lift| function computes a predicate on computations of type
-|Maybe a|. Yet how can we know that this predicate is meaningful in
-any way? The type of the |lift| function alone does not guarantee
-anything about its behaviour. To relate the predicate being computed,
-we therefore need to show that the our propositional handler is
-\emph{sound}.
+\subsection*{Refinement}
+\label{sec:refinement-maybe}
 
-Consider the usual `handler' for |Maybe| that returns a default
-value when encountering a failure:
+We now consider how we can relate functions, specifications (given by
+a relation between input and output), and predicate transformers. We
+begin by defining the following notion of refinement (|_⊑_|):
 
 \begin{code}
-  run : (Forall (a)) a -> Maybe a -> a
-  run d (Pure x)          = x
-  run d (Step Nothing _)  = d
+  _⊆_ : (a -> Set) -> (a -> Set) -> a -> Set
+  P ⊆ Q = \ x -> P x -> Q x
+  
+  _⊑_ : (PT1 PT2 : (b -> Set) -> (a -> Set)) -> Set
+  PT1 ⊑ PT2 = (P : b -> Set) -> PT1 P ⊆ PT2 P
 \end{code}
-To prove the soundness of our |lift| function with respect to this
-handler amounts to proving:
-\begin{spec}
-  soundness : (Forall(a)) (d : a) (P : a -> Set) (m : Maybe a) -> lift P m -> P (run d m)
-\end{spec}
-The proof of this result follows trivially after pattern matching on
-the monadic computation |m|. Of course, there may be alternative
-definitions of |lift| that are sound with respect to some other
-handler---but this depends on the intended semantics of the algebraic
-effects involved. The crucial observation, however, is that soundness
-of propositional handlers are always relative to another semantics.
+This is straight from the literature on refinement calculus.
+
+Using our |wp| function, we can now use this to compare two partial
+functions:
+\begin{code}
+  refineFun : (f g : a -> Partial b) -> Set
+  refineFun = wp f ⊑ wp g
+\end{code}
+We can furthermore show that this notion of refinement on functions is
+familiar: |f ⊑ g| holds if and only if |f x == g x| for all points |x
+elem dom(f)|. 
+
+We can also use these weakest precondition semantics to assign meaning
+to \emph{specifications}, given by a relation |R : a -> b -> Set|:
+\begin{code}
+  wpR : (R : a -> b -> Set) -> (b -> Set) -> (a -> Set)
+  wpR R P x = R x ⊆ P 
+\end{code}
+
+We can now succinctly formulate the desired soundness property:
+\begin{code}
+  soundness : wp ⟦_⟧ ⊑  wpR (_⇓_)
+\end{code}
+In other words, the function |⟦_⟧ : Expr -> Partial Val| is a sound
+implementation of the semantics given by the relation |_⇓_ : Expr ->
+Val -> Set|. We can do so \emph{without} explicitly introducing any
+further constraints on the expressions -- such as the |SafeDiv|
+predicate we saw previously.
+
+These definitions let us prove useful properties, such as:
+
+\begin{code}
+  ruleOfConsequence : (c : Partial a) (f : a -> Partial b) ->
+    (P : b -> Set) -> mustPT (wp f P) c -> mustPT P (c >>= f)
+\end{code}
+
+All in all, this shows how we can relate predicate transformers (|(b
+-> Set) -> (a -> Set)|), specifications (|a -> b -> Set|),
+implementations (|a -> b|) -- in a single framework.
 
 
-\paragraph{Intermezzo: types, specifications, and predicate transformers}
 
-Before studying other effects, it is worth making the construction of
-specifications more explicit.
-\begin{itemize}
-\item A specification on a value of type |A| is a predicate |A ->
-  Set|;
-\item A specification of a function of type |A -> B| is a
-  \emph{predicate transformer} of type |(B -> Set) -> (A -> Set)|.
-\end{itemize}
-You may recognise this construction as the contravariant Hom functor
-on |Set|, i.e., |Hom(_,Set)|. In our example evaluator, we wanted to
-specify the behaviour of a function of type |Expr -> Maybe Nat|. By
-using the |lift| function, this amounts to a predicate transformer of
-the form |(Nat -> Set) -> (Expr -> Set)|.
+% \paragraph{Soundness}
 
-This pattern can be extended to many other effects, as we shall
-explore now.
+% The |lift| function computes a predicate on computations of type
+% |Partial a|. Yet how can we know that this predicate is meaningful in
+% any way? The type of the |lift| function alone does not guarantee
+% anything about its behaviour. To relate the predicate being computed,
+% we therefore need to show that the our propositional handler is
+% \emph{sound}. 
+
+% Consider the usual `handler' for |Partial| that returns a default
+% value when encountering a failure:
+
+% \begin{code}
+%   run : (Forall (a)) a -> Partial a -> a
+%   run d (Pure x)          = x
+%   run d (Step Abort _)  = d
+% \end{code}
+% To prove the soundness of our |lift| function with respect to this
+% handler amounts to proving:
+% \begin{spec}
+%   soundness : (Forall(a)) (d : a) (P : a -> Set) (m : Partial a) -> lift P m -> P (run d m)
+% \end{spec}
+% The proof of this result follows trivially after pattern matching on
+% the monadic computation |m|. Of course, there may be alternative
+% definitions of |lift| that are sound with respect to some other
+% handler---but this depends on the intended semantics of the algebraic
+% effects involved. The crucial observation, however, is that soundness
+% of propositional handlers are always relative to another semantics.
+
+
+% \subsection*{Intermezzo: types and predicate transformers}
+
+% Before studying other effects, it is worth making the construction of
+% specifications more explicit.
+% \begin{itemize}
+% \item A specification on a value of type |A| is a predicate |A ->
+%   Set|;
+% \item A specification of a function of type |A -> B| is a
+%   \emph{predicate transformer} of type |(B -> Set) -> (A -> Set)|.
+% \end{itemize}
+% You may recognise this construction as the contravariant Hom functor
+% on |Set|, i.e., |Hom(_,Set)|. In our example evaluator, we wanted to
+% specify the behaviour of a function of type |Expr -> Partial Nat|. By
+% using the |lift| function, this amounts to a predicate transformer of
+% the form |(Nat -> Set) -> (Expr -> Set)|.
+
+% This pattern can be extended to many other effects, as we shall
+% explore now.
 
 \section{State}
 \label{sec:state}
@@ -665,8 +781,6 @@ of our |quickSort| function
 \item How can we use this technology to reason about combinations of
   effects? Eg mixing state and exceptions.
 
-\item What about other effects? General recursion? Probablistic
-  computations? Async/await?  Shift/reset?  Yield/fork?
   
 \item How can we reason about compound computations built with |>>=|
   and |>>|?  There must be some 'law of consequence' that we can

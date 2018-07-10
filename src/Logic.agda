@@ -218,7 +218,7 @@ module Nondeterminism where
 
   -- Define a handler
   handle : ∀ {a} -> ND a -> List a
-  handle (Pure x) = [ x ]
+  handle (Pure x) = Cons x Nil
   handle (Step Fail x) = Nil
   handle (Step Choice c) = handle (c True) ++ handle (c False) 
 
@@ -278,27 +278,46 @@ module State (s : Set) where
   handle (Step (Put x) k) s = handle (k tt) x 
 
   -- Folding the definitions together
-  wp : {a : Set} -> (P : Pair a s -> Set) -> State a -> (s -> Set)
-  wp P (Pure x) s = P (x , s)
+  wp : {a : Set} -> (P : s -> a -> Set) -> State a -> (s -> Set)
+  wp P (Pure x) s = P s x
   wp P (Step Get k) s = wp P (k s) s
   wp P (Step (Put s') k) s = wp P (k tt) s'
 
-  sound :  {a : Set} -> (P : Pair a s -> Set) -> (c : State a) ->
-             (i : s) -> wp P c i ->
-             P (handle c i)
-  sound P (Pure x) i p = p
-  sound P (Step Get x) i wp = sound P (x i) i wp
-  sound P (Step (Put x) k) i wp with sound P (k tt)
-  ... | ih = ih x wp             
+    
+  -- Funny handler
+  -- funnyhandle : {a : Set} -> (P : s -> a -> Set) -> Nat -> State a -> s -> Set
+  -- funnyhandle P n (Pure x) s = P s x
+  -- funnyhandle P Zero (Step Get x) s = ⊥
+  -- funnyhandle P (Succ n) (Step Get x) s = funnyhandle P n (x s) s
+  -- funnyhandle P n (Step (Put s) x) _ = funnyhandle P n (x tt) s
+
+  -- funnysound :  {a : Set} -> (n : Nat) -> (P : s -> a -> Set) -> (c : State a) ->
+  --             (i : s) -> 
+  --             funnyhandle P n c i -> P (Pair.snd (handle c i)) (Pair.fst (handle c i))
+  -- funnysound n P (Pure x) i H = H
+  -- funnysound Zero P (Step Get x) i ()
+  -- funnysound (Succ n) P (Step Get x) i H = funnysound n P (x i) i H
+  -- funnysound Zero P (Step (Put s) k) i H = funnysound Zero P (k tt) s H
+  -- funnysound (Succ n) P (Step (Put s) k) i H = funnysound (Succ n) P (k tt) s H 
+
+  -- sound :  {a : Set} -> (P : s -> a -> Set) -> (c : State a) ->
+  --            (i : s) -> wp P c i ->
+  --            uncurry P {!!}
+  -- sound P (Pure x) i p = p
+  -- sound P (Step Get x) i wp = sound P (x i) i wp
+  -- sound P (Step (Put x) k) i wp with sound P (k tt)
+  -- ... | ih = ih x wp             
 
   -- The relational variation
   wpR : {a : Set} -> (P : s -> a -> s -> Set) -> State a -> (s -> Set)
-  wpR P c s = wp (uncurry (P s)) c s
+  wpR P c s = wp (\s x -> P s x s) c s
   
   soundR :  {a : Set} -> (P : s -> a -> s -> Set) -> (c : State a) ->
              (i : s) -> wpR P c i ->
              uncurry (P i) (handle c i)
-  soundR P c i p = sound (uncurry (P i)) c i p
+  soundR P (Pure x) i p = p
+  soundR P (Step Get x) i p = {!p!}
+  soundR P (Step (Put x₁) x) i p = {!!} -- soundR (λ s₁ x₂ s2 → {!!}) (x tt) {!!} {!p!} 
 
 module Trees where
 
@@ -318,7 +337,7 @@ module Trees where
   seq (Succ n) k = Cons k (seq n (Succ k))
 
   flatten : ∀ {a} -> Tree a -> List a
-  flatten (Leaf x) = [ x ]
+  flatten (Leaf x) = Cons x Nil
   flatten (Node l r) = flatten l ++ flatten r
 
   relabel : ∀ {a} -> Tree a -> State (Tree Nat)
@@ -332,15 +351,15 @@ module Trees where
     return (Node l' r')
 
   relabelSpec : Nat -> Tree Nat -> Nat -> Set
-  relabelSpec i t f = f == (i + size t)
+  relabelSpec i t f = Succ f == (i + size t)
 
   correctness : ∀ {a} -> Tree a -> Nat -> Set
   correctness t i = wpR relabelSpec (relabel t) i
 
   correctnessHolds : ∀ {a} -> (t : Tree a) -> wpR relabelSpec (relabel t) Zero
   correctnessHolds (Leaf x) = Refl
-  correctnessHolds (Node l r) with correctnessHolds l | correctnessHolds r
-  ... | p | q = {!!}
+  correctnessHolds (Node l r) = {!!}
+  
 
 module Totally (I : Set) (O : Set) where
 
@@ -384,11 +403,11 @@ module QS where
   qs (Cons x xs) =
      call (<=-dec x , filter (<=-dec x) xs) >>= \lts ->
      call (>-dec x , filter (>-dec x) xs) >>= \gts ->
-     return (lts ++ ([ x ] ++ gts))
+     return (lts ++ (Cons x gts))
 
   data IsSorted : List Nat -> Set where
     Base : IsSorted Nil
-    Single : ∀ {x} -> IsSorted ([ x ])
+    Single : ∀ {x} -> IsSorted (Cons x Nil)
     Step : ∀ {x y ys} -> So (<=-dec x y) -> IsSorted (Cons y ys) ->
       IsSorted (Cons x (Cons y ys))
 

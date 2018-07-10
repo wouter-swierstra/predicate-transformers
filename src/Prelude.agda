@@ -22,6 +22,15 @@ data _==_ {l : Level} {a : Set l} (x : a) : a -> Set l where
 trans : {a : Set} {x y z : a} -> x == y -> y == z -> x == z
 trans Refl p = p
 
+sym : {a : Set} {x y : a} -> x == y -> y == x
+sym Refl = Refl
+
+cong : {a b : Set} {x y : a} (f : a -> b) -> x == y -> f x == f y
+cong f Refl = Refl
+
+cong2 : {a b c : Set} {x y : a} {z w : b} (f : a -> b -> c) -> x == y -> z == w -> f x z == f y w
+cong2 f Refl Refl = Refl
+
 infixr 2 _⟨_⟩_
 _⟨_⟩_ : {a : Set} -> (x : a) -> { y z : a} -> x == y -> y == z -> x == z
 _⟨_⟩_ x = trans
@@ -57,6 +66,15 @@ zero-cancellative : (n : Nat) -> (n * Zero) == Zero
 zero-cancellative Zero = Refl
 zero-cancellative (Succ n) = zero-cancellative n
 
+plus-zero : (n : Nat) -> n == (n + Zero)
+plus-zero Zero = Refl
+plus-zero (Succ n) = cong Succ (plus-zero n)
+
+
+plus-succ : (x y : Nat) -> Succ (x + y) == (x + Succ y)
+plus-succ Zero y = Refl
+plus-succ (Succ x) y = cong Succ (plus-succ x y)
+
 
 data Bool : Set where
   True : Bool
@@ -81,6 +99,17 @@ record Pair {l l'} (a : Set l) (b : Set l') : Set (l ⊔ l') where
     fst : a
     snd : b
 
+_×_ : ∀ {l l'} -> Set l -> Set l' -> Set (l ⊔ l')
+_×_ A B  = Pair A B
+
+record Triple {l l' l''} (a : Set l) (b : Set l') (c : Set l'') : Set (l ⊔ l' ⊔ l'') where
+  constructor _,_,_
+  field
+    fst : a
+    snd : b
+    thd : c
+
+
 curry : ∀ {l : Level} {a b c : Set l} -> (Pair a b -> c) -> a -> b -> c
 curry f x y = f (x , y)
 
@@ -91,8 +120,8 @@ data Either (a b : Set) : Set where
   Inl : a -> Either a b
   Inr : b -> Either a b
 
-data ⊤ : Set where
-  tt : ⊤
+record ⊤ : Set where
+  constructor tt 
 
 data ⊥ : Set where
 
@@ -107,8 +136,8 @@ data List (a : Set) : Set where
   Nil : List a
   Cons : a -> List a -> List a
 
-[_] : ∀ {a} -> a -> List a
-[ x ] = Cons x Nil
+-- [_] : ∀ {a} -> a -> List a
+-- [ x ] = Cons x Nil
 
 _++_ :  ∀ {a} -> List a -> List a -> List a
 Nil ++ ys = ys
