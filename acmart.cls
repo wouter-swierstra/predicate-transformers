@@ -37,8 +37,14 @@
 %%   Right brace   \}     Tilde         \~}
 \NeedsTeXFormat{LaTeX2e}
 \ProvidesClass{acmart}
-[2018/04/14 v1.53 Typesetting articles for the Association for
-Computing Machinery]
+[2018/05/09 v1.54 Typesetting articles for the Association for
+Computing Machinery, modified to add a 'nonacm' option -- see
+  https://github.com/borisveytsman/acmart/pull/282.
+You may obtain the source of this modified version at
+  https://github.com/gasche/acmart/blob/nonacm-derived/acmart.dtx,
+and the original version at
+  https://github.com/borisveytsman/acmart/.
+]
 \def\@classname{acmart}
 \InputIfFileExists{acmart-preload-hook.tex}{%
   \ClassWarning{\@classname}{%
@@ -96,6 +102,18 @@ Computing Machinery]
   \fi}{\PackageError{\@classname}{The option authorversion can be either true or
     false}}
 \ExecuteOptionsX{authorversion=false}
+\define@boolkey+{acmart.cls}[@ACM@]{nonacm}[true]{%
+  \if@ACM@nonacm
+    \PackageInfo{\@classname}{Using nonacm mode}%
+    \AtBeginDocument{\@ACM@printacmreffalse}%
+    % in 'nonacm' mode we disable the "ACM Reference Format"
+    % printing by default, but this can be re-enabled by the
+    % user using \settopmatter{printacmref=true}
+  \else
+    \PackageInfo{\@classname}{Not using nonacm mode}%
+  \fi}{\PackageError{\@classname}{The option nonacm can be either true or
+    false}}
+\ExecuteOptionsX{nonacm=false}
 \define@boolkey+{acmart.cls}[@ACM@]{natbib}[true]{%
   \if@ACM@natbib
     \PackageInfo{\@classname}{Explicitly selecting natbib mode}%
@@ -1606,7 +1624,7 @@ Computing Machinery]
        \fi
      \fi
   \fi
-  \footnotetextcopyrightpermission{%
+  \if@ACM@nonacm\else\footnotetextcopyrightpermission{%
     \if@ACM@authordraft
         \raisebox{-2ex}[\z@][\z@]{\makebox[0pt][l]{\large\bfseries
             Unpublished working draft. Not for distribution.}}%
@@ -1624,7 +1642,7 @@ Computing Machinery]
     \if@printcopyright
       \copyright\ \@copyrightyear\ \@copyrightowner\\
     \else
-     \@copyrightyear.\
+      \@copyrightyear.\
     \fi
     \if@ACM@manuscript
       Manuscript submitted to ACM\\
@@ -1644,17 +1662,20 @@ Computing Machinery]
             , \@formatdoi{\@acmDOI}.
           \fi\\
         \else
-          \if@ACM@journal
-            \@permissionCodeOne/\@acmYear/\@acmMonth-ART\@acmArticle
-            \ifx\@acmPrice\@empty\else\ \$\@acmPrice\fi\\
-            \@formatdoi{\@acmDOI}%
-          \else % Conference
-            \ifx\@acmISBN\@empty\else ACM~ISBN~\@acmISBN
-            \ifx\@acmPrice\@empty.\else\dots\$\@acmPrice\fi\\\fi
-            \ifx\@acmDOI\@empty\else\@formatdoi{\@acmDOI}\fi%
+          \if@ACM@nonacm\else
+            \if@ACM@journal
+              \@permissionCodeOne/\@acmYear/\@acmMonth-ART\@acmArticle
+              \ifx\@acmPrice\@empty\else\ \$\@acmPrice\fi\\
+              \@formatdoi{\@acmDOI}%
+            \else % Conference
+              \ifx\@acmISBN\@empty\else ACM~ISBN~\@acmISBN
+              \ifx\@acmPrice\@empty.\else\dots\$\@acmPrice\fi\\\fi
+              \ifx\@acmDOI\@empty\else\@formatdoi{\@acmDOI}\fi%
+            \fi
           \fi
         \fi
       \fi}
+    \fi
   \endgroup
   \setcounter{footnote}{0}%
   \@mkabstract
@@ -2143,7 +2164,7 @@ Computing Machinery]
   \def\@pages@word{\ifnum\getrefnumber{TotPages}=1\relax page\else pages\fi}%
   \def\footnotemark{}%
   \def\\{\unskip{} \ignorespaces}%
-  \def\footnote{\ClassError{\@classname}{Please do note use footnotes
+  \def\footnote{\ClassError{\@classname}{Please do not use footnotes
       inside a \string\title{} or \string\author{} command! Use
       \string\titlenote{} or \string\authornote{} instead!}}%
   \def\@article@string{\ifx\@acmArticle\@empty{\ }\else,
@@ -2151,17 +2172,23 @@ Computing Machinery]
   \par\medskip\small\noindent{\bfseries ACM Reference Format:}\par\nobreak
   \noindent\authors. \@acmYear. \@title
   \ifx\@subtitle\@empty. \else: \@subtitle. \fi
-  \if@ACM@journal
-     \textit{\@journalNameShort}
-     \@acmVolume, \@acmNumber \@article@string (\@acmPubDate),
-     \ref{TotPages}~\@pages@word.
-  \else
-     In \textit{\@acmBooktitle}%
-     \ifx\@acmEditors\@empty\textit{.}\else
-       \andify\@acmEditors\textit{, }\@acmEditors~\@editorsAbbrev.%
-     \fi\
-     ACM, New York, NY, USA%
-       \@article@string\unskip, \ref{TotPages}~\@pages@word.
+  \if@ACM@nonacm\else
+    % The 'nonacm' option disables 'printacmref' by default,
+    % and the present \@mkbibcitation definition is never used
+    % in this case. The conditional remains useful if the user
+    % explicitly sets \settopmatter{printacmref=true}.
+    \if@ACM@journal
+       \textit{\@journalNameShort}
+       \@acmVolume, \@acmNumber \@article@string (\@acmPubDate),
+       \ref{TotPages}~\@pages@word.
+    \else
+       In \textit{\@acmBooktitle}%
+       \ifx\@acmEditors\@empty\textit{.}\else
+         \andify\@acmEditors\textit{, }\@acmEditors~\@editorsAbbrev.%
+       \fi\
+       ACM, New York, NY, USA%
+         \@article@string\unskip, \ref{TotPages}~\@pages@word.
+    \fi
   \fi
   \ifx\@acmDOI\@empty\else\@formatdoi{\@acmDOI}\fi
 \par\egroup}
@@ -2221,45 +2248,62 @@ Computing Machinery]
   \fancyhf{}%
   \renewcommand{\headrulewidth}{\z@}%
   \renewcommand{\footrulewidth}{\z@}%
+  \def\@acmArticlePage{%
+    \ifx\@acmArticle\empty%
+      \if@ACM@printfolios\thepage\fi%
+    \else%
+      \@acmArticle\if@ACM@printfolios:\thepage\fi%
+    \fi%
+  }
   \ifcase\ACM@format@nr
   \relax % manuscript
     \fancyhead[LE]{\ACM@linecountL\if@ACM@printfolios\thepage\fi}%
     \fancyhead[RO]{\if@ACM@printfolios\thepage\fi}%
     \fancyhead[RE]{\@shortauthors}%
     \fancyhead[LO]{\ACM@linecountL\shorttitle}%
-    \fancyfoot[RO,LE]{\footnotesize Manuscript submitted to ACM}%
+    \if@ACM@nonacm\else%
+      \fancyfoot[RO,LE]{\footnotesize Manuscript submitted to ACM}
+    \fi%
   \or % acmsmall
-    \fancyhead[LE]{\ACM@linecountL\@headfootfont\@acmArticle\if@ACM@printfolios:\thepage\fi}%
-    \fancyhead[RO]{\@headfootfont\@acmArticle\if@ACM@printfolios:\thepage\fi}%
+    \fancyhead[LE]{\ACM@linecountL\@headfootfont\@acmArticlePage}%
+    \fancyhead[RO]{\@headfootfont\@acmArticlePage}%
     \fancyhead[RE]{\@headfootfont\@shortauthors}%
     \fancyhead[LO]{\ACM@linecountL\@headfootfont\shorttitle}%
-    \fancyfoot[RO,LE]{\footnotesize \@journalNameShort, Vol. \@acmVolume, No.
-    \@acmNumber, Article \@acmArticle.  Publication date: \@acmPubDate.}%
+    \if@ACM@nonacm\else%
+      \fancyfoot[RO,LE]{\footnotesize \@journalNameShort, Vol. \@acmVolume, No.
+      \@acmNumber, Article \@acmArticle.  Publication date: \@acmPubDate.}%
+    \fi%
   \or % acmlarge
     \fancyhead[LE]{\ACM@linecountL\@headfootfont
-      \@acmArticle\if@ACM@printfolios:\thepage\fi\quad\textbullet\quad\@shortauthors}%
+      \@acmArticlePage\quad\textbullet\quad\@shortauthors}%
     \fancyhead[LO]{\ACM@linecountL}%
     \fancyhead[RO]{\@headfootfont
-      \shorttitle\quad\textbullet\quad\@acmArticle\if@ACM@printfolios:\thepage\fi}%
-    \fancyfoot[RO,LE]{\footnotesize \@journalNameShort, Vol. \@acmVolume, No.
-    \@acmNumber, Article \@acmArticle.  Publication date: \@acmPubDate.}%
+      \shorttitle\quad\textbullet\quad\@acmArticlePage}%
+    \if@ACM@nonacm\else%
+      \fancyfoot[RO,LE]{\footnotesize \@journalNameShort, Vol. \@acmVolume, No.
+      \@acmNumber, Article \@acmArticle.  Publication date: \@acmPubDate.}%
+    \fi%
   \or % acmtog
     \fancyhead[LE]{\ACM@linecountL\@headfootfont
-      \@acmArticle\if@ACM@printfolios:\thepage\fi\quad\textbullet\quad\@shortauthors}%
+      \@acmArticlePage\quad\textbullet\quad\@shortauthors}%
     \fancyhead[LO]{\ACM@linecountL}%
     \fancyhead[RE]{\ACM@linecountR}%
     \fancyhead[RO]{\@headfootfont
-      \shorttitle\quad\textbullet\quad\@acmArticle\if@ACM@printfolios:\thepage\fi\ACM@linecountR}%
-    \fancyfoot[RO,LE]{\footnotesize \@journalNameShort, Vol. \@acmVolume, No.
-    \@acmNumber, Article \@acmArticle.  Publication date: \@acmPubDate.}%
+      \shorttitle\quad\textbullet\quad\@acmArticlePage\ACM@linecountR}%
+    \if@ACM@nonacm\else%
+      \fancyfoot[RO,LE]{\footnotesize \@journalNameShort, Vol. \@acmVolume, No.
+      \@acmNumber, Article \@acmArticle.  Publication date: \@acmPubDate.}%
+    \fi%
   \else % Proceedings
     \fancyfoot[C]{\if@ACM@printfolios\footnotesize\thepage\fi}%
     \fancyhead[LO]{\ACM@linecountL\@headfootfont\shorttitle}%
     \fancyhead[RE]{\@headfootfont\@shortauthors\ACM@linecountR}%
-    \fancyhead[LE]{\ACM@linecountL\@headfootfont\acmConference@shortname,
-      \acmConference@date, \acmConference@venue}%
-    \fancyhead[RO]{\@headfootfont\acmConference@shortname,
-      \acmConference@date, \acmConference@venue\ACM@linecountR}%
+    \if@ACM@nonacm\else%
+      \fancyhead[LE]{\ACM@linecountL\@headfootfont\acmConference@shortname,
+        \acmConference@date, \acmConference@venue}%
+      \fancyhead[RO]{\@headfootfont\acmConference@shortname,
+        \acmConference@date, \acmConference@venue\ACM@linecountR}%
+    \fi%
   \fi
   \if@ACM@sigchiamode
      \fancyheadoffset[L]{\dimexpr(\marginparsep+\marginparwidth)}%
@@ -2317,27 +2361,35 @@ Computing Machinery]
   \relax % manuscript
     \fancyhead[L]{\ACM@linecountL}%
     \fancyfoot[RO,LE]{\if@ACM@printfolios\small\thepage\fi}%
-    \fancyfoot[RE,LO]{\footnotesize Manuscript submitted to ACM}%
+    \if@ACM@nonacm\else%
+      \fancyfoot[RE,LO]{\footnotesize Manuscript submitted to ACM}%
+    \fi%
   \or % acmsmall
-    \fancyfoot[RO,LE]{\footnotesize \@journalNameShort, Vol. \@acmVolume, No.
-    \@acmNumber, Article \@acmArticle.  Publication date:
-    \@acmPubDate.}%
+    \if@ACM@nonacm\else%
+      \fancyfoot[RO,LE]{\footnotesize \@journalNameShort, Vol. \@acmVolume, No.
+      \@acmNumber, Article \@acmArticle.  Publication date:
+      \@acmPubDate.}%
+    \fi%
     \fancyhead[LE]{\ACM@linecountL\@folioblob}%
     \fancyhead[LO]{\ACM@linecountL}%
     \fancyhead[RO]{\@folioblob}%
     \fancyheadoffset[RO,LE]{0.6\@folio@wd}%
   \or % acmlarge
-    \fancyfoot[RO,LE]{\footnotesize \@journalNameShort, Vol. \@acmVolume, No.
-    \@acmNumber, Article \@acmArticle.  Publication date:
-    \@acmPubDate.}%
+    \if@ACM@nonacm\else%
+      \fancyfoot[RO,LE]{\footnotesize \@journalNameShort, Vol. \@acmVolume, No.
+      \@acmNumber, Article \@acmArticle.  Publication date:
+      \@acmPubDate.}%
+    \fi%
     \fancyhead[RO]{\@folioblob}%
     \fancyhead[LE]{\ACM@linecountL\@folioblob}%
     \fancyhead[LO]{\ACM@linecountL}%
     \fancyheadoffset[RO,LE]{1.4\@folio@wd}%
   \or % acmtog
-    \fancyfoot[RO,LE]{\footnotesize \@journalNameShort, Vol. \@acmVolume, No.
-    \@acmNumber, Article \@acmArticle.  Publication date:
-    \@acmPubDate.}%
+    \if@ACM@nonacm\else%
+      \fancyfoot[RO,LE]{\footnotesize \@journalNameShort, Vol. \@acmVolume, No.
+      \@acmNumber, Article \@acmArticle.  Publication date:
+      \@acmPubDate.}%
+    \fi%
     \fancyhead[L]{\ACM@linecountL}%
     \fancyhead[R]{\ACM@linecountR}%
   \else % Conference proceedings
@@ -2348,7 +2400,9 @@ Computing Machinery]
   \if@ACM@timestamp
     \ifnum\ACM@format@nr=0\relax % Manuscript
     \fancyfoot[LO,RE]{\ACM@timestamp\quad
-      \footnotesize Manuscript submitted to ACM}
+      \if@ACM@nonacm\else
+        \footnotesize Manuscript submitted to ACM
+      \fi}
     \else
     \fancyfoot[LO,RE]{\ACM@timestamp}
     \fi

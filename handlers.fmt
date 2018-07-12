@@ -12,9 +12,12 @@
 %format subset = "\subseteq"
 %format elem = "\in"
 %format wpEval = wp "_{" eval "}"
+%format ^^ = "\;"
 %else
 %format (Forall (a)) = "forall { " a " } -> "
 %format (implicit(a)) = "{" a "} ->"
 %format N = "Nat"
 %format top = "⊤"
+%format ^^ = " "
 %endif
+
