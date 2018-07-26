@@ -104,6 +104,8 @@ online.\footnote{\todo{url}}
 \label{sec:intro}
 %if style == newcode
 \begin{code}
+{-# OPTIONS --type-in-type #-}
+
 module Check where
 
 open import Prelude
@@ -317,14 +319,14 @@ We may not want to define predicates such as |SafeDiv|
 ourselves. Instead, we can define the more general predicate
 characterizing the \emph{domain} of a partial function:
 \begin{code}
-  dom : {a : Set} {b : a -> Set} -> ((x : a) -> Partial (b x)) -> (a -> Set)
+  dom : (implicit(a : Set)) (implicit (b : a -> Set)) ((x : a) -> Partial (b x)) -> (a -> Set)
   dom f = wpPartial f (\ _ _ -> ⊤)
 \end{code}
 Indeed, we use this notion of domain to show that the two semantics
 agree precisely:
 \begin{code}
-  complete  : (wpPartial ⟦_⟧ _⇓_)  ^^ ⊆ ^^ (dom ⟦_⟧)
-  sound     : (dom ⟦_⟧)            ^^ ⊆ ^^ (wpPartial ⟦_⟧ _⇓_)
+  complete  : wpPartial ⟦_⟧ _⇓_  ^^ ⊆ ^^ dom ⟦_⟧
+  sound     : dom ⟦_⟧            ^^ ⊆ ^^ wpPartial ⟦_⟧ _⇓_
 \end{code}
 %if style == newcode
 \begin{code}
@@ -402,30 +404,25 @@ following two types:
     Done : a -> I a
     Spec : (a -> Set) -> I a
 
-  spec : (a -> Set) -> I a
-  spec = Spec    
-    
-  Step : Set -> Set1
-  Step a = Partial (I a)
+  M : Set -> Set1
+  M a = Partial (I a)
 \end{code}
 A value of type |I a| is either a result of type |a| or a
 specification of type |a -> Set|, corresponding to an unfinished part
-of our program calculation. During such a derivation, we relate two
-unfinished partial computations.
-
-We can easily extend our notion of refinement to work over our
-refinement steps.
+of our program calculation. The type |M a| then corresponds to
+computations that \emph{mix} code and specifications.  We can easily
+extend our notion of refinement to work over such a mix of code and
+specification:
 \begin{code}
-  wpI : ∀ {a : Set} {b : a -> Set} -> (P : (x : a) -> b x -> Set) -> (x : a) -> I (b x) -> Set
-  wpI P _ (Done y) = P _ y
-  wpI P x (Spec Q) = Q ⊆ P x
+  wpI : (implicit(a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> I (b x) -> Set
+  wpI P _ (Done y)  = P _ y
+  wpI P x (Spec Q)  = Q ⊆ P x
 
-  _⊑_ : {a : Set} {b : a -> Set} (f g : (x : a) -> Step (b x)) -> Set1
-  _⊑_ {a} {b} f g = forall (P : (x : a) -> b x -> Set) (x : a) ->
-                    wpPartial f (wpI P) ⊆ wpPartial g (wpI P)
+  _⊑_ : {a : Set} {b : a -> Set} (f g : (x : a) -> M (b x)) -> Set1
+  f ⊑ g = ∀ P -> wpPartial f (wpI P) ⊆ wpPartial g (wpI P)
 \end{code}
-This refinement relation lets us compare two unfinished derivation
-fragments, consisting of a mix of code and specification.
+This refinement relation lets us compare two (possibly unfinished)
+derivation fragments, consisting of a mix of code and specification.
 
 How can we use this? Let's see another example.
 
@@ -617,180 +614,180 @@ How can we use this? Let's see another example.
 % % This pattern can be extended to many other effects, as we shall
 % % explore now.
 
-% \section{State}
-% \label{sec:state}
+\section{Mutable state}
+\label{sec:state}
 
-% We can do something similar for mutable state. We will define a module
-% parametrized by a type |s|, representing the type of our mutable
-% state:
+We can do something similar for mutable state. We will define a module
+parametrized by a type |s|, representing the type of our mutable
+state:
 
-% \begin{code}
-% module State (s : Set) where
-% \end{code}
+\begin{code}
+module State (s : Set) where
+\end{code}
 
-% %if style == newcode
-% \begin{code}
-%   open Free  
-% \end{code}
-% %endif
+%if style == newcode
+\begin{code}
+  open Free  
+\end{code}
+%endif
 
-% As before, we assemble our free monad from the commands |C| and
-% responses |R|:
+As before, we assemble our free monad from the commands |C| and
+responses |R|:
 
-% \begin{code}
-%   data C : Set where
-%     Get : C
-%     Put : s -> C
+\begin{code}
+  data C : Set where
+    Get : C
+    Put : s -> C
 
-%   R : C -> Set
-%   R Get      = s
-%   R (Put _)  = ⊤
+  R : C -> Set
+  R Get      = s
+  R (Put _)  = ⊤
 
-%   State : Set -> Set
-%   State = Free C R
-% \end{code}
+  State : Set -> Set
+  State = Free C R
+\end{code}
 
-% Once again, we can define a pair of smart constructors to make it
-% easier to write stateful computations:
-% \begin{code}
-%   get : State s
-%   get = Step Get return
+Once again, we can define a pair of smart constructors to make it
+easier to write stateful computations:
+\begin{code}
+  get : State s
+  get = Step Get return
 
-%   put : s -> State ⊤
-%   put s = Step (Put s) (\_ -> return tt)
-% \end{code}
+  put : s -> State ⊤
+  put s = Step (Put s) (\_ -> return tt)
+\end{code}
 
-% The usual handler for stateful computations maps our free monad,
-% |State s|, to the state monad:
-% \begin{code}
-%   run : (Forall(a)) State a -> s -> Pair a s
-%   run (Pure x) s          = (x , s)
-%   run (Step Get k) s      = run (k s) s
-%   run (Step (Put x) k) s  = run (k tt) x 
-% \end{code}
-% Inspired by the previous sections, we can define the following
-% predicate transformer semantics:
-% \begin{code}
-%   lift : (Forall(a)) (P : Pair a s -> Set) -> State a -> (s -> Set)
-%   lift P (Pure x) s           = P (x , s)
-%   lift P (Step Get k) s       = lift P (k s) s
-%   lift P (Step (Put s') k) s  = lift P (k tt) s'
-% \end{code}
-% Given any predicate |P| on the final state and result, it
-% computes the weakest precondition required of the initial state to
-% ensure |P| holds upon completing the computation.
+The usual handler for stateful computations maps our free monad,
+|State s|, to the state monad:
+\begin{code}
+  run : (Forall(a)) State a -> s -> Pair a s
+  run (Pure x) s          = (x , s)
+  run (Step Get k) s      = run (k s) s
+  run (Step (Put x) k) s  = run (k tt) x 
+\end{code}
+Inspired by the previous sections, we can define the following
+predicate transformer semantics:
+\begin{code}
+  lift : (Forall(a)) (P : Pair a s -> Set) -> State a -> (s -> Set)
+  lift P (Pure x) s           = P (x , s)
+  lift P (Step Get k) s       = lift P (k s) s
+  lift P (Step (Put s') k) s  = lift P (k tt) s'
+\end{code}
+Given any predicate |P| on the final state and result, it
+computes the weakest precondition required of the initial state to
+ensure |P| holds upon completing the computation.
 
-% Once again, we can prove soundness of this predicate transformer with
-% respect to the |run| above:
+Once again, we can prove soundness of this predicate transformer with
+respect to the |run| above:
 
-% \begin{code}
-%   soundness : (Forall(a)) (P : Pair a s -> Set) -> (c : State a) -> (i : s) -> lift P c i -> P (run c i)
-% \end{code}
-% %if style == newcode           
-% \begin{code}           
-%   soundness P (Pure x) i p = p
-%   soundness P (Step Get x) i lift = soundness P (x i) i lift
-%   soundness P (Step (Put x) k) i lift with soundness P (k tt)
-%   ... | ih = ih x lift             
-% \end{code}
-% %endif
+\begin{code}
+  soundness : (Forall(a)) (P : Pair a s -> Set) -> (c : State a) -> (i : s) -> lift P c i -> P (run c i)
+\end{code}
+%if style == newcode           
+\begin{code}           
+  soundness P (Pure x) i p = p
+  soundness P (Step Get x) i lift = soundness P (x i) i lift
+  soundness P (Step (Put x) k) i lift with soundness P (k tt)
+  ... | ih = ih x lift             
+\end{code}
+%endif
 
-% We oftentimes want to write a specification as a \emph{relation}
-% between input and output states. To do so, we can partially apply the
-% predicate |P| before calling |lift|:
-% \begin{code}
-%   liftR : {a : Set} -> (P : s -> a -> s -> Set) -> State a -> (s -> Set)
-%   liftR P c s = lift (uncurry (P s)) c s
-% \end{code}
-% Reusing our previous soundness result, we can show that the |liftR|
-% is sound with respect to the |run| semantics defined above.
+We oftentimes want to write a specification as a \emph{relation}
+between input and output states. To do so, we can partially apply the
+predicate |P| before calling |lift|:
+\begin{code}
+  liftR : {a : Set} -> (P : s -> a -> s -> Set) -> State a -> (s -> Set)
+  liftR P c s = lift (uncurry (P s)) c s
+\end{code}
+Reusing our previous soundness result, we can show that the |liftR|
+is sound with respect to the |run| semantics defined above.
 
-% \subsection*{Example: tree labelling}
-% \label{sec:trees}
+\subsection*{Example: tree labelling}
+\label{sec:trees}
 
-% \todo{Do example}
+\todo{Do example}
 
-% \subsection*{Rule of consequence}
-% \label{sec:consequence}
-
-
+\subsection*{Rule of consequence}
+\label{sec:consequence}
 
 
 
-% \section{Nondeterminism}
-% \label{sec:non-det}
+\section{Nondeterminism}
+\label{sec:non-det}
 
-% Can we repeat this construction of predicate transformer semantics for
-% other effects? In this section, we will show how we can lift a
-% predicate |a -> Set| over non-deterministic computations returning
-% values of type |a|. Once again, we begin by defining a free monad
-% describing the effects that can be used to describe non-deterministic
-% computations:
+Can we repeat this construction of predicate transformer semantics for
+other effects? In this section, we will show how we can lift a
+predicate |a -> Set| over non-deterministic computations returning
+values of type |a|. Once again, we begin by defining a free monad
+describing the effects that can be used to describe non-deterministic
+computations:
 
-% %if style == newcode
-% \begin{code}
-% module Nondeterminism where
+%if style == newcode
+\begin{code}
+module Nondeterminism where
 
-%   -- Define a free monad
-%   open Free
-% \end{code}
-% %endif
+  -- Define a free monad
+  open Free
+\end{code}
+%endif
 
-% \begin{code}
-%   data C : Set where
-%     Fail : C
-%     Choice : C
+\begin{code}
+  data C : Set where
+    Fail : C
+    Choice : C
 
-%   R : C -> Set
-%   R Fail = ⊥
-%   R Choice = Bool
-% \end{code}
+  R : C -> Set
+  R Fail = ⊥
+  R Choice = Bool
+\end{code}
 
-% Here we have chosen to define two possible commands: |Fail| and
-% |Choice|. The |Fail| constructor corresponds to a non-deterministic
-% computation that will not return any results; conceptually, the
-% |Choice| constructor takes two arguments and non-deterministically
-% chooses between them. To model this, the response used in the
-% continuation of the free monad, |R Choice|, is a |Bool|, indicating
-% which argument to choose. We can make this more clear by defining the
-% following shorthands for non-deterministic computations, |ND|, and
-% its constructors:
-% \begin{code}
-%   ND : Set -> Set
-%   ND = Free C R
+Here we have chosen to define two possible commands: |Fail| and
+|Choice|. The |Fail| constructor corresponds to a non-deterministic
+computation that will not return any results; conceptually, the
+|Choice| constructor takes two arguments and non-deterministically
+chooses between them. To model this, the response used in the
+continuation of the free monad, |R Choice|, is a |Bool|, indicating
+which argument to choose. We can make this more clear by defining the
+following shorthands for non-deterministic computations, |ND|, and
+its constructors:
+\begin{code}
+  ND : Set -> Set
+  ND = Free C R
 
-%   fail : (Forall(a)) ND a
-%   fail = Step Fail (\ ())
+  fail : (Forall(a)) ND a
+  fail = Step Fail (\ ())
 
-%   choice : (Forall(a)) ND a -> ND a -> ND a
-%   choice c1 c2 = Step Choice (\ b -> if b then c1 else c2)
-% \end{code}
+  choice : (Forall(a)) ND a -> ND a -> ND a
+  choice c1 c2 = Step Choice (\ b -> if b then c1 else c2)
+\end{code}
 
-% Next, we turn our attention to lifting a predicate of type |a -> Set|
-% to computations of type |ND a -> Set|. There are two canonical ways to
-% do so:
+Next, we turn our attention to lifting a predicate of type |a -> Set|
+to computations of type |ND a -> Set|. There are two canonical ways to
+do so:
 
-% > All : (Forall(a)) (P : a -> Set) -> ND a -> Set
-% > All P (Pure x) = P x
-% > All P (Step Fail _) = ⊤
-% > All P (Step Choice c) = Pair (All P (c True)) (All P (c False)) 
-% > 
-% > Any : (Forall(a)) (P : a -> Set) -> ND a -> Set
-% > Any P (Pure x) = P x
-% > Any P (Step Fail _) = ⊥
-% > Any P (Step Choice c) = Either (Any P (c True)) (Any P (c False))
+> All : (Forall(a)) (P : a -> Set) -> ND a -> Set
+> All P (Pure x) = P x
+> All P (Step Fail _) = ⊤
+> All P (Step Choice c) = Pair (All P (c True)) (All P (c False)) 
+> 
+> Any : (Forall(a)) (P : a -> Set) -> ND a -> Set
+> Any P (Pure x) = P x
+> Any P (Step Fail _) = ⊥
+> Any P (Step Choice c) = Either (Any P (c True)) (Any P (c False))
 
-% The statement |All P nd| holds when |P| holds for \emph{all} possible
-% values returned by the non-deterministic computation |nd|; the
-% statement |Any P nd| holds when |P| holds for \emph{any} possible
-% value returned by the non-deterministic computation |nd|. Both these
-% functions could also be defined using |fold|, for instance:
+The statement |All P nd| holds when |P| holds for \emph{all} possible
+values returned by the non-deterministic computation |nd|; the
+statement |Any P nd| holds when |P| holds for \emph{any} possible
+value returned by the non-deterministic computation |nd|. Both these
+functions could also be defined using |fold|, for instance:
 
-% > All' :  (Forall(a)) (P : a -> Set) -> ND a -> Set
-% > All' = fold (\ { Fail _ → ⊤ ; Choice k → Pair (k True) (k False) })
+\begin{spec}
+All' :  (Forall(a)) (P : a -> Set) -> ND a -> Set
+All' = fold (\ { Fail _ → ⊤ ; Choice k → Pair (k True) (k False) })
+\end{spec}
 
-% We can relate both these predicates to the usual `list handler' for
-% non-determinism and prove appropriate soundness results.
+We can relate both these predicates to the usual `list handler' for
+non-determinism and prove appropriate soundness results.
 
 % \subsection*{Example}
 % \label{example-non-det}
@@ -822,7 +819,8 @@ How can we use this? Let's see another example.
 
 % \todo{Bigger example? n-queens?}
 
-% \section{General recursion, totally free}
+\section{General recursion, totally free}
+\label{sec:recursion}
 
 % Besides these well-known effects, we can handle \emph{general
 %   recursion} in a similar fashion. To do so, we introduce a module
@@ -915,39 +913,39 @@ How can we use this? Let's see another example.
 % \end{code}
 
 
-% \section{Open questions}
-% \label{sec:questions}
+\section{Open questions}
+\label{sec:questions}
 
 
-% \begin{itemize}
-% \item How can we use this technology to reason about combinations of
-%   effects? Eg mixing state and exceptions.
-
-  
-% \item How can we reason about compound computations built with |>>=|
-%   and |>>|?  There must be some 'law of consequence' that we can
-%   derive for specific handlers/effects -- is there a more general
-%   form? What about loops/if?
-
-% \item  What is a specification of a program with effects? Can we define
-%   generalized refinement rules?
-
-% \item Relation with equations/equational part of algebraic effects?
-
-% \item Connection with relational specifications
-
-% \item wp (s,q) or wp (s,p) implies wp(s,q or p) -- but not the other
-%   way around. The implication in the other direction only holds when
-%   the program is deterministic.
+\begin{itemize}
+\item How can we use this technology to reason about combinations of
+  effects? Eg mixing state and exceptions.
 
   
-% \end{itemize}
+\item How can we reason about compound computations built with |>>=|
+  and |>>|?  There must be some 'law of consequence' that we can
+  derive for specific handlers/effects -- is there a more general
+  form? What about loops/if?
 
-% \section{Discussion}
-% \label{sec:discussion}
+\item  What is a specification of a program with effects? Can we define
+  generalized refinement rules?
 
-% \subsection{Related work}
-% \label{sec:related-work}
+\item Relation with equations/equational part of algebraic effects?
+
+\item Connection with relational specifications
+
+\item wp (s,q) or wp (s,p) implies wp(s,q or p) -- but not the other
+  way around. The implication in the other direction only holds when
+  the program is deterministic.
+
+  
+\end{itemize}
+
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Related work}
+\label{sec:related-work}
 
 % Just do it
 

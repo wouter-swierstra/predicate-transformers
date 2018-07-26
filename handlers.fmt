@@ -13,6 +13,7 @@
 %format elem = "\in"
 %format wpEval = wp "_{" eval "}"
 %format ^^ = "\;"
+%format Set1 = Set
 %else
 %format (Forall (a)) = "forall { " a " } -> "
 %format (implicit(a)) = "{" a "} ->"
