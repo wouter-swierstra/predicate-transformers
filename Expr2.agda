@@ -1,6 +1,6 @@
 {-#  OPTIONS --type-in-type  #-}
 
-module Expr where
+module Expr2 where
 
 open import Prelude
 open import Level hiding (lift)
@@ -119,71 +119,52 @@ module Maybe where
   complete (Div e1 e2) h | Step Abort _ with-≡ eq | _ | ih1 | _
     rewrite eq = magic ih1
 
-  data I (a : Set) : Set1 where
-    Done : a -> I a
-    Spec : (a -> Set) -> I a
+  data I {a : Set} (b : a -> Set) : Set1 where
+    Done : ({x : a} -> b x) -> I b
+    Spec : (pre : a -> Set) -> (post : (x : a) -> b x -> Set) -> I b
 
-  M : Set -> Set1
-  M a = Partial (I a)
+  M : {a : Set} -> (a -> Set) -> Set1
+  M b = Partial (I b)
 
-  isCode : ∀ {a} -> M a -> Set
-  isCode (Pure (Done x)) = ⊤
-  isCode (Pure (Spec x)) = ⊥
-  isCode (Step Abort x) = ⊤
+  spec : ∀ {a} {b : a -> Set} -> (P : a -> Set) -> (Q : (x : a) -> b x -> Set) -> M b
+  spec P Q = Pure (Spec P Q)
 
-  
-  done : ∀ {a} -> (m : M a) -> isCode m -> Partial a
-  done (Pure (Done x)) p = Pure x
-  done (Pure (Spec x)) ()
-  done (Step Abort k) p = Step Abort λ ()
-
-  fromCode : ∀ {a} -> Partial a -> M a
-  fromCode (Pure x) = Pure (Done x)
-  fromCode (Step Abort x) = Step Abort \()
-
-  spec : ∀ {a} -> (P : a -> Set) -> M a
-  spec P = Pure (Spec P)
-
-  existsC : (a : Set) (b : a -> Set) -> Set
-  existsC a b = Not ((x : a) -> Not (b x))
-
-  wpI : {a : Set} -> {b : a -> Set} -> (P : (x : a) -> b x -> Set) -> (x : a) -> I (b x) -> Set
+  wpI : {a : Set} -> {b : a -> Set} -> (P : (x : a) -> b x -> Set) -> (x : a) -> I b -> Set
   wpI P i (Done o)  = P i o
-  wpI {a} {b} P i (Spec Q)  =
+  wpI {a} {b} P i (Spec pre post)  =
     Pair
-      {!!}
-      (Q ⊆ P i)
+      (pre i)
+      (post i ⊆ P i) -- or should that be forall i...
+                     -- or should it say that forall inputs, satisfying the precondition, etc.
+                     -- cf indexed containers
 
   wpM : {a : Set} -> {b : a -> Set} ->
-    (f : (x : a) -> M (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
+    (f : (x : a) -> M b) -> ((x : a) -> b x -> Set) -> (a -> Set)
   wpM f = wp f · mustPT · wpI
 
+  record _⊑_ {a : Set} {b : a -> Set} (f g : (x : a) -> M b) : Set1 where
+     constructor refinement
+     field
+       proof : (∀ P -> (i : a) -> (H : wpM f P i) -> wpM g P i)
 
-  record _⊑_ {a : Set} {b : a -> Set} (f g : (x : a) -> M (b x)) : Set1 where
-    constructor refinement
-    field
-      proof : (∀ P -> wpM f P ⊆ wpM g P)
-
-  ⊑-refl : ∀ {a} {b : a -> Set} -> (f : (x : a) -> M (b x)) -> f ⊑ f
+  ⊑-refl : ∀ {a} {b : a -> Set} -> (f : (x : a) -> M b) -> f ⊑ f
   ⊑-refl f = refinement \P x H -> H
 
-  ⊑-trans : ∀ {a} {b : a -> Set} -> {f g h : (x : a) -> M (b x)} -> f ⊑ g -> g ⊑ h -> f ⊑ h
+  ⊑-trans : ∀ {a} {b : a -> Set} -> {f g h : (x : a) -> M b} -> f ⊑ g -> g ⊑ h -> f ⊑ h
   ⊑-trans (record { proof = step1 }) (record { proof = step2 }) =
     refinement \P H x -> step2 P H (step1 P H x)
 
-
-  strengthenSpec : {a : Set} {b : a -> Set} (S S' : (x : a) -> b x -> Set) ->
-    ((x : a) -> S' x ⊆ S x) ->
-    (λ x → Pure (Spec (S x))) ⊑ (\x -> Pure (Spec (S' x)))
-  strengthenSpec S S' H = refinement λ {P x (h1 , h2) → {!!} , λ bx s'bx → h2 bx (H _ _ s'bx)}
-
+  strengthenPost : {a : Set} {b : a -> Set} (S1 S2 : (x : a) -> b x -> Set) (Pre : a -> Set) ->
+    ((x : a) -> S2 x ⊆ S1 x) ->
+    (\x -> spec Pre S1) ⊑ \x -> spec Pre S2
+  strengthenPost S1 S2 Pre H = refinement λ { P x (fst , snd) → fst , λ bx s2 → snd bx (H _ bx s2)}
 
   infixr 2 _⟨_⟩_
   _⟨_⟩_ : forall {a : Set} {b : a -> Set}
-    (f : (x : a) -> M (b x)) -> {g h : (x : a) -> M (b x)} -> (f ⊑ g) -> (g ⊑ h) -> f ⊑ h
+    (f : (x : a) -> M (b)) -> {g h : (x : a) -> M (b)} -> (f ⊑ g) -> (g ⊑ h) -> f ⊑ h
   _⟨_⟩_ f {g} {h} step1 step2 = ⊑-trans {f = f} {g = g} {h = h} step1 step2
 
-  _■ : forall {a : Set} {b : a -> Set} (f : (x : a) -> M (b x)) -> f ⊑ f
+  _■ : forall {a : Set} {b : a -> Set} (f : (x : a) -> M (b)) -> f ⊑ f
   _■ f = ⊑-refl f
 
   Stack = List
@@ -195,20 +176,35 @@ module Maybe where
   PopSpec : Stack Nat -> (Pair Nat (Stack Nat)) -> Set
   PopSpec xs (y , ys) = xs == Cons y ys
 
-  popSpec : Stack Nat -> M (Pair Nat (Stack Nat))
-  popSpec xs = spec (PopSpec xs)
+  K : {a : Set} -> Set -> (a -> Set)
+  K A _ = A
 
-  popCorrect : popSpec ⊑ (fromCode · pop)
-  popCorrect = refinement \ { P Nil (fst , snd) → fst (λ x ())
-                            ; P (Cons x xs) (fst , snd) → snd (x , xs) Refl}
+  popSpec : (xs : Stack Nat) -> M {Stack Nat} (\_ -> Pair Nat (Stack Nat))
+  popSpec xs = spec (\q -> q == Nil -> ⊥) PopSpec
+
+  fromCode : ∀ {a b : Set} -> (Partial a) -> M {b} (\_ -> a)
+  fromCode (Pure y) = Pure (Done y)
+  fromCode (Step Abort x) = Step Abort \()
+
+  popCorrect : popSpec ⊑ \xs -> fromCode {Pair Nat (Stack Nat)} (pop xs)
+  popCorrect = refinement λ { P Nil (fst , snd) → magic (fst Refl)
+                            ; P (Cons x xs) (fst , snd) → snd _ Refl}
 
   data AddSpec : Stack Nat -> Stack Nat -> Set where
     AddThem : ∀ {x1 x2 : Nat} {xs : Stack Nat} -> AddSpec (Cons x1 (Cons x2 xs)) (Cons (x1 + x2) xs)
 
-  addSpec : Stack Nat -> M (Stack Nat)
-  addSpec (xs) = spec (AddSpec xs)
+  null? : Stack Nat -> Set
+  null? Nil = ⊤
+  null? _ = ⊥
 
-  add : Stack Nat -> M (Stack Nat)
+  single? : Stack Nat -> Set
+  single? Nil = ⊥
+  single? (Cons x xs) = null? xs
+  
+  addSpec : Stack Nat -> M {Stack Nat} (\_ -> Stack Nat)
+  addSpec (xs) = spec (\xs -> Pair (null? xs -> ⊥) (single? xs -> ⊥)) AddSpec
+
+  add : Stack Nat -> M {Stack Nat} (\_ -> Stack Nat)
   add xs =
     pop xs >>= \{ (x1 , xs) -> 
     pop xs >>= \{ (x2 , xs) ->
@@ -218,9 +214,9 @@ module Maybe where
   addCorrect = refinement prf
     where
     prf : (P : Stack Nat -> Stack Nat -> Set) -> wpM addSpec P ⊆ wpM add P
-    prf P Nil (fst , snd) = fst \xs -> λ ()
-    prf P (Cons x Nil) (fst , snd) = fst λ x₁ () 
-    prf P (Cons x (Cons x₁ xs)) H = Pair.snd H (Cons _ xs) AddThem
+    prf P Nil ((fst , _) , _) = fst _
+    prf P (Cons x Nil) ((_ , snd) , _) = snd _
+    prf P (Cons x (Cons x₁ xs)) H = Pair.snd H _ AddThem
 
  -- Can we do calculation in this style?
 
@@ -228,78 +224,78 @@ module Maybe where
   explicitDerivation =
     addSpec
       ⟨ step1 ⟩
-    (\xs -> pop xs >>= \ { (x1 , xs) -> spec (AddSpec (Cons x1 xs))})
+    (\xs -> pop xs >>= \ { (x1 , xs) -> spec (\xs -> Pair (null? xs -> ⊥) (single? xs -> ⊥)) (AddSpec)})
       ⟨ step2 ⟩
     (\xs -> pop xs >>= \ { (x1 , xs) ->
             pop xs >>= \ { (x2 , xs) ->
-            spec (AddSpec (Cons x1 (Cons x2 xs)))
-                         }})
+            spec (\xs -> ⊤) (AddSpec)}})
       ⟨ step3 ⟩
     add ■
       where
-        step1 : addSpec ⊑ (\xs -> pop xs >>= \ { (x1 , xs) -> Pure (Spec (AddSpec (Cons x1 xs)))})
-        step1 = refinement \ { P Nil (fst , snd) → fst λ x () ; P (Cons x xs) H → H}
-        step2 : (\xs -> pop xs >>= \ { (x1 , xs) -> spec (AddSpec (Cons x1 xs))})
+        step1 : addSpec ⊑ (\xs -> pop xs >>= \ { (x1 , xs) -> spec (\xs -> Pair (null? xs -> ⊥) (single? xs -> ⊥)) ((\as bs -> AddSpec as bs))})
+        step1 = refinement λ { P Nil ((fst , _) , snd) → magic (fst _)
+                             ; P (Cons x Nil) ((_ , fst) , snd) → magic (fst _)
+                             ; P (Cons x (Cons x₁ xs)) (H , snd) → H , snd}
+        step2 : (\xs -> pop xs >>= \ { (x1 , xs) -> spec (\xs -> Pair (null? xs -> ⊥) (single? xs -> ⊥)) AddSpec})
                 ⊑
                 (\xs -> pop xs >>= \ { (x1 , xs) ->
                         pop xs >>= \ { (x2 , xs) ->
-                        spec (AddSpec (Cons x1 (Cons x2 xs)))}})
-        step2 = refinement \ { P Nil ()
-                             ; P (Cons x Nil) (fst , snd) → fst \x ()
-                             ; P (Cons x (Cons x₁ xs)) H → H}
+                        spec (\xs -> ⊤) AddSpec}})
+        step2 = refinement λ { P Nil ()
+                             ; P (Cons x Nil) ((_ , fst) , snd) → magic (fst _)
+                             ; P (Cons x (Cons x₁ i)) (fst , snd) → tt , snd}
         step3 : (\xs -> pop xs >>= \ { (x1 , xs) ->
                         pop xs >>= \ { (x2 , xs) ->
-                        spec (AddSpec (Cons x1 (Cons x2 xs)))}})
+                        spec (\xs -> ⊤) AddSpec}})
                 ⊑ add
-        step3 = refinement \ { P Nil () ; P (Cons x Nil) ()
-                             ; P (Cons x1 (Cons x2 xs)) (fst , snd) →
-                                 snd (Cons (x1 + x2) xs) AddThem }
+        step3 = refinement λ { P Nil ()
+                             ; P (Cons x Nil) ()
+                             ; P (Cons x1 (Cons x2 xs)) (fst , snd) → snd (Cons (x1 + x2) xs) AddThem}
 
-  -- Rephrasing things a bit...
+ --  -- Rephrasing things a bit...
 
+ --  Σ : (a : Set) -> (b : a -> Set) -> Set
+ --  Σ = Sigma
 
-  Σ : (a : Set) -> (b : a -> Set) -> Set
-  Σ = Sigma
+ --  popM : Stack Nat -> M (Pair Nat (Stack Nat))
+ --  popM xs = pop xs >>= λ x → Pure (Done x)
 
-  popM : Stack Nat -> M (Pair Nat (Stack Nat))
-  popM xs = pop xs >>= λ x → Pure (Done x)
+ --  _>=>_ : ∀ {a b c} -> (I a -> M b) -> (I b -> M c) -> (I a -> M c)
+ --  _>=>_ c1 c2 = \x ->  c1 x >>= c2
 
-  _>=>_ : ∀ {a b c} -> (I a -> M b) -> (I b -> M c) -> (I a -> M c)
-  _>=>_ c1 c2 = \x ->  c1 x >>= c2
-
-  popIt : (S : Stack Nat -> Stack Nat -> Set) ->
-          Σ (Pair Nat (Stack Nat) -> M (Stack Nat))
-            (\g -> 
-              (P : Stack Nat -> Stack Nat -> Set) ->
-              wpM (spec · S) P ⊆ wpM (\xs -> pop xs >>= g) P) ->
-          Σ (Stack Nat -> M (Stack Nat)) (\f -> (spec · S) ⊑ f)
-  popIt S (g , H) = (\xs -> pop xs >>= g) , refinement H
-
-
-  returnStep : ∀ {P : Stack Nat -> Stack Nat -> Set} ->
-    ((xs : Stack Nat) -> P xs xs) ->
-    Σ (Stack Nat -> M (Stack Nat)) (\f -> (\x -> spec (P x)) ⊑ f)    
-  returnStep H = (\xs -> Pure (Done xs)) , refinement λ { P ys (fst , snd) → snd ys (H ys)}
-
-  popStep : (S : Stack Nat -> Stack Nat -> Set) ->
-          (S' : Pair Nat (Stack Nat) -> Stack Nat -> Set) ->
-          ((x : Nat) (xs : Stack Nat) -> S (Cons x xs) ⊆ S' (x , xs)) ->
-          ((x : Nat) (xs : Stack Nat) -> S' (x , xs) ⊆ S (Cons x xs)) ->          
-          Σ (Pair Nat (Stack Nat) -> M (Stack Nat))
-            (\g -> (spec · S') ⊑ g) ->
-          Σ (Stack Nat -> M (Stack Nat)) (\f -> (spec · S) ⊑ f)
-  popStep S S' H1 H2 (g , proof) =
-    (\xs -> pop xs >>= g) , {!!}
+ --  popIt : (S : Stack Nat -> Stack Nat -> Set) ->
+ --          Σ (Pair Nat (Stack Nat) -> M (Stack Nat))
+ --            (\g -> 
+ --              (P : Stack Nat -> Stack Nat -> Set) ->
+ --              wpM (spec · S) P ⊆ wpM (\xs -> pop xs >>= g) P) ->
+ --          Σ (Stack Nat -> M (Stack Nat)) (\f -> (spec · S) ⊑ f)
+ --  popIt S (g , H) = (\xs -> pop xs >>= g) , refinement H
 
 
-  derivation : Σ (Stack Nat -> M (Stack Nat)) (\f -> addSpec ⊑ f)
-  derivation =  {!!}
+ --  returnStep : ∀ {P : Stack Nat -> Stack Nat -> Set} ->
+ --    ((xs : Stack Nat) -> P xs xs) ->
+ --    Σ (Stack Nat -> M (Stack Nat)) (\f -> (\x -> spec (P x)) ⊑ f)    
+ --  returnStep H = (\xs -> Pure (Done xs)) , refinement λ { P ys (fst , snd) → snd ys (H ys)}
 
-  feasible : {a : Set} -> {b : a -> Set} ->
-    (f : (x : a) -> M (b x)) -> Set
-  feasible {a} f = (x : a) -> wp f (\_ _ -> ⊥) x == ⊥
+ --  popStep : (S : Stack Nat -> Stack Nat -> Set) ->
+ --          (S' : Pair Nat (Stack Nat) -> Stack Nat -> Set) ->
+ --          ((x : Nat) (xs : Stack Nat) -> S (Cons x xs) ⊆ S' (x , xs)) ->
+ --          ((x : Nat) (xs : Stack Nat) -> S' (x , xs) ⊆ S (Cons x xs)) ->          
+ --          Σ (Pair Nat (Stack Nat) -> M (Stack Nat))
+ --            (\g -> (spec · S') ⊑ g) ->
+ --          Σ (Stack Nat -> M (Stack Nat)) (\f -> (spec · S) ⊑ f)
+ --  popStep S S' H1 H2 (g , proof) =
+ --    (\xs -> pop xs >>= g) , {!!}
 
-  infeasible : {a : Set} -> {b : a -> Set} ->
-    (f : (x : a) -> M (b x)) -> Set
-  infeasible f = feasible f -> ⊥
+
+ --  derivation : Σ (Stack Nat -> M (Stack Nat)) (\f -> addSpec ⊑ f)
+ --  derivation =  {!!}
+
+ --  feasible : {a : Set} -> {b : a -> Set} ->
+ --    (f : (x : a) -> M (b x)) -> Set
+ --  feasible {a} f = (x : a) -> wp f (\_ _ -> ⊥) x == ⊥
+
+ --  infeasible : {a : Set} -> {b : a -> Set} ->
+ --    (f : (x : a) -> M (b x)) -> Set
+ --  infeasible f = feasible f -> ⊥
 
