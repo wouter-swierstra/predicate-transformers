@@ -417,15 +417,59 @@ specification:
   wpI : (implicit(a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> I (b x) -> Set
   wpI P _ (Done y)  = P _ y
   wpI P x (Spec Q)  = Q ⊆ P x
+\end{code}
+\todo{This is not quite right... Need that there is some
+  implementation of Q}
 
+
+
+We can use this notion of weakest precondition on |I| to define a
+notion of weakest precondition for the computations in |M|, that mix
+specifications and code:
+\begin{code}
+  wpM : {a : Set} -> {b : a -> Set} ->
+    (f : (x : a) -> M (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
+  wpM f = wp f · mustPT · wpI
+\end{code}
+Finally, we can revisit our notion of refinement to use these weakest
+precondition semantics:
+\begin{code}  
   _⊑_ : {a : Set} {b : a -> Set} (f g : (x : a) -> M (b x)) -> Set1
-  f ⊑ g = ∀ P -> wpPartial f (wpI P) ⊆ wpPartial g (wpI P)
+  f ⊑ g = ∀ P -> wpM f P ⊆ wpM g P
 \end{code}
 This refinement relation lets us compare two (possibly unfinished)
 derivation fragments, consisting of a mix of code and specification.
 
 How can we use this? Let's see another example.
 
+\subsection*{\textsc{Add}}
+
+Suppose we are writing an interpreter for a simple stack machine. To
+interpret the |ADD| instruction, we replace the top two elements of
+the stack with their sum. Of course, this may fail if the stack has
+too few elements. This section shows how to derive the obvious
+definition step by step from a specification.
+
+We begin by defining the specification of our addition function as a
+relation between input and output:
+\begin{code}
+  data AddSpec : Stack Nat -> Stack Nat -> Set where
+    AddStep : (implicit(x1 x2 : Nat)) (implicit(xs : Stack Nat)) AddSpec (x1 :: x2 :: xs) ((x1 + x2) :: xs)
+\end{code}
+Once again, note that we |AddSpec xs ys| is uninhabited when the
+`input' stack |xs| less than two elements.
+
+One way to define
+\begin{code}
+  pop : ∀ {a} -> Stack a -> Partial (Pair a (Stack a))
+  pop Nil = abort
+  pop (Cons x xs) = return (x , xs)
+\end{code}
+It is straightforward to define an |add| function that uses |pop| and
+satisfies the specification given by |AddSpec|. Rather than doing so
+directly, however, we will use this example to illustrate how to
+\emph{derive} the function's implementation step by step from the
+specification we have given above.
 
 % \subsection*{Example: fast multiplication}
 
