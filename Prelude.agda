@@ -32,12 +32,12 @@ cong f Refl = Refl
 cong2 : {a b c : Set} {x y : a} {z w : b} (f : a -> b -> c) -> x == y -> z == w -> f x z == f y w
 cong2 f Refl Refl = Refl
 
--- infixr 2 _⟨_⟩_
--- _⟨_⟩_ : {a : Set} -> (x : a) -> { y z : a} -> x == y -> y == z -> x == z
--- _⟨_⟩_ x = trans
+infixr 2 _=⟨_⟩=_
+_=⟨_⟩=_ : {a : Set} -> (x : a) -> { y z : a} -> x == y -> y == z -> x == z
+_=⟨_⟩=_ x = trans
 
--- _■ : forall {a : Set} (x : a) -> x == x
--- _■ x = Refl
+_=∎ : forall {a : Set} (x : a) -> x == x
+_=∎ x = Refl
 
 data Nat : Set where
   Zero : Nat
