@@ -1,5 +1,10 @@
-default :
-	lagda2pdf handlers.lagda
+default : handlers.pdf
+
+%.tex : %.lagda
+	lhs2TeX -o $@ $<
+
+%.pdf : %.tex
+	latexmk -xelatex $<
 
 clean :
 	rm -f *.aux *.log *.out *.ptb *.bbl *.blg *.agdai Check.agda Prelude.agda handlers.tex

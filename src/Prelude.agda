@@ -4,7 +4,7 @@ open import Level
 postulate
   undefined : ∀ {a : Set} -> a
 
-const : {a b : Set} -> a -> b -> a
+const : {l : Level} {a b : Set l} -> a -> b -> a
 const x _ = x
 
 id : {a : Set} -> a -> a
