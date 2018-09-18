@@ -303,3 +303,273 @@ module Maybe where
     (f : (x : a) -> M (b x)) -> Set
   infeasible f = feasible f -> ⊥
 
+
+module State (s : Set) where
+  open Free hiding (_⊑_)
+
+  data C : Set where
+    Get : C
+    Put : s -> C
+    Spec : {output : Set} -> (s -> Set) -> (Pair output s -> Set) -> C
+
+  R : C -> Set
+  R Get = s
+  R (Put _)  = ⊤
+  R (Spec {b} _ _) = b -- we claim Spec produces a value of type b
+
+  State : Set -> Set
+  State = Free C R
+
+  get : State s
+  get = Step Get return
+  put : s -> State ⊤
+  put x = Step (Put x) (λ _ → return tt)
+  spec : {a : Set} -> (s -> Set) -> (Pair a s -> Set) -> State a
+  spec pre post = Step (Spec pre post) return
+
+  -- TODO: replace spec with spec' everywhere?
+  spec' : {a : Set} -> {b : Set} -> (Pair a s -> Set) -> (Pair b s -> Set) -> a -> State b
+  spec' pre post x = spec (\t -> pre (x , t)) post
+
+  isCode : {a : Set} -> State a -> Set
+  isCode (Pure _) = ⊤
+  isCode (Step Get k) = (state : s) -> isCode (k state)
+  isCode (Step (Put _) k) = isCode (k tt)
+  isCode (Step (Spec x₁ x₂) k) = ⊥
+
+  isCodeBind : {a b : Set} -> (x : State a) -> (f : a -> State b) -> isCode x -> ((t : a) -> isCode (f t)) -> isCode (x >>= f)
+  isCodeBind (Pure x) f xIs fIs = fIs x
+  isCodeBind (Step Get k) f xIs fIs state = isCodeBind (k state) f (xIs state) fIs
+  isCodeBind (Step (Put x) k) f xIs fIs = isCodeBind (k tt) f xIs fIs
+  isCodeBind (Step (Spec pre post) k) f () fIs
+
+  -- define a relation on initial states and stateful computations, where the postcondition holds in the final state
+  -- TODO: seems legit but check that it works
+  holds : {b : Set} -> (P : Pair b s -> Set) -> s -> (State b -> Set)
+  holds P init (Pure x) = P (x , init)
+  holds P init (Step Get k) = holds P init (k init)
+  holds P init (Step (Put next) k) = holds P next (k tt)
+  holds {f} P init (Step (Spec {i} pre post) k) = Pair (pre init) -- The specification holds if the initial value satisfies the precondition...
+    ((val : i) -> (x : s) -> -- and for all intermediate values and states...
+      post (val , x) -> -- such that the postcondition holds...
+        holds P x (k val)) -- the continuation makes P hold
+
+  wpState : {a : Set} -> {b : Set} -> (f : a -> State b) -> (P : Pair b s -> Set) -> (Pair a s -> Set)
+  wpState {a} f P (arg , init) = wp f (\_ -> holds P init) arg
+
+  -- give the current value and update it with the function
+  modify : (s -> s) -> State s
+  modify f = get >>= λ x → put (f x) >>= (λ _ → return x)
+
+  -- the interaction of holds with bind
+  holdsBind : {a : Set} -> {b : Set} -> (P : Pair b s -> Set) -> (t : s) -> (x : State a) -> (f : a -> State b) -- given f and x
+    -> holds (wpState f P) t x -- if the wp of f holds after x,
+    -> holds P t (x >>= f) -- then x >>= f satisfies P on input state x
+  holdsBind P t (Pure x) f xHolds = xHolds
+  holdsBind P t (Step Get k) f xHolds = holdsBind P t (k t) f xHolds
+  holdsBind P t (Step (Put t') k) f xHolds = holdsBind P t' (k tt) f xHolds
+  holdsBind P t (Step (Spec pre post) k) f (fst , snd) = fst , (λ x x₁ x₂ → holdsBind P x₁ (k x) f (snd x x₁ x₂))
+
+  -- If we have a Spec, then for any P, its precondition is implied by the wp.
+  holdsSpecPre : {a : Set} -> {b : Set} -> (pre : Pair a s -> Set) -> (post P : Pair b s -> Set)
+    -> wpState (spec' pre post) P ⊆ pre
+  holdsSpecPre _ _ _ _ (preHolds , _) = preHolds
+  -- If we have Spec pre post, then for any postcondition P that is implied by post, the wp is equivalent to pre.
+  holdsSpecPost : {a : Set} -> {b : Set} -> (pre : Pair a s -> Set) -> (post P : Pair b s -> Set)
+    -> post ⊆ P
+    -> pre ⊆ wpState (spec' pre post) P
+  holdsSpecPost pre post P postImplies x preHolds = preHolds , (λ val x₁ → postImplies (val , x₁))
+
+module TreeLabeling where
+  open Free hiding (_⊑_)
+  open State
+
+  -- we have to put this here so we don't have s as an obligatory variable
+  record _⊑_ {s : Set} {a : Set} {b : Set} (f g : a -> State s b) : Set1 where
+    constructor refinement
+    field
+      proof : (∀ P -> wpState s f P ⊆ wpState s g P)
+
+  record Preorder {a : Set} (R : a -> a -> Set) : Set where
+    constructor preorder
+    field
+      pre-refl : (∀ {x} -> R x x)
+      pre-trans : (∀ {x y z} -> R x y -> R y z -> R x z)
+  open Preorder
+
+  pre-⊑ : ∀ {a b c} -> Preorder (_⊑_ {a} {b} {c})
+  pre-⊑ = preorder
+    (refinement (λ P x₁ z → z))
+    (λ p q → refinement (λ P x₁ z₁ → _⊑_.proof q P x₁ (_⊑_.proof p P x₁ z₁)))
+
+  infixr 2 _⟨_⟩_
+  _⟨_⟩_ : forall {a s : Set} {b : Set}
+    (f : (x : a) -> State s b) -> {g h : (x : a) -> State s b} -> (f ⊑ g) -> (g ⊑ h) -> f ⊑ h
+  _⟨_⟩_ f {g} {h} step1 step2 = (pre-trans pre-⊑) {f} {g} {h} step1 step2
+
+  _∎ : forall {a s : Set} {b : Set} (f : (x : a) -> State s b) -> f ⊑ f
+  _∎ f = pre-refl pre-⊑ {f}
+
+  -- For proofs it is more useful to run dependent programs, but for case-analysis we want direct monadic values.
+  run' : {s : Set} -> {b : Set} -> (prog : State s b) -> isCode s prog -> s -> Pair b s
+  run' (Pure x) prf init = x , init
+  run' (Step Get k) prf init = run' (k init) (prf init) init
+  run' (Step (Put next) k) prf init = run' (k tt) prf next
+  run' (Step (Spec pre post) k) () init
+
+  run : {a s : Set} -> {b : Set} -> (prog : a -> State s b) -> ((t : a) -> isCode s (prog t)) -> Pair a s -> Pair b s
+  run prog prf (x , init) = run' (prog x) (prf x) init
+
+  -- completeness and soundness of wpState for code
+  -- wpState is sound: it gives a precondition
+  soundness : {a s : Set} -> {b : Set} -> (prog : a -> State s b) -> (prf : (x : a) -> isCode s (prog x)) -- if we have code,
+    -> (P : Pair b s -> Set) -- and a postcondition,
+    -> (i : Pair a s) -> wpState s prog P i -> P (run prog prf i) -- then wpState gives a precondition for P
+  soundness {a} {s} {b} prog prf P (x , t) wpHolds = soundness' (prog x) (prf x) P t wpHolds
+    where
+      soundness' : (prog : State s b) -> (prf : isCode s prog) -> (P : Pair b s -> Set) -> (t : s) -> holds s P t prog -> P (run' prog prf t)
+      soundness' (Pure _) _ _ _ hold = hold
+      soundness' (Step Get k) prf P t hold = soundness' (k t) (prf t) P t hold
+      soundness' (Step (Put x) k) prf P t hold = soundness' (k tt) prf P x hold
+      soundness' (Step (Spec _ _) _) () _ _ _
+
+  -- wpState is complete: it gives a condition that is weaker than all preconditions
+  completeness' : {s : Set} -> {b : Set} -> (prog : State s b) -> (prf : isCode s prog)
+    -> (pre : s -> Set) -> (post : Pair b s -> Set)
+    -> (t : s) -> pre t -> post (run' prog prf t)
+    -> holds s post t prog
+  completeness' (Pure _) _ _ _ _ _ postHold = postHold
+  completeness' (Step Get k) prf pre post t preHold postHold = completeness' (k t) (prf t) (λ _ → post (run' (k t) (prf t) t))
+      post t postHold postHold
+  completeness' (Step (Put x) k) prf pre post t preHold postHold = completeness' (k tt) prf (λ _ → post (run' (k tt) prf x)) post x
+    postHold postHold
+  completeness' (Step (Spec _ _) _) () _ _ _ _ _
+
+  completeness : {a s : Set} -> {b : Set} -> (prog : a -> State s b) -> (prf : (x : a) -> isCode s (prog x)) -- if we have code,
+    -> (pre : Pair a s -> Set) -> (post : Pair b s -> Set) -- and a specification
+    -> ((i : Pair a s) -> pre i -> post (run prog prf i)) -- and for all preconditioned values, the postcondition holds for running
+    -> pre ⊆ wpState s prog post -- then it is stronger than the weakest precondition
+  completeness {a} {s} {b} prog prf pre post specRun (x , t) preHolds
+    = completeness' (prog x) (prf x) (\t -> pre (x , t)) post t preHolds (specRun (x , t) preHolds)
+ 
+  -- maar met run heb je non-isCode weggelaten, dus hier kunnen we relateren met spec
+  refinePrePost : {a s : Set} -> {b : Set} -> (prog : a -> State s b) -> (prf : (x : a) -> isCode s (prog x)) -- if we have code
+    -> (pre : Pair a s -> Set) -> (post : Pair b s -> Set) -- and a specification
+    -> ((i : Pair a s) -> pre i -> post (run prog prf i)) -- and for all preconditioned values, the postcondition holds
+    -> spec' s pre post ⊑ prog -- then the code refines the specification
+  refinePrePost {a} {s} {b} prog prf pre post postAfterRun = refinement prePost
+    where
+      rPP' : (prog : State s b) -> (prf : isCode s prog) -- if we have code
+        -> (pre : s -> Set) -> (post : Pair b s -> Set) -- and a specification
+        -> ((t : s) -> pre t -> post (run' prog prf t)) -- and for all preconditioned values, the postcondition holds
+        -> (P : Pair b s -> Set) -> (t : s) -> holds s P t (spec s pre post) -> holds s P t prog
+      rPP' prog prf pre post postAfterRun P t (fst , snd)
+        = completeness' prog prf pre P t fst (snd (Pair.fst (run' prog prf t)) (Pair.snd (run' prog prf t)) (postAfterRun t fst))
+      -- rPP' prog prf pre post postAfterRun P t (fst , snd) = {!!}
+      prePost : (P : Pair b s -> Set) -> (x : Pair a s) -> wpState s (spec' s pre post) P x -> wpState s prog P x
+      prePost P (x , t) wpSpec = rPP' (prog x) (prf x) (\t' -> pre (x , t')) post (λ t₁ → postAfterRun (x , t₁)) P t wpSpec
+      -- prog prf pre post postAfterRun P x hold = completeness prog prf pre P (λ i preH → {!postAfterRun i preH!}) x (holdsSpecPre s pre post P x hold)
+
+  data Tree (s : Set) : Set where
+    Leaf : s -> Tree s
+    Branch : Tree s -> Tree s -> Tree s
+
+  -- the number of leaves in the tree
+  size : {s : Set} -> Tree s -> Nat
+  size (Leaf _) = 1
+  size (Branch l r) = size l + size r
+
+  flatten : {s : Set} -> Tree s -> List s
+  flatten (Leaf x) = Cons x Nil
+  flatten (Branch l r) = (flatten l) ++ (flatten r)
+
+  -- TODO: is this a useful definition?
+  range : Nat -> List Nat
+  range 0 = Nil
+  range (Succ n) = range n ++ (Cons n Nil)
+
+  splitRange : (p q : Nat) -> (range p ++ map (_+_ p) (range q)) == range (p + q)
+  splitRange = {!!}
+
+  -- basic tree labelling function, but we don't prove it works!
+  labelTree : {a : Set} -> Tree a -> State Nat (Tree Nat)
+  labelTree (Leaf x) = (modify Nat Succ) >>= λ n → return (Leaf n)
+  labelTree (Branch l r) = labelTree l >>= \l' -> labelTree r >>= \r' -> return (Branch l' r')
+
+  labelPre : Nat -> Set
+  labelPre n = n == 0
+  labelPost : Pair (Tree Nat) Nat -> Set
+  labelPost (t , n) = Pair (flatten t == range (size t)) (n == size t)
+  labelSpec : {a : Set} -> Tree a -> State Nat (Tree Nat)
+  labelSpec x = spec Nat labelPre labelPost
+
+  -- If we can prove there is a refinement, and the refinement is code, then we have an implementation.
+  implementation : {a s : Set} -> {b : Set} -> ((t : a) -> State s b) -> Set
+  implementation {a} {s} {b} spec = Sigma ((t : a) -> State s b) (\prog -> Pair ((t : a) -> isCode s (prog t)) (spec ⊑ prog))
+
+  -- We already have the function, so let's prove it works.
+  labelRefinement : {a : Set} -> implementation (labelSpec {a})
+  labelRefinement {a} = labelTree , (itIsCode , refinePrePost labelTree itIsCode (λ x → Pair.snd x == 0) labelPost provePost)
+
+    where
+      itIsCode : {a : Set} -> (t : Tree a) -> isCode Nat (labelTree t)
+      itIsCode (Leaf x) = λ state → tt
+      -- TODO: can we make this better?
+      -- Maybe a combinator that gives Either (isCode prog) (continueHere continuation),
+      -- such that isCode p implies isCode (continuation p)
+      itIsCode (Branch l r) = isCodeBind Nat (labelTree l) (\l' -> labelTree r >>= \r' -> return (Branch l' r')) (itIsCode l)
+        λ t → isCodeBind Nat (labelTree r) (λ z → Pure (Branch t z)) (itIsCode r) (λ t₁ → tt)
+
+      inBranches : (l r : Tree a) -> (n : Nat) -> Branch (Pair.fst (run labelTree itIsCode (l , n))) (Pair.fst (run labelTree itIsCode (r , (n + size l)))) == Pair.fst (run labelTree itIsCode (Branch l r , n))
+      inBranches l r n = {!!}
+
+      preserveSize : (i : Pair (Tree a) Nat) -> size (Pair.fst i) == size (Pair.fst (run labelTree itIsCode i))
+      preserveSize (Leaf x , _) = Refl
+      preserveSize (Branch l r , _) = {!!}
+
+      proveRange : (i : Pair (Tree a) Nat) -> flatten (Pair.fst (run labelTree itIsCode i)) == map (_+_ (Pair.snd i)) (range (size (Pair.fst i)))
+      proveRange (Leaf x , n) = cong (λ k → Cons k Nil) (plus-zero n)
+      proveRange (Branch l r , n) =
+        let lt = run labelTree itIsCode (Branch l r , n)
+            ll = run labelTree itIsCode (l , n)
+            lr = run labelTree itIsCode (r , (n + size l))
+        in flatten (Pair.fst lt)
+          =⟨ sym (cong flatten (inBranches l r n)) ⟩= flatten (Branch (Pair.fst ll) (Pair.fst lr))
+          =⟨ Refl ⟩= (flatten (Pair.fst ll) ++ flatten (Pair.fst lr))
+          =⟨ cong (flip _++_ (flatten (Pair.fst lr))) (proveRange (l , n)) ⟩= (map (_+_ n) (range (size l)) ++ flatten (Pair.fst lr))
+          =⟨ cong (_++_ (map (_+_ n) (range (size l)))) {!!} ⟩= {!!}
+          =⟨ cong (_++_ (map (_+_ n) (range (size l)))) {!!} ⟩= {!!}
+          =⟨ cong (_++_ (map (_+_ n) (range (size l)))) (cong {!!} {!!}) ⟩= (map (_+_ n) (range (size l)) ++
+                                                                   map (λ z → n + (size l + z)) (range (size r)))
+          =⟨ cong (_++_ (map (_+_ n) (range (size l)))) (sym (map-functorial (_+_ (size l)) (_+_ n))) ⟩= (map (_+_ n) (range (size l)) ++ map (_+_ n) (map (_+_ (size l)) (range (size r))))
+          =⟨ map-concat {l = range (size l)} {l' = map (_+_ (size l)) (range (size r))} (_+_ n) ⟩= map (_+_ n) (range (size l) ++ map (_+_ (size l)) (range (size r)))
+          =⟨ cong (map (_+_ n)) (splitRange (size l) (size r)) ⟩= map (_+_ n) (range (size l + size r))
+          =∎
+          {- =⟨ sym (cong flatten (inBranches l r n)) ⟩= flatten (Branch (Pair.fst ll) (Pair.fst lr))
+          =⟨ Refl ⟩= (flatten (Pair.fst ll) ++ flatten (Pair.fst lr))
+          =⟨ cong (map (_+_ n)) (splitRange (size l) (size r)) ⟩= map (_+_ n) (range (size l + size r))
+          -}
+
+      provePost : (i : Pair (Tree a) Nat) -> Pair.snd i == 0 -> labelPost (run labelTree itIsCode i)
+      provePost (Leaf x , .0) Refl = Refl , Refl
+      provePost (Branch l r , .0) Refl =
+        {!!} ,
+        (run labelTree itIsCode (Branch l r , 0) .Pair.snd =⟨ {!!} ⟩= size (run labelTree itIsCode (Branch l r , 0) .Pair.fst) =∎)
+        --trans (trans (sym (cong flatten (inBranches l r 0))) {!!})
+        --(trans (splitRange (size l) (size r)) (cong range (preserveSize (Branch l r , 0)))) , {!!}
+
+      -- We try to prove inductively that the refinement holds.
+      -- This doesn't work because the termination checker doesn't believe us...
+      {-
+      itRefines : (x : Pair (Tree a) Nat) -> (P : Pair (Tree Nat) Nat → Set) → wpState Nat labelSpec P x -> wpState Nat labelTree P x
+      itRefines (t@(Leaf _) , .0) P (Refl , post)
+        = let (labelled , label) = run labelTree itIsCode (t , 0)
+          in post labelled label (Refl , Refl)
+      itRefines (t@(Branch l r) , .0) P (Refl , post)
+        = let iRr n l' = itRefines (r , n) {!wpState Nat ? ?!} {!!}
+          in holdsBind Nat P 0 (labelTree l) (\l' -> labelTree r >>= \r' -> return (Branch l' r'))
+            (itRefines (l , 0) (wpState Nat (λ l' → labelTree r >>= (λ r' → return (Branch l' r'))) P)
+              (Refl , \l' n x → holdsBind Nat P n (labelTree r) (λ r' → return (Branch l' r')) (iRr n l')))
+       -}
+
+
