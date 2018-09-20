@@ -10,6 +10,10 @@ const x _ = x
 id : {a : Set} -> a -> a
 id x = x
 
+flip : ∀ {l : Level} {a : Set l} {b : Set l} {c : Set l}
+  -> (a -> b -> c) -> (b -> a -> c)
+flip f x y = f y x
+
 _·_ : ∀ {l l' l''} {a : Set l} {b : Set l'} {c : Set l''} ->
       (b -> c) -> (a -> b) -> a -> c
 f · g = λ x → f (g x)
@@ -177,3 +181,7 @@ record Sigma {l l'} (a : Set l) (b : a -> Set l') : Set (l ⊔ l') where
   field
     fst : a
     snd : b fst
+
+-- Constant function for Set
+K : {a : Set} -> Set -> (a -> Set)
+K b = \_ -> b

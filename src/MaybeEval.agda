@@ -1,3 +1,4 @@
+{-# OPTIONS --type-in-type #-}
 module MaybeEval where
 
 open import Prelude
@@ -19,10 +20,21 @@ just     = Pure
 abort  : forall { a } ->  Partial a
 abort  = Step Abort (\ ())
 
+data Maybe (a : Set) : Set where
+  Just : a -> Maybe a
+  Nothing : Maybe a
+
+-- When we run Partial, we get a Maybe.
+liftJust : {a : Set} -> (a -> Set) -> (Maybe a -> Set)
+liftJust P Nothing = ⊥
+liftJust P (Just x) = P x
+rtPartial : RunType
+rtPartial = types Maybe Just liftJust
+
 -- Lift a predicate on base values to monadic values.
-mustPT : forall { a : Set } ->  {b : a -> Set} -> (P : (x : a) -> b x -> Set) -> (x : a) -> Partial (b x) -> Set
-mustPT P _ (Pure x)          = P _ x
-mustPT P _ (Step Abort _)    = ⊥
+mustPT : PTs C R
+mustPT P _ (Pure x) = P _ x
+mustPT P _ (Step Abort _) = ⊥
 
 -- Example: small expression language.
 data Expr : Set where
@@ -229,17 +241,18 @@ correct4 (Div l r) (fst , snd , thd) =
 
 -- Introduce specifications into the mix.
 M : {a : Set} -> (a -> Set) -> Set
-M = Mix C R
+M = Mix C R rtPartial
 
 wpM : {a : Set} -> {b : a -> Set} ->
-  ((x : a) -> b x -> Set) ->
-  (f : (x : a) -> M b) -> (a -> Set)
+  (P : Post rtPartial a b) ->
+  (f : (x : a) -> M b) ->
+  (Pre rtPartial a)
 wpM {a} {b} = wpMix mustPT
 
 record _⊑_ {a : Set} {b : a -> Set} (f g : (x : a) -> M b) : Set1 where
     constructor refinement
     field
-      proof : (∀ P -> (i : a) -> (H : wpM P f i) -> wpM P g i)
+      proof : ∀ P -> wpM (liftPost rtPartial P) f ⊆ wpM (liftPost rtPartial P) g
 
 ⊑-refl : ∀ {a} {b : a -> Set} -> (f : (x : a) -> M b) -> f ⊑ f
 ⊑-refl f = refinement \P x H -> H
@@ -248,70 +261,79 @@ record _⊑_ {a : Set} {b : a -> Set} (f g : (x : a) -> M b) : Set1 where
 ⊑-trans (record { proof = step1 }) (record { proof = step2 }) =
   refinement \P H x -> step2 P H (step1 P H x)
 
-strengthenPost : {a : Set} {b : a -> Set} (S1 S2 : (x : a) -> b x -> Set) (Pre : a -> Set) ->
-  ((x : a) -> S2 x ⊆ S1 x) ->
-  (\x -> spec Pre S1) ⊑ \x -> spec Pre S2
+strengthenPost : {a : Set} {b : a -> Set}
+  -> (S1 S2 : Post rtPartial a b)
+  -> (pre : Pre rtPartial a)
+  -> ((x : a) -> S2 x ⊆ S1 x)
+  -> (\x -> specI pre S1) ⊑ \x -> specI pre S2
 strengthenPost S1 S2 Pre H = refinement λ { P x (fst , snd) → fst , λ bx s2 → snd bx (H _ bx s2)}
 
+-- Does running this monadic value work?
 isCode' : {a : Set} {b : a -> Set} -> M b -> Set
 isCode' (Pure (Done x)) = ⊤
 isCode' (Pure (Spec pre post)) = ⊥
-isCode' (Step Abort x) = ⊥ -- TODO: or should this be top?
+isCode' (Step Abort x) = ⊤
 
+-- Does running this monadic computation work?
 isCode : {a : Set} {b : a -> Set} -> (a -> M b) -> Set
 isCode {a} prog = (x : a) -> isCode' (prog x)
 
-run' : {a : Set} {b : a -> Set} {x : a} (prog : M b) -> isCode' prog -> b x
-run' (Pure (Done x₁)) prf = x₁
+run' : {a : Set} {b : a -> Set} {x : a} (prog : M b) -> isCode' prog -> Maybe (b x)
+run' (Pure (Done x₁)) prf = Just x₁
 run' (Pure (Spec pre post)) ()
-run' (Step Abort k) ()
+run' (Step Abort k) prf = Nothing
 
 run : {a : Set} {b : a -> Set}
   -> (prog : a -> M b) -> (isCode prog)
-  -> (x : a) -> b x
+  -> (x : a) -> Maybe (b x)
 run {a} {b} prog prf x = run' (prog x) (prf x)
 
 wpPure : {a : Set} {b : a -> Set}
   -> (i : a) -> (y : b i)
   -> (P : b i -> Set)
-  -> wpM (\x -> P) (\x -> Pure (Done y)) i -> P y
+  -> wpM (\x -> liftJust P) (\x -> done y) i -> P y
 wpPure i y P x = x
 
+-- wpM P prog x is equivalent to wpM' P x (prog x)
+wpM' : {a : Set} {b : a -> Set}
+  -> (P : (x : a) -> Maybe (b x) -> Set)
+  -> (x : a) -> (prog : M b) -> Set
+wpM' P = mustPT (flip (wpI P))
+
 accentize : {a : Set} {b : a -> Set}
-  -> (P : (x : a) -> b x -> Set)
-  -> (prog : a -> M b) -> (x : a) -> (wpM P prog x)
-  -> mustPT (wpI P) x (prog x)
+  -> (P : (x : a) -> Maybe (b x) -> Set)
+  -> (prog : a -> M b) -> (x : a)
+  -> wpM P prog x -> wpM' P x (prog x)
 accentize _ _ _ x₁ = x₁
 unaccentize : {a : Set} {b : a -> Set}
-  -> (P : (x : a) -> b x -> Set)
+  -> (P : (x : a) -> Maybe (b x) -> Set)
   -> (prog : a -> M b) -> (x : a)
-  -> mustPT (wpI P) x (prog x)
-  -> (wpM P prog x)
+  -> wpM' P x (prog x) -> wpM P prog x
 unaccentize _ _ _ z = z
 
 -- wpM gives a precondition for running code
 runSoundness : {a : Set} {b : a -> Set}
-  -> (P : (x : a) -> b x -> Set)
+  -> (P : (x : a) -> Maybe (b x) -> Set)
   -> (prog : a -> M b) -> (prf : isCode prog)
   -> (x : a) -> wpM P prog x -> P x (run prog prf x)
 runSoundness {a} {b} P prog prf x wpHolds = runSoundness' (prog x) (prf x) x (accentize P prog x wpHolds)
   where
-  runSoundness' : (prog' : M b) -> (prf' : isCode' prog') -> (x : a) -> mustPT (wpI P) x prog' -> P x (run' prog' prf')
+  runSoundness' : (prog' : M b) -> (prf' : isCode' prog') -> (x : a) -> wpM' P x prog' -> P x (run' prog' prf')
   runSoundness' (Pure (Done output)) _ _ z = z
   runSoundness' (Pure (Spec pre post)) ()
-  runSoundness' (Step Abort x) ()
--- wpM gives the weakest precondition
+  runSoundness' (Step Abort x) _ _ ()
+-- wpM gives the weakest precondition, as long as the postcondition is false on Nothing
 runCompleteness : {a : Set} {b : a -> Set}
-  -> (pre : a -> Set) -> (post : (x : a) -> b x -> Set)
+  -> (pre : a -> Set) -> (post : (x : a) -> (b x) -> Set)
   -> (prog : a -> M b) -> (prf : isCode prog)
-  -> ((x : a) -> pre x -> post x (run prog prf x)) -- if the precondition causes the postcondition
-  -> (pre ⊆ wpM post prog) -- then the precondition implies the wp
-runCompleteness {a} {b} pre post prog prf preCausesPost x preHolds = unaccentize post prog x (runCompleteness' (prog x) (prf x) (preCausesPost x preHolds))
+  -> ((x : a) -> pre x -> (liftPost rtPartial post) x (run prog prf x)) -- if the precondition causes the postcondition
+  -> (pre ⊆ wpM (liftPost rtPartial post) prog) -- then the precondition implies the wp
+runCompleteness {a} {b} pre post prog prf preCausesPost x preHolds = unaccentize (liftPost rtPartial post) prog x (runCompleteness' (prog x) (prf x) (preCausesPost x preHolds))
   where
-  runCompleteness' : (prog' : M b) (prf' : isCode' prog') -> post x (run' prog' prf') -> mustPT (wpI post) x prog'
+  runCompleteness' : (prog' : M b) (prf' : isCode' prog') -> liftPost rtPartial post x (run' prog' prf') -> wpM' (liftPost rtPartial post) x prog'
   runCompleteness' (Pure (Done _₁)) prf' postHolds = postHolds
   runCompleteness' (Pure (Spec pre post)) ()
-  runCompleteness' (Step Abort k) ()
+  runCompleteness' (Step Abort k) prf' postHolds = postHolds
 
 {-
 weakenPost : {a : Set} {b : a -> Set}
@@ -322,37 +344,38 @@ weakenPost P post postImpliesP prog x x₂ = {!!}
 -}
 weakenPost' : {a : Set} {b : a -> Set}
   -> (x : a)
-  -> (P post : (x : a) -> b x -> Set) -> ((y : b x) -> post x y -> P x y)
+  -> (P post : (x : a) -> Maybe (b x) -> Set)
+  -> (post x ⊆ P x)
   -> (prog : a -> M b)
   -> wpM post prog x -> wpM P prog x
 weakenPost' {a} {b} x P post x₁ prog wpPost = unaccentize P prog x (wp'' (prog x) (accentize post prog x wpPost))
   where
-    wp'' : (prog' : M b) -> mustPT (wpI post) x prog' -> mustPT (wpI P) x prog'
-    wp'' (Pure (Done x₂)) = x₁ x₂
+    wp'' : (prog' : M b) -> wpM' post x prog' -> wpM' P x prog'
+    wp'' (Pure (Done x₂)) = x₁ (Just x₂)
     wp'' (Pure (Spec pre post)) = λ z → Pair.fst z , (λ x₂ x₃ → x₁ x₂ (Pair.snd z x₂ x₃))
-    wp'' (Step Abort _) = λ z → z
+    wp'' (Step Abort _) z = z
 
-wpSpec : {a : Set} {b : a -> Set} (pre : a -> Set) (post : (x : a) -> b x -> Set)
-  -> (P : (x : a) -> b x -> Set)
-  -> ((x : a) -> (wpM P (\_ -> spec pre post) x)) -> ((i : a) -> post i ⊆ P i)
+wpSpec : {a : Set} {b : a -> Set} (pre : a -> Set)
+  -> (post P : (x : a) -> (Maybe (b x)) -> Set)
+  -> ((x : a) -> (wpM P (\_ -> specI pre post) x)) -> ((i : a) -> post i ⊆ P i)
 wpSpec pre post P wpHolds input output postHolds = Pair.snd (wpHolds input) output postHolds
-wpSpec' : {a : Set} {b : a -> Set} (pre : a -> Set) (post : (x : a) -> b x -> Set)
-  -> (P : (x : a) -> b x -> Set)
-  -> (x : a) -> (wpM P (\_ -> spec pre post) x) -> (y : b x) -> post x y -> P x y
+wpSpec' : {a : Set} {b : a -> Set} (pre : a -> Set)
+  -> (post P : (x : a) -> Maybe (b x) -> Set)
+  -> (x : a) -> (wpM P (\_ -> specI pre post) x) -> (y : Maybe (b x)) -> post x y -> P x y
 wpSpec' pre post P x x₁ y x₂ = Pair.snd x₁ y x₂
 
-wpSpecPost : {a : Set} {b : a -> Set} (pre : a -> Set) (post : (x : a) -> b x -> Set)
-  -> (x : a) -> (pre x) -> (wpM post (\_ -> spec pre post) x)
+wpSpecPost : {a : Set} {b : a -> Set} (pre : a -> Set) (post : (x : a) -> Maybe (b x) -> Set)
+  -> (x : a) -> (pre x) -> (wpM post (\_ -> specI pre post) x)
 wpSpecPost pre post x preX = preX , (λ x₁ z → z)
 
-progRefinesItsSpec : {a : Set} {b : a -> Set} (pre : a -> Set) (post : (x : a) -> b x -> Set)
+progRefinesItsSpec : {a : Set} {b : a -> Set} (pre : a -> Set) (post : (x : a) -> (b x) -> Set)
   -> (prog : a -> M b) -> (prf : isCode prog)
-  -> ((x : a) -> pre x -> post x (run prog prf x))
-  -> (\_ -> spec pre post) ⊑ prog
+  -> ((x : a) -> pre x -> liftPost rtPartial post x (run prog prf x))
+  -> (\_ -> specI pre (liftPost rtPartial post)) ⊑ prog
 progRefinesItsSpec {a} {b} pre post prog prf x = refinement pris'
   where
-  pris' : (P : (x : a) -> b x -> Set) -> (i : a) -> wpM P (\_ -> spec pre post) i -> wpM P prog i
+  pris' : (P : (x : a) -> b x -> Set) -> (i : a) -> wpM (liftPost rtPartial P) (\_ -> specI pre (liftPost rtPartial post)) i -> wpM (liftPost rtPartial P) prog i
   pris' P i (fst , snd)
-    = weakenPost' i P post snd prog
-      (runCompleteness pre post prog prf x i fst)
+    = weakenPost' i (liftPost rtPartial P) (liftPost rtPartial post) snd prog
+      (runCompleteness {b = b} pre post prog prf x i fst)
 
