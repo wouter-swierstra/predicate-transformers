@@ -3,7 +3,9 @@ module MaybeEval where
 
 open import Prelude
 open import Level hiding (lift)
+
 open import Free hiding (_⊑_)
+open import Maybe
 open import Spec
 
 -- Define the Partial / Maybe monad.
@@ -20,14 +22,6 @@ just     = Pure
 abort  : forall { a } ->  Partial a
 abort  = Step Abort (\ ())
 
-data Maybe (a : Set) : Set where
-  Just : a -> Maybe a
-  Nothing : Maybe a
-
--- When we run Partial, we get a Maybe.
-liftJust : {a : Set} -> (a -> Set) -> (Maybe a -> Set)
-liftJust P Nothing = ⊥
-liftJust P (Just x) = P x
 rtPartial : RunType
 rtPartial = types Maybe Just liftJust
 
@@ -398,4 +392,3 @@ progRefinesItsSpec {a} {b} pre post prog prf x = refinement pris'
   pris' P i (fst , snd)
     = weakenPost' i (liftM P) (liftM post) snd prog
       (runCompleteness {b = b} pre post prog prf x i fst)
-

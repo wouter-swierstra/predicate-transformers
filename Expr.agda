@@ -467,7 +467,7 @@ module TreeLabeling where
         = completeness' prog prf pre P t fst (snd (Pair.fst (run' prog prf t)) (Pair.snd (run' prog prf t)) (postAfterRun t fst))
       -- rPP' prog prf pre post postAfterRun P t (fst , snd) = {!!}
       prePost : (P : Pair b s -> Set) -> (x : Pair a s) -> wpState s (spec' s pre post) P x -> wpState s prog P x
-      prePost P (x , t) wpSpec = rPP' (prog x) (prf x) (\t' -> pre (x , t')) post (λ t₁ → postAfterRun (x , t₁)) P t wpSpec
+      prePost P (x , t) wpSpec = rPP' (prog x) (prf x) (\t' -> pre (x , t')) post (λ t₁ → {! postAfterRun (x , t₁) !}) P t wpSpec
       -- prog prf pre post postAfterRun P x hold = completeness prog prf pre P (λ i preH → {!postAfterRun i preH!}) x (holdsSpecPre s pre post P x hold)
 
   data Tree (s : Set) : Set where

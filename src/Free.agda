@@ -17,9 +17,6 @@ _>>=_ : forall {  C R a b } ->  Free C R a -> (a -> Free C R b) -> Free C R b
 Pure x   >>= f  = f x
 Step c x >>= f  = Step c (\ r -> x r >>= f)
 
-_⊆_ : {l : Level} {a : Set l} -> (R1 R2 : a -> Set l) -> Set l
-_⊆_ {a = a} R1 R2 = (x : a) -> R1 x -> R2 x 
-
 wp : {a : Set} {b : a -> Set} -> ((x : a) -> b x -> Set) -> ((f : (x : a) -> b x) -> a -> Set)
 wp P f = \ a -> P a (f a)
 

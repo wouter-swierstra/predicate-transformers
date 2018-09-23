@@ -35,6 +35,9 @@ cong f Refl = Refl
 cong2 : {a b c : Set} {x y : a} {z w : b} (f : a -> b -> c) -> x == y -> z == w -> f x z == f y w
 cong2 f Refl Refl = Refl
 
+coerce : {a b : Set} -> a == b -> a -> b
+coerce Refl x = x
+
 infixr 2 _⟨_⟩_
 _⟨_⟩_ : {a : Set} -> (x : a) -> { y z : a} -> x == y -> y == z -> x == z
 _⟨_⟩_ x = trans
@@ -185,3 +188,6 @@ record Sigma {l l'} (a : Set l) (b : a -> Set l') : Set (l ⊔ l') where
 -- Constant function for Set
 K : {a : Set} -> Set -> (a -> Set)
 K b = \_ -> b
+
+_⊆_ : {a : Set} -> (p q : a -> Set) -> Set
+_⊆_ {a} p q = (x : a) -> p x -> q x
