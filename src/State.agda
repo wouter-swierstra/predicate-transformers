@@ -1,9 +1,10 @@
 {-# OPTIONS --type-in-type #-}
 
-open import Prelude
+open import Prelude hiding (_⟨_⟩_)
 open import Maybe
 
 open import Preorder
+open Preorder.Preorder
 open import Spec
 
 module State where
@@ -43,6 +44,16 @@ put : {s : Set} -> s -> State s ⊤
 put x = Step (Put x) (λ _ → return tt)
 modify : {s : Set} -> (s -> s) -> State s s
 modify f = Step Get (\t -> Step (Put (f t)) \_ -> return t)
+spec' : {s : Set} {a : Set} -> (s -> Set) -> (s -> Pair a s -> Set) -> State s a
+spec' pre post = Spec (λ t i → pre (Pair.snd i)) (\t i o -> post (Pair.snd i) o) return
+
+_>>=_ : {a s : Set} -> {b : Set} -> State s a -> (a -> State s b) -> State s b
+Pure x >>= f = f x
+Step c k >>= f = Step c \x -> k x >>= f
+Spec pre post k >>= f = Spec pre post \x -> k x >>= f
+_>=>_ : {a s : Set} -> {b c : Set}
+  -> (a -> State s b) -> (b -> State s c) -> (a -> State s c)
+f >=> g = \x -> f x >>= g
 
 -- TODO: define it like this? We have to prove termination though...
 {-
@@ -56,20 +67,37 @@ holds P init (Put next) k = {!!}
 
 holds : {a s : Set}
   -> (P : Pair a s -> Set)
-  -> (x : Pair ⊤ s)
+  -> (t : s)
   -> (prog : State s a) -> Set
-holds P (_ , t) (Pure x) = P (x , t)
-holds P (_ , t) (Step Get k) = holds P (tt , t) (k t)
-holds P (_ , t) (Step (Put x) k) = holds P (tt , x) (k tt)
-holds {s = s} P (_ , t) (Spec {b} pre post k) = Pair (pre ⊤ (tt , t)) -- if precondition holds
+holds P t (Pure x) = P (x , t)
+holds P t (Step Get k) = holds P t (k t)
+holds P t (Step (Put x) k) = holds P x (k tt)
+holds {s = s} P t (Spec {b} pre post k) = Pair (pre ⊤ (tt , t)) -- if precondition holds
   ((x : b) -> (t' : s) -> post ⊤ (tt , t) (x , t') -- and for all intermediate values such that the postcondition holds,
-    -> holds P (tt , t') (k x)) -- then the continuation makes P hold
+    -> holds P t' (k x)) -- then the continuation makes P hold
 
 wpState : {a s : Set} -> {b : a -> Set}
   -> (P : Post (rtState s) a b)
   -> (f : (x : a) -> State s (b x))
   -> (Pre (rtState s) a)
-wpState P f (x , t) = wp (\y -> holds (P (y , t)) (tt , t)) f x
+wpState P f (x , t) = wp (\y -> holds (P (y , t)) t) f x
+
+-- Relation between holds and _>>=_
+holdsBind : {a s : Set} -> {b : Set}
+  -> (P : Pair b s -> Set)
+  -> (mx : State s a) -> (f : a -> State s b)
+  -> (t : s) -> holds (wpState (\i o -> P o) f) t mx -> holds P t (mx >>= f)
+holdsBind P (Pure x) f t holdsX = holdsX
+holdsBind P (Step Get k) f t holdsX = holdsBind P (k t) f t holdsX
+holdsBind P (Step (Put x) k) f t holdsX = holdsBind P (k tt) f x holdsX
+holdsBind P (Spec pre post k) f t (fst , snd) = fst , (λ x t' x₁ → holdsBind P (k x) f t' (snd x t' x₁))
+
+-- Relation between wpState and _>=>_
+wpKleisli : {a s : Set} -> {b c : Set}
+  -> (P : Post (rtState s) a (K c))
+  -> (f : a -> State s b) -> (g : b -> State s c)
+  -> wpState (λ i m → wpState (λ m o → P i o) g m) f ⊆ wpState P (f >=> g)
+wpKleisli P f g (x , t) wpF = holdsBind (P (x , t)) (f x) g t wpF
 
 -- If we have a Spec, then for any P, its precondition is implied by the wp.
 holdsSpecPre : {a s : Set} -> {b : a -> Set}
@@ -90,12 +118,31 @@ holdsSpecPost pre post P postImplies (x , t) preHolds
 record _⊑_ {s : Set} {a : Set} {b : Set} (f g : a -> State s b) : Set1 where
   constructor refinement
   field
-    proof : (∀ P -> wpState P f ⊆ wpState P g)
+    proof : ∀ P -> wpState P f ⊆ wpState P g
+-- Define the refinement relation on holds and show it's a preorder.
+record _⊑'_ {s : Set} {b : Set} (mx my : State s b) : Set1 where
+  constructor refinement'
+  field
+    proof : ∀ P t -> holds P t mx -> holds P t my
+
+⊑-refl : {a s : Set} {b : Set} (f : a -> State s b) -> f ⊑ f
+⊑-refl f = refinement \ P x z -> z
+⊑-trans : {a s : Set} {b : Set} (f g h : a -> State s b) -> f ⊑ g -> g ⊑ h -> f ⊑ h
+⊑-trans f g h x x₁ = refinement \P x₂ x₃ -> _⊑_.proof x₁ P x₂ (_⊑_.proof x P x₂ x₃)
 
 pre-⊑ : ∀ {a b c} -> Preorder (_⊑_ {a} {b} {c})
-pre-⊑ = preorder
-  (refinement (λ P x₁ z → z))
-  (λ p q → refinement (λ P x₁ z₁ → _⊑_.proof q P x₁ (_⊑_.proof p P x₁ z₁)))
+pre-⊑ = preorder (\{f} -> ⊑-refl f) (\{f} {g} {h} -> ⊑-trans f g h)
+pre-⊑' : ∀ {b c} -> Preorder (_⊑'_ {b} {c})
+pre-⊑' = preorder
+  (λ {x} → refinement' (λ P t z → z))
+  (λ {x} {y} {z} z₁ z₂ → refinement' (λ P t z₃ → _⊑'_.proof z₂ P t (_⊑'_.proof z₁ P t z₃)))
+
+-- How to get ⊑ from ⊑'
+addRefinementArgument : {a s : Set} -> {b : Set}
+  -> (f g : a -> State s b)
+  -> ((x : a) -> f x ⊑' g x)
+  -> f ⊑ g
+addRefinementArgument f g noArgs = refinement λ P x₁ x₂ → _⊑'_.proof (noArgs (Pair.fst x₁)) (P x₁) (Pair.snd x₁) x₂
 
 -- Define how to execute stateful computations.
 -- The handler only talks about how to update state when we encounter a command.
@@ -118,7 +165,7 @@ soundness {a} {s} {b} prog prf P x t wpHolds
   where
   soundness' : (prog : State s b) -> (prf : isCode prog)
     -> (P : Pair b s -> Set)
-    -> (t : s) -> holds P (tt , t) prog -> P (runState prog prf t)
+    -> (t : s) -> holds P t prog -> P (runState prog prf t)
   soundness' (Pure _) _ _ _ itHolds = itHolds
   soundness' (Step Get k) prf P t itHolds
     = soundness' (k t) (prf t) P t itHolds
@@ -131,7 +178,7 @@ completeness' : {s : Set} -> {b : Set} -> (prog : State s b) -> (prf : isCode pr
   -> (pre : s -> Set) -> (post : Pair b s -> Set)
   -> (t : s)
   -> pre t -> post (runState prog prf t)
-  -> holds post (tt , t) prog
+  -> holds post t prog
 completeness' (Pure _) _ _ _ _ _ postHold = postHold
 completeness' (Step Get k) prf pre post t preHold postHold
   = completeness' (k t) (prf t) (λ _ → pre t) post t preHold postHold
@@ -162,11 +209,188 @@ refinePrePost {a} {s} {b} prog prf pre post postAfterRun = refinement prePost
       -> (pre : s -> Set) -> (post : s -> Pair b s -> Set)
       -> ((t : s) -> pre t -> post t (runState prog prf t))
       -> (P : Pair b s -> Set)
-      -> (x : a) -> (t : s) -> holds P (tt , t) (spec (\i -> pre (Pair.fst i)) (\i -> post (Pair.fst i)) t)
-      -> holds P (tt , t) prog
+      -> (x : a) -> (t : s) -> holds P t (spec (\i -> pre (Pair.fst i)) (\i -> post (Pair.fst i)) t)
+      -> holds P t prog
     rPP' prog prf pre post postAfterRun P x t (preHolds , postImpliesP)
       = let (y , t') = runState prog prf t
         in completeness' prog prf pre P t preHolds
             (postImpliesP y t' (postAfterRun t preHolds))
     prePost : (P : Pair a s -> Pair b s -> Set) -> (x : Pair a s) -> wpState P (spec pre post) x -> wpState P prog x
     prePost P (x , t) wpSpec = rPP' (prog x) (prf x) (λ z → pre (x , z)) (\z -> post (x , z)) (postAfterRun x) (P (x , t)) x t wpSpec
+
+sharpenSpec : {a s : Set} {b : Set} ->
+  (pre pre' : Pair a s -> Set) ->
+  (post post' : Pair a s -> Pair b s -> Set) ->
+  (∀ i -> pre i -> pre' i) ->
+  (∀ i o -> pre i -> post' i o -> post i o) ->
+  spec pre post ⊑ spec pre' post'
+sharpenSpec {a} {s} {b} pre pre' post post' sh we = refinement sharpen'
+  where
+  sharpen' : (P : Pair a s -> Pair b s -> Set) -> (i : Pair a s) ->
+    wpState P (spec pre post) i -> wpState P (spec pre' post') i
+  sharpen' P i (fst , snd)
+    = sh i fst
+    , λ x t' x₁ → snd x t' (we i (x , t') fst x₁)
+sharpenSpec' : {s : Set} {b : Set} ->
+  (pre pre' : s -> Set) ->
+  (post post' : s -> Pair b s -> Set) ->
+  (∀ i -> pre i -> pre' i) ->
+  (∀ i o -> pre i -> post' i o -> post i o) ->
+  spec' pre post ⊑' spec' pre' post'
+sharpenSpec' {s} {b} pre pre' post post' sh we = refinement' sharpen'
+  where
+  sharpen' : (P : Pair b s -> Set) -> (t : s) ->
+    holds P t (spec' pre post) -> holds P t (spec' pre' post')
+  sharpen' P t (fst , snd) = (sh t fst) , (λ x t' z → snd x t' (we t (x , t') fst z))
+
+-- How to refine a specification by doing a Get:
+-- the argument gets passed to the first and second argument.
+preGet : {s : Set} ->
+  s ->
+  (P : Pair s s -> Set) ->
+  s -> Set
+preGet t P t' = (t == t') -> (P (t , t'))
+postGet : {s : Set} -> {b : Set} ->
+  s ->
+  (Q : Pair s s -> Pair b s -> Set) ->
+  s -> Pair b s -> Set
+postGet t Q t' o = Pair (t == t') (Q (t , t') o)
+-- The same for Put:
+-- instead of caring about whatever we put,
+-- we want to know about the input to the value that was put.
+prePut : {s : Set}
+  -> (t' : s)
+  -> (P : Pair ⊤ s -> Set)
+  -> s -> Set
+prePut t' P _ = P (tt , t')
+postPut : {s : Set} {b : Set}
+  -> (t' : s)
+  -> (Q : Pair ⊤ s -> Pair b s -> Set)
+  -> s -> Pair b s -> Set
+postPut t' Q _ = Q (tt , t')
+
+refineGet : {s : Set} -> {b : Set} ->
+  (P : Pair s s -> Set) ->
+  (Q : Pair s s -> Pair b s -> Set) ->
+  spec' (\t -> preGet t P t) (\t -> postGet t Q t) ⊑' (get >>= spec (\i -> Pair (Pair.fst i == Pair.snd i) (P i)) Q)
+refineGet {s} {b} P Q = refinement'
+  (λ P₁ t z → (Refl , Pair.fst z Refl) , (λ x x₁ x₂ → Pair.snd z x x₁ (Refl , x₂)))
+refinePut : {s : Set} -> {b : Set}
+  -> (P : Pair ⊤ s -> Set)
+  -> (Q : Pair ⊤ s -> Pair b s -> Set)
+  -> (t : s)
+  -> spec' (prePut t P) (postPut t Q) ⊑' (put t >>= spec P Q)
+refinePut pre post t = refinement' λ P t₁ x → x
+
+-- The type of all implementations of a given specification.
+record Impl' {s : Set} {b : Set} (spec : State s b) : Set where
+  constructor impl
+  field
+    prog : State s b
+    code : isCode prog
+    refines : spec ⊑' prog
+open Impl'
+
+-- Combinators for 'easy' proofs of Impl.
+doReturn : {a s : Set} ->
+  {pre : s -> Set} ->
+  {post : s -> Pair a s -> Set} ->
+  (x : a) ->
+  (∀ t -> pre t -> post t (x , t)) ->
+  Impl' (spec' pre post)
+doReturn {a} {s} {pre} {post} x prf = impl
+  (return x)
+  tt
+  (refinement' (λ P t z → Pair.snd z x t (prf t (Pair.fst z))))
+
+record DerivationArgs (a' : Set) (s : Set) (b : Set)
+  (pre : s -> Set) (post : s -> Pair b s -> Set)
+  (preT : a' -> (Pair a' s -> Set) -> s -> Set)
+  (postT : a' -> (Pair a' s -> Pair b s -> Set) -> s -> Pair b s -> Set)
+  (x : a') : Set where
+  constructor der
+  field
+    pre' : Pair a' s -> Set
+    post' : Pair a' s -> Pair b s -> Set
+    stPre : ∀ t -> pre t -> preT x pre' t
+    wePost : ∀ t o -> pre t -> postT x post' t o -> post t o
+    continue : Impl' (spec pre' post' x)
+open DerivationArgs
+
+doGet : {s : Set} -> {b : Set} ->
+  {pre : s -> Set} ->
+  {post : s -> Pair b s -> Set} ->
+  ((t : s) -> DerivationArgs s s b pre post preGet postGet t) ->
+  Impl' (spec' pre post)
+doGet {s} {b} {pre} {post} df = impl
+  (get >>= \t -> prog (cases t))
+  (λ t → code (cases t))
+  (((spec' pre post
+      ⟨ sharpenSpec' pre P post Q (\t -> stPre (df t) t) (\t o -> wePost (df t) t o) ⟩
+    spec' P Q
+      ⟨ refineGet P' Q' ⟩
+    (get >>= \t -> spec' (P'' t) (Q'' t))
+      ⟨ refineUnderGet (λ t → spec' (P'' t) (Q'' t)) (spec P' Q') (sharpenSpec (uncurry P'') P' (uncurry Q'') Q' (λ i x → Pair.snd x) λ i o x x₁ → x₁) ⟩
+    (get >>= spec P' Q')
+      ⟨ refineUnderGet (spec P' Q') (\t -> prog (cases t)) (addRefinementArgument (spec P' Q')
+        (λ t → prog (cases t)) (\t -> refines (cases t))) ⟩
+    (get >>= \t -> prog (cases t)) ∎ ) pre-⊑'))
+  where
+    P' : Pair s s -> Set
+    P' i@(t , _) = pre' (df t) i
+    Q' : Pair s s -> Pair b s -> Set
+    Q' i@(t , _) = post' (df t) i
+    P'' : s -> s -> Set
+    P'' t t' = Pair (t == t') (pre' (df t) (t , t'))
+    Q'' : s -> s -> Pair b s -> Set
+    Q'' t t' = post' (df t) (t , t')
+    P : (t : s) -> Set
+    P t = preGet t (pre' (df t)) t
+    Q : (t : s) -> Pair b s -> Set
+    Q t = postGet t (post' (df t)) t
+    cases : (t : s) -> Impl' (spec (pre' (df t)) (post' (df t)) t)
+    cases t = continue (df t)
+    refineUnderGet : {s : Set} {b : Set} ->
+      (prog prog' : s -> State s b) ->
+      (prog ⊑ prog') ->
+      (get >>= prog) ⊑' (get >>= prog')
+    refineUnderGet prog prog' prf = refinement' λ P' t wpProg → holdsBind P' get prog' t (_⊑_.proof prf (λ x → P') (t , t) wpProg)
+
+doPut : {s : Set} -> {b : Set} ->
+  {pre : s -> Set} ->
+  {post : s -> Pair b s -> Set} ->
+  (t : s) ->
+  (DerivationArgs ⊤ s b pre post (\_ -> prePut t) (\_ -> postPut t) tt) ->
+  Impl' (spec' pre post)
+doPut {s} {b} {pre} {post} t (der pre' post' stPre wePost (impl prog code refines)) = impl
+  (put t >>= \_ -> prog)
+  (const code)
+  (((spec' pre post)
+      ⟨ sharpenSpec' pre (prePut t pre') post (postPut t post') stPre wePost ⟩
+    spec' (prePut t pre') (postPut t post')
+      ⟨ refinePut pre' post' t ⟩
+    (put t >>= \_ -> spec pre' post' tt)
+      ⟨ refineUnderPut t (spec pre' post' tt) prog refines ⟩
+    (put t >>= \_ -> prog) ∎) pre-⊑')
+  where
+  refineUnderPut : {s : Set} {b : Set} ->
+    (t : s) ->
+    (prog prog' : State s b) ->
+    (prog ⊑' prog') ->
+    (put t >>= \_ -> prog) ⊑' (put t >>= \_ -> prog')
+  refineUnderPut t prog prog' prf = refinement' \P' _ wpProg -> _⊑'_.proof prf P' t wpProg
+
+-- Specify the incrementation program: give the current state and update it by incrementing.
+incrPost : Nat -> Pair Nat Nat -> Set
+incrPost n (n' , n+1) = Pair (n == n') (Succ n == n+1)
+incrSpec : State Nat Nat
+incrSpec = spec' (\_ -> ⊤) incrPost
+
+incrImpl : Impl' incrSpec
+incrImpl =
+  doGet \t -> der (\i -> ¹ i == ² i) (λ i o → Pair (¹ i == ¹ o) (Succ (¹ i) == ² o)) (λ t₁ x x₁ → x₁) (lemma1 t)
+  (doPut (Succ t) (der (\i -> ² i == (Succ t)) (\i o -> Pair (t == ¹ o) (Succ t == ² o)) (λ t₁ _ → Refl) (λ t₁ o _ z → z)
+  (doReturn t (λ t₁ x → Refl , (sym x)))))
+  where
+  lemma1 : (t : Nat) (t₁ : Nat) (o : Pair Nat Nat) → ⊤ → postGet t (λ i o₁ → Pair ((¹ i) == (¹ o₁)) (Succ (¹ i) == (² o₁))) t₁ o → incrPost t₁ o
+  lemma1 n .n (.n , .(Succ n)) tt (Refl , (Refl , Refl)) = Refl , Refl

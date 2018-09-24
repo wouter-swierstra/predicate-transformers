@@ -488,8 +488,8 @@ module TreeLabeling where
   range 0 = Nil
   range (Succ n) = range n ++ (Cons n Nil)
 
-  splitRange : (p q : Nat) -> (range p ++ map (_+_ p) (range q)) == range (p + q)
-  splitRange = {!!}
+  --splitRange : (p q : Nat) -> (range p ++ map (_+_ p) (range q)) == range (p + q)
+  --splitRange = {!!}
 
   -- basic tree labelling function, but we don't prove it works!
   labelTree : {a : Set} -> Tree a -> State Nat (Tree Nat)
@@ -526,29 +526,6 @@ module TreeLabeling where
       preserveSize : (i : Pair (Tree a) Nat) -> size (Pair.fst i) == size (Pair.fst (run labelTree itIsCode i))
       preserveSize (Leaf x , _) = Refl
       preserveSize (Branch l r , _) = {!!}
-
-      proveRange : (i : Pair (Tree a) Nat) -> flatten (Pair.fst (run labelTree itIsCode i)) == map (_+_ (Pair.snd i)) (range (size (Pair.fst i)))
-      proveRange (Leaf x , n) = cong (λ k → Cons k Nil) (plus-zero n)
-      proveRange (Branch l r , n) =
-        let lt = run labelTree itIsCode (Branch l r , n)
-            ll = run labelTree itIsCode (l , n)
-            lr = run labelTree itIsCode (r , (n + size l))
-        in flatten (Pair.fst lt)
-          =⟨ sym (cong flatten (inBranches l r n)) ⟩= flatten (Branch (Pair.fst ll) (Pair.fst lr))
-          =⟨ Refl ⟩= (flatten (Pair.fst ll) ++ flatten (Pair.fst lr))
-          =⟨ cong (flip _++_ (flatten (Pair.fst lr))) (proveRange (l , n)) ⟩= (map (_+_ n) (range (size l)) ++ flatten (Pair.fst lr))
-          =⟨ cong (_++_ (map (_+_ n) (range (size l)))) {!!} ⟩= {!!}
-          =⟨ cong (_++_ (map (_+_ n) (range (size l)))) {!!} ⟩= {!!}
-          =⟨ cong (_++_ (map (_+_ n) (range (size l)))) (cong {!!} {!!}) ⟩= (map (_+_ n) (range (size l)) ++
-                                                                   map (λ z → n + (size l + z)) (range (size r)))
-          =⟨ cong (_++_ (map (_+_ n) (range (size l)))) (sym (map-functorial (_+_ (size l)) (_+_ n))) ⟩= (map (_+_ n) (range (size l)) ++ map (_+_ n) (map (_+_ (size l)) (range (size r))))
-          =⟨ map-concat {l = range (size l)} {l' = map (_+_ (size l)) (range (size r))} (_+_ n) ⟩= map (_+_ n) (range (size l) ++ map (_+_ (size l)) (range (size r)))
-          =⟨ cong (map (_+_ n)) (splitRange (size l) (size r)) ⟩= map (_+_ n) (range (size l + size r))
-          =∎
-          {- =⟨ sym (cong flatten (inBranches l r n)) ⟩= flatten (Branch (Pair.fst ll) (Pair.fst lr))
-          =⟨ Refl ⟩= (flatten (Pair.fst ll) ++ flatten (Pair.fst lr))
-          =⟨ cong (map (_+_ n)) (splitRange (size l) (size r)) ⟩= map (_+_ n) (range (size l + size r))
-          -}
 
       provePost : (i : Pair (Tree a) Nat) -> Pair.snd i == 0 -> labelPost (run labelTree itIsCode i)
       provePost (Leaf x , .0) Refl = Refl , Refl
