@@ -125,12 +125,12 @@ curry f x y = f (x , y)
 uncurry :  ∀ {l l' l'' : Level} {a : Set l} {b : Set l'} {c : Set l''} -> (a -> b -> c) -> Pair a b -> c
 uncurry f (x , y) = f x y
 
-data Either (a b : Set) : Set where
+data Either {l : Level} (a b : Set l) : Set l where
   Inl : a -> Either a b
   Inr : b -> Either a b
 
 record ⊤ : Set where
-  constructor tt 
+  constructor tt
 
 data ⊥ : Set where
 
@@ -140,6 +140,39 @@ magic ()
 So : Bool -> Set
 So True = ⊤
 So False = ⊥
+
+¬ : ∀ {l} -> Set l -> Set l
+¬ a = a -> ⊥
+
+Decide : ∀ {l} (a : Set l) -> Set l
+Decide a = Either a (¬ a)
+
+decideFrom : (b : Bool) -> Decide (So b)
+decideFrom True = Inl tt
+decideFrom False = Inr λ z → z
+
+data EqNat : (a b : Nat) -> Set where
+  EqZero : EqNat 0 0
+  EqSucc : {a b : Nat} -> EqNat a b -> EqNat (Succ a) (Succ b)
+
+succ-inj-eq : {a b : Nat} -> EqNat (Succ a) (Succ b) -> EqNat a b
+succ-inj-eq (EqSucc eq) = eq
+
+decideEqNat : (a b : Nat) -> Decide (EqNat a b)
+decideEqNat Zero Zero = Inl EqZero
+decideEqNat Zero (Succ b) = Inr (λ ())
+decideEqNat (Succ a) Zero = Inr (λ ())
+decideEqNat (Succ a) (Succ b) with decideEqNat a b
+... | Inl eq = Inl (EqSucc eq)
+... | Inr absurd = Inr \eq' -> absurd (succ-inj-eq eq')
+
+eqNat⇒== : {a b : Nat} -> EqNat a b -> a == b
+eqNat⇒== EqZero = Refl
+eqNat⇒== (EqSucc eq) with eqNat⇒== eq
+... | Refl = Refl
+
+succ-inj : {a b : Nat} -> Succ a == Succ b -> a == b
+succ-inj {a} {b} Refl = Refl
 
 data List (a : Set) : Set where
   Nil : List a

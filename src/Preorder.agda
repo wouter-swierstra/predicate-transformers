@@ -10,13 +10,14 @@ open Preorder
 infixr 2 _⟨_⟩_
 _⟨_⟩_ : {a : Set} {b : a -> Set} ->
   {R : ((x : a) -> b x) -> ((x : a) -> b x) -> Set} ->
-  {P : Preorder {(x : a) -> b x} R} ->
   (f : (x : a) -> b x) -> {g h : (x : a) -> b x} ->
-  R f g -> R g h -> R f h
-_⟨_⟩_ {P = P} f {g} {h} step1 step2 = pre-trans P {f} {g} {h} step1 step2
+  R f g -> (Preorder R -> R g h) ->
+  (P : Preorder {(x : a) -> b x} R) ->
+  R f h
+_⟨_⟩_ f {g} {h} step1 step2 P = pre-trans P {f} {g} {h} step1 (step2 P)
 
 _∎ : {a : Set} {b : a -> Set} ->
+  (f : (x : a) -> b x) ->
   {R : ((x : a) -> b x) -> ((x : a) -> b x) -> Set} ->
-  {P : Preorder {(x : a) -> b x} R} ->
-  (f : (x : a) -> b x) -> R f f
-_∎ {P = P} f = pre-refl P {f}
+  (P : Preorder {(x : a) -> b x} R) -> R f f
+_∎ f P = pre-refl P {f}
