@@ -230,3 +230,20 @@ K b = \_ -> b
 
 _⊆_ : {a : Set} -> (p q : a -> Set) -> Set
 _⊆_ {a} p q = (x : a) -> p x -> q x
+
+
+record _⇔_ (P Q : Set) : Set where
+  constructor iff
+  field
+    if : Q -> P
+    onlyIf : P -> Q
+
+independent : {a : Set} ->
+  (P : (x : a) -> Set) ->
+  Set
+independent {a} P = (x : a) -> (x' : a) -> P x -> P x'
+
+rebase : {a : Set} ->
+  (P : a -> Set) -> independent P ->
+  Sigma a P -> (x : a) -> P x
+rebase P iP (fst , snd) x = iP fst x snd

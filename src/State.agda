@@ -244,43 +244,59 @@ sharpenSpec' {s} {b} pre pre' post post' sh we = refinement' sharpen'
   sharpen' P t (fst , snd) = (sh t fst) , (λ x t' z → snd x t' (we t (x , t') fst z))
 
 -- How to refine a specification by doing a Get:
--- the argument gets passed to the first and second argument.
+-- the state gets passed to the first and second argument,
+-- so they should be equal.
 preGet : {s : Set} ->
-  s ->
-  (P : Pair s s -> Set) ->
-  s -> Set
-preGet t P t' = (t == t') -> (P (t , t'))
+  (P : s -> Set) ->
+  Pair s s -> Set
+preGet P (t , t') = Pair (t == t') (P t)
 postGet : {s : Set} -> {b : Set} ->
-  s ->
-  (Q : Pair s s -> Pair b s -> Set) ->
-  s -> Pair b s -> Set
-postGet t Q t' o = Pair (t == t') (Q (t , t') o)
--- The same for Put:
--- instead of caring about whatever we put,
--- we want to know about the input to the value that was put.
-prePut : {s : Set}
-  -> (t' : s)
-  -> (P : Pair ⊤ s -> Set)
-  -> s -> Set
-prePut t' P _ = P (tt , t')
-postPut : {s : Set} {b : Set}
-  -> (t' : s)
-  -> (Q : Pair ⊤ s -> Pair b s -> Set)
-  -> s -> Pair b s -> Set
-postPut t' Q _ = Q (tt , t')
+  (Q : s -> Pair b s -> Set) ->
+  Pair s s -> Pair b s -> Set
+postGet Q (t , t') o = Pair (t == t') (Q t o)
+
+-- Turn a general precondition into a precondition for
+-- the continuation of Put.
+-- We need to ensure that the state for the pre- and postcondition are equal,
+-- so we have to move the precondition to the postcondition.
+prePut : {s : Set} -> {b : Set} ->
+  (t : s) ->
+  (P : s -> Set) -> (Q : s -> Pair b s -> Set) ->
+  Pair ⊤ s -> Set
+prePut {s} t P Q (tt , t') = (t == t')
+postPut : {s : Set} {b : Set} ->
+  (t : s) ->
+  (P : s -> Set) -> (Q : s -> Pair b s -> Set) ->
+  Pair ⊤ s -> Pair b s -> Set
+postPut {s} t P Q (tt , t') o = (t : s) -> P t -> Q t o
 
 refineGet : {s : Set} -> {b : Set} ->
-  (P : Pair s s -> Set) ->
-  (Q : Pair s s -> Pair b s -> Set) ->
-  spec' (\t -> preGet t P t) (\t -> postGet t Q t) ⊑' (get >>= spec (\i -> Pair (Pair.fst i == Pair.snd i) (P i)) Q)
-refineGet {s} {b} P Q = refinement'
-  (λ P₁ t z → (Refl , Pair.fst z Refl) , (λ x x₁ x₂ → Pair.snd z x x₁ (Refl , x₂)))
+  (P : s -> Set) ->
+  (Q : s -> Pair b s -> Set) ->
+  spec' P Q ⊑' (get >>= spec (preGet P) (postGet Q))
+refineGet {s} {b} P Q = refinement' λ P₁ t x → (Refl , Pair.fst x) , (λ x₁ x₂ x₃ → Pair.snd x x₁ x₂ (Pair.snd x₃))
+refineUnderGet : {s : Set} {b : Set} ->
+  (prog prog' : s -> State s b) ->
+  (prog ⊑ prog') ->
+  (get >>= prog) ⊑' (get >>= prog')
+refineUnderGet prog prog' prf = refinement' λ P' t wpProg →
+  holdsBind P' get prog' t (_⊑_.proof prf (λ x → P') (t , t) wpProg)
 refinePut : {s : Set} -> {b : Set}
-  -> (P : Pair ⊤ s -> Set)
-  -> (Q : Pair ⊤ s -> Pair b s -> Set)
+  -> (P : s -> Set)
+  -> (Q : s -> Pair b s -> Set)
   -> (t : s)
-  -> spec' (prePut t P) (postPut t Q) ⊑' (put t >>= spec P Q)
-refinePut pre post t = refinement' λ P t₁ x → x
+  -> spec' P Q ⊑' (put t >>= spec (prePut t P Q) (postPut t P Q))
+refinePut {s} {b} P Q t = refinement' λ P₁ t₁ x → Refl , lemma P₁ t₁ x
+  where
+  lemma : (P' : Pair b s -> Set) -> (t' : s) -> (prf : Pair (P t') ((x' : b) (t'' : s) -> Q t' (x' , t'') -> P' (x' , t''))) -> (x' : b) (t'' : s) -> postPut t P Q (tt , t) (x' , t'') -> P' (x' , t'')
+  lemma P' tbp (hP , QtoP') xo to pp = QtoP' xo to (pp tbp hP)
+refineUnderPut : {s : Set} {b : Set} ->
+  (t : s) ->
+  (prog prog' : State s b) ->
+  (prog ⊑' prog') ->
+  (put t >>= \_ -> prog) ⊑' (put t >>= \_ -> prog')
+refineUnderPut t prog prog' prf = refinement' \P' _ wpProg ->
+  _⊑'_.proof prf P' t wpProg
 
 -- The type of all implementations of a given specification.
 record Impl' {s : Set} {b : Set} (spec : State s b) : Set where
@@ -292,93 +308,55 @@ record Impl' {s : Set} {b : Set} (spec : State s b) : Set where
 open Impl'
 
 -- Combinators for 'easy' proofs of Impl.
-doReturn : {a s : Set} ->
-  {pre : s -> Set} ->
-  {post : s -> Pair a s -> Set} ->
-  (x : a) ->
-  (∀ t -> pre t -> post t (x , t)) ->
+doSharpen : {a s : Set} ->
+  {pre pre' : s -> Set} ->
+  {post post' : s -> Pair a s -> Set} ->
+  ((t : s) -> pre t -> pre' t) ->
+  ((t : s) -> (o : Pair a s) -> pre t -> post' t o -> post t o) ->
+  Impl' (spec' pre' post') ->
   Impl' (spec' pre post)
-doReturn {a} {s} {pre} {post} x prf = impl
+doSharpen {a} {s} {pre} {pre'} {post} {post'} x x₁ (impl prog₁ code₁ refines₁) = impl prog₁ code₁
+  ((spec' pre post ⟨ sharpenSpec' pre pre' post post' x x₁ ⟩ spec' pre' post' ⟨ refines₁ ⟩ (prog₁ ∎)) pre-⊑')
+
+doReturn : {a s : Set} ->
+  (post : s -> Pair a s -> Set) ->
+  (x : a) ->
+  Impl' (spec' (\t -> post t (x , t)) post)
+doReturn {a} {s} post x = impl
   (return x)
   tt
-  (refinement' (λ P t z → Pair.snd z x t (prf t (Pair.fst z))))
-
-record DerivationArgs (a' : Set) (s : Set) (b : Set)
-  (pre : s -> Set) (post : s -> Pair b s -> Set)
-  (preT : a' -> (Pair a' s -> Set) -> s -> Set)
-  (postT : a' -> (Pair a' s -> Pair b s -> Set) -> s -> Pair b s -> Set)
-  (x : a') : Set where
-  constructor der
-  field
-    pre' : Pair a' s -> Set
-    post' : Pair a' s -> Pair b s -> Set
-    stPre : ∀ t -> pre t -> preT x pre' t
-    wePost : ∀ t o -> pre t -> postT x post' t o -> post t o
-    continue : Impl' (spec pre' post' x)
-open DerivationArgs
+  (refinement' (λ P t z → Pair.snd z x t (Pair.fst z)))
 
 doGet : {s : Set} -> {b : Set} ->
   {pre : s -> Set} ->
   {post : s -> Pair b s -> Set} ->
-  ((t : s) -> DerivationArgs s s b pre post preGet postGet t) ->
+  ((t : s) -> Impl' (spec' (\t' -> preGet pre (t , t')) (\t' -> postGet post (t , t')))) ->
   Impl' (spec' pre post)
-doGet {s} {b} {pre} {post} df = impl
+doGet {s} {b} {pre} {post} cases = impl
   (get >>= \t -> prog (cases t))
   (λ t → code (cases t))
-  (((spec' pre post
-      ⟨ sharpenSpec' pre P post Q (\t -> stPre (df t) t) (\t o -> wePost (df t) t o) ⟩
-    spec' P Q
-      ⟨ refineGet P' Q' ⟩
-    (get >>= \t -> spec' (P'' t) (Q'' t))
-      ⟨ refineUnderGet (λ t → spec' (P'' t) (Q'' t)) (spec P' Q') (sharpenSpec (uncurry P'') P' (uncurry Q'') Q' (λ i x → Pair.snd x) λ i o x x₁ → x₁) ⟩
-    (get >>= spec P' Q')
-      ⟨ refineUnderGet (spec P' Q') (\t -> prog (cases t)) (addRefinementArgument (spec P' Q')
-        (λ t → prog (cases t)) (\t -> refines (cases t))) ⟩
-    (get >>= \t -> prog (cases t)) ∎ ) pre-⊑'))
+  ((spec' pre post
+      ⟨ refineGet pre post ⟩
+    (get >>= spec (preGet pre) (postGet post))
+      ⟨ refineUnderGet (spec (preGet pre) (postGet post)) (\t -> prog (cases t)) (addRefinementArgument (spec (preGet pre) (postGet post)) (\t -> prog (cases t)) \t -> refines (cases t)) ⟩
+    (get >>= \t -> prog (cases t)) ∎) pre-⊑')
   where
-    P' : Pair s s -> Set
-    P' i@(t , _) = pre' (df t) i
-    Q' : Pair s s -> Pair b s -> Set
-    Q' i@(t , _) = post' (df t) i
-    P'' : s -> s -> Set
-    P'' t t' = Pair (t == t') (pre' (df t) (t , t'))
-    Q'' : s -> s -> Pair b s -> Set
-    Q'' t t' = post' (df t) (t , t')
-    P : (t : s) -> Set
-    P t = preGet t (pre' (df t)) t
-    Q : (t : s) -> Pair b s -> Set
-    Q t = postGet t (post' (df t)) t
-    cases : (t : s) -> Impl' (spec (pre' (df t)) (post' (df t)) t)
-    cases t = continue (df t)
-    refineUnderGet : {s : Set} {b : Set} ->
-      (prog prog' : s -> State s b) ->
-      (prog ⊑ prog') ->
-      (get >>= prog) ⊑' (get >>= prog')
-    refineUnderGet prog prog' prf = refinement' λ P' t wpProg → holdsBind P' get prog' t (_⊑_.proof prf (λ x → P') (t , t) wpProg)
 
 doPut : {s : Set} -> {b : Set} ->
   {pre : s -> Set} ->
   {post : s -> Pair b s -> Set} ->
   (t : s) ->
-  (DerivationArgs ⊤ s b pre post (\_ -> prePut t) (\_ -> postPut t) tt) ->
+  Impl' (spec' (\t' -> prePut t pre post (tt , t')) (\t' -> postPut t pre post (tt , t'))) ->
   Impl' (spec' pre post)
-doPut {s} {b} {pre} {post} t (der pre' post' stPre wePost (impl prog code refines)) = impl
-  (put t >>= \_ -> prog)
-  (const code)
-  (((spec' pre post)
-      ⟨ sharpenSpec' pre (prePut t pre') post (postPut t post') stPre wePost ⟩
-    spec' (prePut t pre') (postPut t post')
-      ⟨ refinePut pre' post' t ⟩
-    (put t >>= \_ -> spec pre' post' tt)
-      ⟨ refineUnderPut t (spec pre' post' tt) prog refines ⟩
-    (put t >>= \_ -> prog) ∎) pre-⊑')
+doPut {s} {b} {pre} {post} t cases = impl
+  (put t >>= \_ -> prog cases)
+  (const (code cases))
+  ((spec' pre post
+      ⟨ refinePut pre post t ⟩
+    (put t >>= spec (prePut t pre post) (postPut t pre post))
+      ⟨ refineUnderPut t (spec (prePut t pre post) (postPut t pre post) tt) (prog cases) (refines cases) ⟩
+    (put t >>= \_ -> prog cases) ∎) pre-⊑')
   where
-  refineUnderPut : {s : Set} {b : Set} ->
-    (t : s) ->
-    (prog prog' : State s b) ->
-    (prog ⊑' prog') ->
-    (put t >>= \_ -> prog) ⊑' (put t >>= \_ -> prog')
-  refineUnderPut t prog prog' prf = refinement' \P' _ wpProg -> _⊑'_.proof prf P' t wpProg
 
 -- Specify the incrementation program: give the current state and update it by incrementing.
 incrPost : Nat -> Pair Nat Nat -> Set
@@ -388,9 +366,7 @@ incrSpec = spec' (\_ -> ⊤) incrPost
 
 incrImpl : Impl' incrSpec
 incrImpl =
-  doGet \t -> der (\i -> ¹ i == ² i) (λ i o → Pair (¹ i == ¹ o) (Succ (¹ i) == ² o)) (λ t₁ x x₁ → x₁) (lemma1 t)
-  (doPut (Succ t) (der (\i -> ² i == (Succ t)) (\i o -> Pair (t == ¹ o) (Succ t == ² o)) (λ t₁ _ → Refl) (λ t₁ o _ z → z)
-  (doReturn t (λ t₁ x → Refl , (sym x)))))
-  where
-  lemma1 : (t : Nat) (t₁ : Nat) (o : Pair Nat Nat) → ⊤ → postGet t (λ i o₁ → Pair ((¹ i) == (¹ o₁)) (Succ (¹ i) == (² o₁))) t₁ o → incrPost t₁ o
-  lemma1 n .n (.n , .(Succ n)) tt (Refl , (Refl , Refl)) = Refl , Refl
+  doGet \n ->
+  doPut (Succ n) (
+  doSharpen (λ t x → x , Refl , x) (λ t o x x₁ t₁ x₂ → (Pair.fst x₂) , ((Triple.snd x₁) , (Triple.thd x₁))) (
+  doReturn (\n+1 n,n+1 -> Triple (Succ n == n+1) (n == Pair.fst n,n+1) (Succ n == Pair.snd n,n+1)) n))
