@@ -247,3 +247,14 @@ rebase : {a : Set} ->
   (P : a -> Set) -> independent P ->
   Sigma a P -> (x : a) -> P x
 rebase P iP (fst , snd) x = iP fst x snd
+
+
+record IsMonad (m : Set -> Set) : Set₁ where
+  constructor isMonad
+  field
+    bind : {a b : Set} -> m a -> (a -> m b) -> m b
+    pure : {a : Set} -> a -> m a
+open IsMonad
+
+mmap : {m : Set -> Set} -> IsMonad m -> {a b : Set} -> (a -> b) -> m a -> m b
+mmap (isMonad bind pure) f mx = bind mx (\x -> pure (f x))
