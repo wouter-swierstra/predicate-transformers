@@ -5,7 +5,7 @@ open import Maybe
 
 open import Preorder
 open Preorder.Preorder
-open import Spec
+open import Spec hiding (Impl')
 
 module State where
 
@@ -213,13 +213,13 @@ refinePrePost {a} {s} {b} prog prf pre post postAfterRun = refinement prePost
     prePost : (P : Pair a s -> Pair b s -> Set) -> (x : Pair a s) -> wpState P (specState pre post) x -> wpState P prog x
     prePost P (x , t) wpSpec = rPP' (prog x) (prf x) (λ z → pre (x , z)) (\z -> post (x , z)) (postAfterRun x) (P (x , t)) x t wpSpec
 
-sharpenSpec : {a s : Set} {b : Set} ->
+sharpenSpecState : {a s : Set} {b : Set} ->
   (pre pre' : Pair a s -> Set) ->
   (post post' : Pair a s -> Pair b s -> Set) ->
   (∀ i -> pre i -> pre' i) ->
   (∀ i o -> pre i -> post' i o -> post i o) ->
   specState pre post ⊑ specState pre' post'
-sharpenSpec {a} {s} {b} pre pre' post post' sh we = refinement sharpen'
+sharpenSpecState {a} {s} {b} pre pre' post post' sh we = refinement sharpen'
   where
   sharpen' : (P : Pair a s -> Pair b s -> Set) -> (i : Pair a s) ->
     wpState P (specState pre post) i -> wpState P (specState pre' post') i
@@ -301,21 +301,21 @@ record Impl' {s : Set} {b : Set} (spec : State s b) : Set where
 open Impl'
 
 -- Combinators for 'easy' proofs of Impl.
-doSharpen : {a s : Set} ->
+doSharpenState : {a s : Set} ->
   {pre pre' : s -> Set} ->
   {post post' : s -> Pair a s -> Set} ->
   ((t : s) -> pre t -> pre' t) ->
   ((t : s) -> (o : Pair a s) -> pre t -> post' t o -> post t o) ->
   Impl' (spec' pre' post') ->
   Impl' (spec' pre post)
-doSharpen {a} {s} {pre} {pre'} {post} {post'} x x₁ (impl prog₁ code₁ refines₁) = impl prog₁ code₁
+doSharpenState {a} {s} {pre} {pre'} {post} {post'} x x₁ (impl prog₁ code₁ refines₁) = impl prog₁ code₁
   ((spec' pre post ⟨ sharpenSpec' pre pre' post post' x x₁ ⟩ spec' pre' post' ⟨ refines₁ ⟩ (prog₁ ∎)) pre-⊑')
 
-doReturn : {a s : Set} ->
+doReturnState : {a s : Set} ->
   (post : s -> Pair a s -> Set) ->
   (x : a) ->
   Impl' (spec' (\t -> post t (x , t)) post)
-doReturn {a} {s} post x = impl
+doReturnState {a} {s} post x = impl
   (return x)
   tt
   (refinement' (λ P t z → Pair.snd z (x , t) t (Pair.fst z)))
@@ -361,5 +361,5 @@ incrImpl : Impl' incrSpec
 incrImpl =
   doGet \n ->
   doPut (Succ n) (
-  doSharpen (λ t x → x , Refl , x) (λ t o x x₁ t₁ x₂ → (Pair.fst x₂) , ((Triple.snd x₁) , (Triple.thd x₁))) (
-  doReturn (\n+1 n,n+1 -> Triple (Succ n == n+1) (n == Pair.fst n,n+1) (Succ n == Pair.snd n,n+1)) n))
+  doSharpenState (λ t x → x , Refl , x) (λ t o x x₁ t₁ x₂ → (Pair.fst x₂) , ((Triple.snd x₁) , (Triple.thd x₁))) (
+  doReturnState (\n+1 n,n+1 -> Triple (Succ n == n+1) (n == Pair.fst n,n+1) (Succ n == Pair.snd n,n+1)) n))
