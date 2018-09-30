@@ -46,16 +46,12 @@ modify f = Step Get (\t -> Step (Put (f t)) \_ -> return t)
 -- in State we tend to use the state in pre- and postconditions.
 -- We access it using the Get and Put operations.
 -- spec' is an intermediate for specState.
-spec' : {s : Set} {a : Set} -> (s -> Set) -> (s -> Pair a s -> Set) -> State s a
-spec' pre post = Step Get (\t -> Spec (pre t) (post t) \f -> (Step (Put (² f)) \_ -> return (¹ f)))
+specState' : {s : Set} {a : Set} -> (s -> Set) -> (s -> Pair a s -> Set) -> State s a
+specState' pre post = Step Get (\t -> Spec (pre t) (post t) \f -> (Step (Put (² f)) \_ -> return (¹ f)))
 specState : {s : Set} {a : Set} {b : Set} ->
   (Pair a s -> Set) -> (Pair a s -> Pair b s -> Set) -> a -> State s b
-specState pre post x = spec' (\t -> pre (x , t)) (\t -> post (x , t))
+specState pre post x = specState' (\t -> pre (x , t)) (\t -> post (x , t))
 
-_>>=_ : {a s : Set} -> {b : Set} -> State s a -> (a -> State s b) -> State s b
-Pure x >>= f = f x
-Step c k >>= f = Step c \x -> k x >>= f
-Spec pre post k >>= f = Spec pre post \x -> k x >>= f
 _>=>_ : {a s : Set} -> {b c : Set}
   -> (a -> State s b) -> (b -> State s c) -> (a -> State s c)
 f >=> g = \x -> f x >>= g
@@ -204,7 +200,7 @@ refinePrePost {a} {s} {b} prog prf pre post postAfterRun = refinement prePost
       -> (pre : s -> Set) -> (post : s -> Pair b s -> Set)
       -> ((t : s) -> pre t -> post t (runState prog prf t))
       -> (P : Pair b s -> Set)
-      -> (x : a) -> (t : s) -> holds P t (spec' pre post)
+      -> (x : a) -> (t : s) -> holds P t (specState' pre post)
       -> holds P t prog
     rPP' prog prf pre post postAfterRun P x t (preHolds , postImpliesP)
       = let (y , t') = runState prog prf t
@@ -231,11 +227,11 @@ sharpenSpec' : {s : Set} {b : Set} ->
   (post post' : s -> Pair b s -> Set) ->
   (∀ i -> pre i -> pre' i) ->
   (∀ i o -> pre i -> post' i o -> post i o) ->
-  spec' pre post ⊑' spec' pre' post'
+  specState' pre post ⊑' specState' pre' post'
 sharpenSpec' {s} {b} pre pre' post post' sh we = refinement' sharpen'
   where
   sharpen' : (P : Pair b s -> Set) -> (t : s) ->
-    holds P t (spec' pre post) -> holds P t (spec' pre' post')
+    holds P t (specState' pre post) -> holds P t (specState' pre' post')
   sharpen' P t (fst , snd) = (sh t fst) , (λ x t' z → snd x t' (we t x fst z))
 
 -- How to refine a specification by doing a Get:
@@ -268,7 +264,7 @@ postPut {s} t P Q (tt , t') o = (t : s) -> P t -> Q t o
 refineGet : {s : Set} -> {b : Set} ->
   (P : s -> Set) ->
   (Q : s -> Pair b s -> Set) ->
-  spec' P Q ⊑' (get >>= specState (preGet P) (postGet Q))
+  specState' P Q ⊑' (get >>= specState (preGet P) (postGet Q))
 refineGet {s} {b} P Q = refinement' λ P₁ t x → (Refl , Pair.fst x) , (λ x₁ x₂ x₃ → Pair.snd x x₁ x₂ (Pair.snd x₃))
 refineUnderGet : {s : Set} {b : Set} ->
   (prog prog' : s -> State s b) ->
@@ -280,7 +276,7 @@ refinePut : {s : Set} -> {b : Set}
   -> (P : s -> Set)
   -> (Q : s -> Pair b s -> Set)
   -> (t : s)
-  -> spec' P Q ⊑' (put t >>= specState (prePut t P Q) (postPut t P Q))
+  -> specState' P Q ⊑' (put t >>= specState (prePut t P Q) (postPut t P Q))
 refinePut {s} {b} P Q t = refinement' λ P₁ t₁ x → Refl , λ x₁ t' x₂ → (² x) x₁ t' (x₂ t₁ (¹ x))
 
 refineUnderPut : {s : Set} {b : Set} ->
@@ -306,15 +302,15 @@ doSharpenState : {a s : Set} ->
   {post post' : s -> Pair a s -> Set} ->
   ((t : s) -> pre t -> pre' t) ->
   ((t : s) -> (o : Pair a s) -> pre t -> post' t o -> post t o) ->
-  Impl' (spec' pre' post') ->
-  Impl' (spec' pre post)
+  Impl' (specState' pre' post') ->
+  Impl' (specState' pre post)
 doSharpenState {a} {s} {pre} {pre'} {post} {post'} x x₁ (impl prog₁ code₁ refines₁) = impl prog₁ code₁
-  ((spec' pre post ⟨ sharpenSpec' pre pre' post post' x x₁ ⟩ spec' pre' post' ⟨ refines₁ ⟩ (prog₁ ∎)) pre-⊑')
+  ((specState' pre post ⟨ sharpenSpec' pre pre' post post' x x₁ ⟩ specState' pre' post' ⟨ refines₁ ⟩ (prog₁ ∎)) pre-⊑')
 
 doReturnState : {a s : Set} ->
   (post : s -> Pair a s -> Set) ->
   (x : a) ->
-  Impl' (spec' (\t -> post t (x , t)) post)
+  Impl' (specState' (\t -> post t (x , t)) post)
 doReturnState {a} {s} post x = impl
   (return x)
   tt
@@ -323,12 +319,12 @@ doReturnState {a} {s} post x = impl
 doGet : {s : Set} -> {b : Set} ->
   {pre : s -> Set} ->
   {post : s -> Pair b s -> Set} ->
-  ((t : s) -> Impl' (spec' (\t' -> preGet pre (t , t')) (\t' -> postGet post (t , t')))) ->
-  Impl' (spec' pre post)
+  ((t : s) -> Impl' (specState' (\t' -> preGet pre (t , t')) (\t' -> postGet post (t , t')))) ->
+  Impl' (specState' pre post)
 doGet {s} {b} {pre} {post} cases = impl
   (get >>= \t -> prog (cases t))
   (λ t → code (cases t))
-  ((spec' pre post
+  ((specState' pre post
       ⟨ refineGet pre post ⟩
     (get >>= specState (preGet pre) (postGet post))
       ⟨ refineUnderGet (specState (preGet pre) (postGet post)) (\t -> prog (cases t)) (addRefinementArgument (specState (preGet pre) (postGet post)) (\t -> prog (cases t)) \t -> refines (cases t)) ⟩
@@ -339,12 +335,12 @@ doPut : {s : Set} -> {b : Set} ->
   {pre : s -> Set} ->
   {post : s -> Pair b s -> Set} ->
   (t : s) ->
-  Impl' (spec' (\t' -> prePut t pre post (tt , t')) (\t' -> postPut t pre post (tt , t'))) ->
-  Impl' (spec' pre post)
+  Impl' (specState' (\t' -> prePut t pre post (tt , t')) (\t' -> postPut t pre post (tt , t'))) ->
+  Impl' (specState' pre post)
 doPut {s} {b} {pre} {post} t cases = impl
   (put t >>= \_ -> prog cases)
   (const (code cases))
-  ((spec' pre post
+  ((specState' pre post
       ⟨ refinePut pre post t ⟩
     (put t >>= specState (prePut t pre post) (postPut t pre post))
       ⟨ refineUnderPut t (specState (prePut t pre post) (postPut t pre post) tt) (prog cases) (refines cases) ⟩
@@ -355,7 +351,7 @@ doPut {s} {b} {pre} {post} t cases = impl
 incrPost : Nat -> Pair Nat Nat -> Set
 incrPost n (n' , n+1) = Pair (n == n') (Succ n == n+1)
 incrSpec : State Nat Nat
-incrSpec = spec' (\_ -> ⊤) incrPost
+incrSpec = specState' (\_ -> ⊤) incrPost
 
 incrImpl : Impl' incrSpec
 incrImpl =

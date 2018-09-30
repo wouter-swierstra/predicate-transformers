@@ -187,9 +187,17 @@ data List (a : Set) : Set where
 -- [_] : ∀ {a} -> a -> List a
 -- [ x ] = Cons x Nil
 
+foldr : {a b : Set} -> (a -> b -> b) -> b -> List a -> b
+foldr f e Nil = e
+foldr f e (Cons x xs) = f x (foldr f e xs)
+
 _++_ :  ∀ {a} -> List a -> List a -> List a
 Nil ++ ys = ys
 Cons x xs ++ ys = Cons x (xs ++ ys)
+
+map : {a b : Set} -> (a -> b) -> List a -> List b
+map f Nil = Nil
+map f (Cons x xs) = Cons (f x) (map f xs)
 
 filter : {a : Set} -> (a -> Bool) -> List a -> List a
 filter p Nil = Nil
@@ -207,6 +215,10 @@ filter p (Cons x xs) =
 all : {a : Set} -> (P : a -> Bool) -> List a -> Set
 all P Nil = ⊤
 all P (Cons x xs) = Pair (So (P x)) (all P xs) 
+
+data _∈_ {a : Set} : a -> List a -> Set where
+  ∈Head : ∀ {x xs} -> x ∈ Cons x xs
+  ∈Tail : ∀ {x x' xs} -> x ∈ xs -> x ∈ Cons x' xs
 
 data _<_ : Nat -> Nat -> Set where
   Base : ∀ {n} -> Zero < Succ n
@@ -258,3 +270,7 @@ open IsMonad
 
 mmap : {m : Set -> Set} -> IsMonad m -> {a b : Set} -> (a -> b) -> m a -> m b
 mmap (isMonad bind pure) f mx = bind mx (\x -> pure (f x))
+
+IsMonad-List : IsMonad List
+bind IsMonad-List mx f = foldr (_++_) Nil (map f mx)
+pure IsMonad-List x = Cons x Nil

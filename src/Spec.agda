@@ -22,6 +22,13 @@ data Mix (C : Set) (R : C -> Set) (a : Set) : Set where
     -> (a' -> Set)
     -> (k : a' -> Mix C R a) -> Mix C R a
 
+infixl 20 _>>=_
+_>>=_ : {C : Set} {R : C -> Set} -> {a : Set} {b : Set}
+  -> Mix C R a -> (a -> Mix C R b) -> Mix C R b
+Pure x >>= f = f x
+Step c k >>= f = Step c (λ z → k z >>= f)
+Spec pre post k >>= f = Spec pre post (λ z → k z >>= f)
+
 fromCode : {C : Set} {R : C -> Set} {a : Set}
   -> Free.Free C R a -> Mix C R a
 fromCode (Free.Pure x) = Pure x
@@ -37,6 +44,11 @@ spec : ∀ {a} {b : a -> Set}
   -> (Q : Post a b)
   -> (x : a) -> Mix C R (b x)
 spec {a} {b} P Q x = Spec (P x) (Q x) Pure
+spec' : {bx : Set} {C : Set} {R : C -> Set}
+  -> (P : Set)
+  -> (Q : bx -> Set)
+  -> Mix C R bx
+spec' {a} {b} P Q = Spec P Q Pure
 
 -- The type of functions that convert pure postconditions
 -- to ones about effects.
@@ -102,6 +114,9 @@ record Refine' {C : Set} {R : C -> Set} (PT : PTs C R)
 pre-Refine : {a : Set} {b : a -> Set} {C : Set} {R : C -> Set} {PT : PTs C R} -> Preorder (Refine PT {a = a} {b = b})
 Refine.proof (pre-refl pre-Refine) _ _ prf = prf
 Refine.proof (pre-trans pre-Refine (refinement fg) (refinement gh)) P x prf = gh P x (fg P x prf)
+pre-Refine' : {bx : Set} {C : Set} {R : C -> Set} {PT : PTs C R} -> Preorder (Refine' PT {bx = bx})
+Refine'.proof' (pre-refl pre-Refine') _ prf = prf
+Refine'.proof' (pre-trans pre-Refine' (refinement' fg) (refinement' gh)) P prf = gh P (fg P prf)
 
 refinePointwise : {C : Set} {R : C -> Set} {PT : PTs C R} {a : Set} {b : a -> Set} {f g : (x : a) -> Mix C R (b x)}
   -> ((x : a) -> Refine' PT (f x) (g x)) -> Refine PT f g
