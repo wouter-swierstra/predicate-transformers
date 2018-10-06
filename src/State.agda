@@ -5,31 +5,29 @@ open import Maybe
 
 open import Preorder
 open Preorder.Preorder
-open import Spec hiding (Impl')
+open import WP
+open import SliceSpec
 
 module State where
 
-module StateMonad (s : Set) where
-  data C : Set where
-    Get : C
-    Put : s -> C
+data C (s : Set) : Set where
+  Get : C s
+  Put : s -> C s
 
-  R : C -> Set
-  R Get = s
-  R (Put _)  = ⊤
+R : (s : Set) -> C s -> Set
+R s Get = s
+R s (Put _)  = ⊤
 
-  fmapS : {a : Set} {b : a -> Set} -> (f : (x : a) -> b x)
-    -> (x : Pair a s) -> Pair (b (Pair.fst x)) s
-  fmapS f (fst , snd) = f fst , snd
-  prfmapS : {a : Set} -> {b : a -> Set}
-    -> (f : (x : a) -> b x) -> (x : Pair a s)
-    -> f (Pair.fst x) == Pair.fst (fmapS f x)
-  prfmapS f (fst , snd) = Refl
+fmapS : {a s : Set} {b : a -> Set} -> (f : (x : a) -> b x)
+  -> (x : Pair a s) -> Pair (b (Pair.fst x)) s
+fmapS f (fst , snd) = f fst , snd
+prfmapS : {a s : Set} -> {b : a -> Set}
+  -> (f : (x : a) -> b x) -> (x : Pair a s)
+  -> f (Pair.fst x) == Pair.fst (fmapS f x)
+prfmapS f (fst , snd) = Refl
 
-  State : (b : Set) -> Set
-  State = Mix C R
-
-open StateMonad
+State : (s : Set) (b : Set) -> Set
+State s b = Slice s (C s) (R s) b
 
 Monad-State : {s : Set} -> IsMonad (\a -> s -> Pair a s)
 IsMonad.bind Monad-State mx f t = uncurry f (mx t)
@@ -42,84 +40,81 @@ put : {s : Set} -> s -> State s ⊤
 put x = Step (Put x) (λ _ → return tt)
 modify : {s : Set} -> (s -> s) -> State s s
 modify f = Step Get (\t -> Step (Put (f t)) \_ -> return t)
--- In contrast to Spec.spec, which ignores effects,
--- in State we tend to use the state in pre- and postconditions.
--- We access it using the Get and Put operations.
--- spec' is an intermediate for specState.
-specState' : {s : Set} {a : Set} -> (s -> Set) -> (s -> Pair a s -> Set) -> State s a
-specState' pre post = Step Get (\t -> Spec (pre t) (post t) \f -> (Step (Put (² f)) \_ -> return (¹ f)))
 specState : {s : Set} {a : Set} {b : Set} ->
-  (Pair a s -> Set) -> (Pair a s -> Pair b s -> Set) -> a -> State s b
-specState pre post x = specState' (\t -> pre (x , t)) (\t -> post (x , t))
+  (a -> s -> Set) -> (a -> s -> b -> s -> Set) -> a -> State s b
+specState pre post x = spec (pre x) (post x)
 
 _>=>_ : {a s : Set} -> {b c : Set}
   -> (a -> State s b) -> (b -> State s c) -> (a -> State s c)
 f >=> g = \x -> f x >>= g
 
-holds : {a s : Set}
-  -> (P : Pair a s -> Set)
-  -> (t : s)
-  -> (prog : State s a) -> Set
-holds P t (Pure x) = P (x , t)
-holds P t (Step Get k) = holds P t (k t)
-holds P t (Step (Put x) k) = holds P x (k tt)
-holds {s = s} P t (Spec {b} pre post k) = Pair pre -- if precondition holds
-  ((x : b) -> (t' : s) -> post x -- and for all intermediate values such that the postcondition holds,
-    -> holds P t' (k x)) -- then the continuation makes P hold
+holds : {s : Set} -> PTs s (C s) (R s)
+holds Get P t = P t t
+holds (Put x) P t = P tt x
 
+-- Does the stateful computation satisfy the predicate on the given initial state?
+ptState : {a s : Set} -> (Q : a -> s -> Set) -> State s a -> s -> Set
+ptState = ptSlice holds
+-- Give the weakest precondition on input to f and initial state,
+-- such that the (extended) postcondition holds.
 wpState : {a s : Set} -> {b : Set}
-  -> (P : Pair a s -> Pair b s -> Set)
+  -> (P : a -> s -> b -> s -> Set)
   -> (f : a -> State s b)
-  -> (Pair a s -> Set)
-wpState P f (x , t) = wp (\y -> holds (P (y , t)) t) f x
+  -> (a -> s -> Set)
+wpState P f x t = ptState (P x t) (f x) t
 
 -- Relation between holds and _>>=_
 holdsBind : {a s : Set} -> {b : Set}
-  -> (P : Pair b s -> Set)
+  -> (P : b -> s -> Set)
   -> (mx : State s a) -> (f : a -> State s b)
-  -> (t : s) -> holds (wpState (\i o -> P o) f) t mx -> holds P t (mx >>= f)
+  -> (t : s) -> ptState (\x t' -> wpState (\_ _ -> P) f x t') mx t -> ptState P (mx >>= f) t
 holdsBind P (Pure x) f t holdsX = holdsX
 holdsBind P (Step Get k) f t holdsX = holdsBind P (k t) f t holdsX
-holdsBind P (Step (Put x) k) f t holdsX = holdsBind P (k tt) f x holdsX
-holdsBind P (Spec pre post k) f t (fst , snd) = fst , (λ x t' x₁ → holdsBind P (k x) f t' (snd x t' x₁))
+holdsBind P (Step (Put t') k) f t holdsX = holdsBind P (k tt) f t' holdsX
+holdsBind P (Spec pre post k) f t (fst , snd) = fst , λ x' z x → holdsBind P (k z) f x' (snd x' z x)
 
 -- Relation between wpState and _>=>_
 wpKleisli : {a s : Set} -> {b c : Set}
-  -> (P : Pair a s -> Pair c s -> Set)
+  -> (P : a -> s -> c -> s -> Set)
   -> (f : a -> State s b) -> (g : b -> State s c)
-  -> wpState (λ i m → wpState (λ m o → P i o) g m) f ⊆ wpState P (f >=> g)
-wpKleisli P f g (x , t) wpF = holdsBind (P (x , t)) (f x) g t wpF
+  -> (x : a) -> (t : s) ->
+  wpState (λ _ _ → wpState (\_ _ -> P x t) g) f x t ->
+  wpState P (f >=> g) x t
+wpKleisli P f g x t wpF = holdsBind (P x t) (f x) g t wpF
 
 -- If we have a Spec, then for any P, its precondition is implied by the wp.
 holdsSpecPre : {a s : Set} -> {b : Set}
-  -> (pre : Pair a s -> Set)
-  -> (post P : Pair a s -> Pair b s -> Set)
-  -> wpState P (specState pre post) ⊆ pre
-holdsSpecPre pre post P (x , t) (fst , snd) = fst
+  -> (pre : a -> s -> Set)
+  -> (post P : a -> s -> b -> s -> Set)
+  -> (x : a) -> (t : s) ->
+  wpState P (specState pre post) x t -> pre x t
+holdsSpecPre pre post P x t = Pair.fst
 -- If we have Spec pre post, then for any postcondition P that is implied by post, the wp is equivalent to pre.
 holdsSpecPost : {a s : Set} -> {b : Set}
-  -> (pre : Pair a s -> Set)
-  -> (post P : Pair a s -> Pair b s -> Set)
-  -> ((x : Pair a s) -> (y : Pair b s) -> post x y -> P x y)
-  -> pre ⊆ wpState P (specState pre post)
-holdsSpecPost pre post P postImplies (x , t) preHolds
-  = preHolds , λ x₁ t' x₂ → postImplies (x , t) x₁ x₂
+  -> (pre : a -> s -> Set)
+  -> (post P : a -> s -> b -> s -> Set)
+  -> ((x : a) -> (t : s) -> (y : b) -> (t' : s) -> post x t y t' -> P x t y t')
+  -> (x : a) -> (t : s) ->
+  pre x t -> wpState P (specState pre post) x t
+holdsSpecPost pre post P postImplies x t preHolds
+  = preHolds , (λ x₁ x₂ → postImplies x t x₂ x₁)
 
 -- Define the refinement relation on wpState and show it's a preorder.
 record _⊑_ {s : Set} {a : Set} {b : Set} (f g : a -> State s b) : Set1 where
   constructor refinement
   field
-    proof : ∀ P -> wpState P f ⊆ wpState P g
+    proof : ∀ P x t -> wpState P f x t -> wpState P g x t
 -- Define the refinement relation on holds and show it's a preorder.
 record _⊑'_ {s : Set} {b : Set} (mx my : State s b) : Set1 where
   constructor refinement'
   field
-    proof : ∀ P t -> holds P t mx -> holds P t my
+    proof : ∀ P t -> ptState P mx t -> ptState P my t
 
 ⊑-refl : {a s : Set} {b : Set} (f : a -> State s b) -> f ⊑ f
-⊑-refl f = refinement \ P x z -> z
+⊑-refl f = refinement \ P x z x₁ → x₁
 ⊑-trans : {a s : Set} {b : Set} (f g h : a -> State s b) -> f ⊑ g -> g ⊑ h -> f ⊑ h
-⊑-trans f g h x x₁ = refinement \P x₂ x₃ -> _⊑_.proof x₁ P x₂ (_⊑_.proof x P x₂ x₃)
+⊑-trans f g h (refinement proof) (refinement proof₁)
+  = refinement (λ P x t z → proof₁ (λ _ _ → P x t) x t (proof (λ _ _ → P x t) x t z))
 
 pre-⊑ : ∀ {a b c} -> Preorder (_⊑_ {a} {b} {c})
 pre-⊑ = preorder (\{f} -> ⊑-refl f) (\{f} {g} {h} -> ⊑-trans f g h)
@@ -133,30 +128,30 @@ addRefinementArgument : {a s : Set} -> {b : Set}
   -> (f g : a -> State s b)
   -> ((x : a) -> f x ⊑' g x)
   -> f ⊑ g
-addRefinementArgument f g noArgs = refinement λ P x₁ x₂ → _⊑'_.proof (noArgs (Pair.fst x₁)) (P x₁) (Pair.snd x₁) x₂
+addRefinementArgument f g noArgs = refinement λ P x t pt → _⊑'_.proof (noArgs x) (P x t) t pt
 
 -- Define how to execute stateful computations.
 -- The handler only talks about how to update state when we encounter a command.
-handleState : {s : Set} -> (c : C s) -> s -> (Pair (R s c) s)
-handleState Get init = init , init
-handleState (Put x) init = tt , x
-runState : {a s : Set} -> (prog : State s a) -> isCode prog
+handleState : {s : Set} -> s -> (c : C s) -> Id (Pair (R s c) s)
+handleState init Get = In (init , init)
+handleState init (Put x) = In (tt , x)
+runState : {a s : Set} -> (prog : State s a) -> isCodeSlice prog
   -> s -> Pair a s
-runState = run Monad-State handleState
+runState prog prf t = out (runSlice IsMonad-Id handleState prog prf t)
 
 -- wpState is sound: it gives a valid precondition
 soundness : {a s : Set} -> {b : Set}
-  -> (prog : a -> State s b) -> (prf : (x : a) -> isCode (prog x))
-  -> (P : Pair a s -> Pair b s -> Set)
+  -> (prog : a -> State s b) -> (prf : (x : a) -> isCodeSlice (prog x))
+  -> (P : a -> s -> b -> s -> Set)
   -> (x : a) -> (t : s)
-  -> wpState P prog (x , t)
-  -> P (x , t) (runState (prog x) (prf x) t)
+  -> wpState P prog x t
+  -> uncurry (P x t) (runState (prog x) (prf x) t)
 soundness {a} {s} {b} prog prf P x t wpHolds
-  = soundness' (prog x) (prf x) (P (x , t)) t wpHolds
+  = soundness' (prog x) (prf x) (P x t) t wpHolds
   where
-  soundness' : (prog : State s b) -> (prf : isCode prog)
-    -> (P : Pair b s -> Set)
-    -> (t : s) -> holds P t prog -> P (runState prog prf t)
+  soundness' : (prog : State s b) -> (prf : isCodeSlice prog)
+    -> (P : b -> s -> Set)
+    -> (t : s) -> ptState P prog t -> uncurry P (runState prog prf t)
   soundness' (Pure _) _ _ _ itHolds = itHolds
   soundness' (Step Get k) prf P t itHolds
     = soundness' (k t) (prf t) P t itHolds
@@ -165,86 +160,85 @@ soundness {a} {s} {b} prog prf P x t wpHolds
   soundness' (Spec _ _ _) ()
 
 -- wpState is complete: it gives a condition that is weaker than all preconditions
-completeness' : {s : Set} -> {b : Set} -> (prog : State s b) -> (prf : isCode prog)
-  -> (pre : s -> Set) -> (post : Pair b s -> Set)
+completeness' : {s : Set} -> {b : Set} -> (prog : State s b) -> (prf : isCodeSlice prog)
+  -> (pre : s -> Set) -> (post : s -> b -> s -> Set)
   -> (t : s)
-  -> pre t -> post (runState prog prf t)
-  -> holds post t prog
+  -> pre t -> uncurry (post t) (runState prog prf t)
+  -> ptState (post t) prog t
 completeness' (Pure _) _ _ _ _ _ postHold = postHold
 completeness' (Step Get k) prf pre post t preHold postHold
-  = completeness' (k t) (prf t) (λ _ → pre t) post t preHold postHold
+  = completeness' (k t) (prf t) pre post t preHold postHold
 completeness' (Step (Put x) k) prf pre post t preHold postHold
-  = completeness' (k tt) (prf tt) (λ _ → pre t) post x preHold postHold
+  = completeness' (k tt) (prf tt) (\_ -> pre t) (\_ -> post t) x preHold postHold
 completeness' (Spec _ _ _) ()
 
 completeness : {a s : Set} -> {b : Set}
-  -> (prog : a -> State s b) -> (prf : (x : a) -> isCode (prog x)) -- if we have code,
-  -> (pre : Pair a s -> Set) -> (post : Pair a s -> Pair b s -> Set) -- and a specification
-  -> ((x : a) -> (t : s) -> pre (x , t) -> post (x , t) (runState (prog x) (prf x) t)) -- and for all preconditioned values, the postcondition holds for running
-  -> (x : a) -> (t : s) -> pre (x , t) -> wpState post prog (x , t) -- then it is stronger than the weakest precondition
+  -> (prog : a -> State s b) -> (prf : (x : a) -> isCodeSlice (prog x)) -- if we have code,
+  -> (pre : a -> s -> Set) -> (post : a ->  s -> b -> s -> Set) -- and a specification
+  -> ((x : a) -> (t : s) -> pre x t -> uncurry (post x t) (runState (prog x) (prf x) t)) -- and for all preconditioned values, the postcondition holds for running
+  -> (x : a) -> (t : s) -> pre x t -> wpState post prog x t -- then it is stronger than the weakest precondition
 completeness {a} {s} {b} prog prf pre post specRun x t preHolds
-  = completeness' (prog x) (prf x) (\t -> pre (x , t)) (post (x , t)) t preHolds (specRun x t preHolds)
+  = completeness' (prog x) (prf x) (pre x) (post x) t preHolds (specRun x t preHolds)
 
 -- But the soundness and completeness only talk about code.
 -- To relate it to specifications, we show the following lemma:
 -- code refines all specifications that hold for running it.
 -- Slogan: "a program is its own reference implementation."
 refinePrePost : {a s : Set} -> {b : Set}
-  -> (prog : a -> State s b) -> (prf : (x : a) -> isCode (prog x)) -- if we have code
-  -> (pre : Pair a s -> Set) -> (post : Pair a s -> Pair b s -> Set) -- and a specification
-  -> ((x : a) -> (t : s) -> pre (x , t) -> post (x , t) (runState (prog x) (prf x) t)) -- and for all preconditioned values, the postcondition holds
+  -> (prog : a -> State s b) -> (prf : (x : a) -> isCodeSlice (prog x)) -- if we have code
+  -> (pre : a -> s -> Set) -> (post : a -> s -> b -> s -> Set) -- and a specification
+  -> ((x : a) -> (t : s) -> pre x t -> uncurry (post x t) (runState (prog x) (prf x) t)) -- and for all preconditioned values, the postcondition holds
   -> specState pre post ⊑ prog -- then the code refines the specification
 refinePrePost {a} {s} {b} prog prf pre post postAfterRun = refinement prePost
   where
-    rPP' : (prog : State s b) -> (prf : isCode prog)
-      -> (pre : s -> Set) -> (post : s -> Pair b s -> Set)
-      -> ((t : s) -> pre t -> post t (runState prog prf t))
-      -> (P : Pair b s -> Set)
-      -> (x : a) -> (t : s) -> holds P t (specState' pre post)
-      -> holds P t prog
-    rPP' prog prf pre post postAfterRun P x t (preHolds , postImpliesP)
+    rPP' : (prog : State s b) -> (prf : isCodeSlice prog)
+      -> (pre : s -> Set) -> (post : s -> b -> s -> Set)
+      -> ((t : s) -> pre t -> uncurry (post t) (runState prog prf t))
+      -> (P : s -> b -> s -> Set)
+      -> (x : a) -> (t : s) -> ptState (P t) (spec pre post) t
+      -> ptState (P t) prog t
+    rPP' prog prf pre post postAfterRun P x t (fst , snd)
       = let (y , t') = runState prog prf t
-        in completeness' prog prf pre P t preHolds
-            (postImpliesP (y , t') t' (postAfterRun t preHolds))
-    prePost : (P : Pair a s -> Pair b s -> Set) -> (x : Pair a s) -> wpState P (specState pre post) x -> wpState P prog x
-    prePost P (x , t) wpSpec = rPP' (prog x) (prf x) (λ z → pre (x , z)) (\z -> post (x , z)) (postAfterRun x) (P (x , t)) x t wpSpec
+        in completeness' prog prf pre P t fst (snd t' y (postAfterRun t fst))
+    prePost : (P : a -> s -> b -> s -> Set) -> (x : a) (t : s) -> wpState P (specState pre post) x t -> wpState P prog x t
+    prePost P x t wpSpec = rPP' (prog x) (prf x) (pre x) (post x) (postAfterRun x) (P x) x t wpSpec
 
 sharpenSpecState : {a s : Set} {b : Set} ->
-  (pre pre' : Pair a s -> Set) ->
-  (post post' : Pair a s -> Pair b s -> Set) ->
-  (∀ i -> pre i -> pre' i) ->
-  (∀ i o -> pre i -> post' i o -> post i o) ->
+  (pre pre' : a -> s -> Set) ->
+  (post post' : a -> s -> b -> s -> Set) ->
+  (∀ x t -> pre x t -> pre' x t) ->
+  (∀ x t y t' -> pre x t -> post' x t y t' -> post x t y t') ->
   specState pre post ⊑ specState pre' post'
 sharpenSpecState {a} {s} {b} pre pre' post post' sh we = refinement sharpen'
   where
-  sharpen' : (P : Pair a s -> Pair b s -> Set) -> (i : Pair a s) ->
-    wpState P (specState pre post) i -> wpState P (specState pre' post') i
-  sharpen' P i (fst , snd)
-    = sh i fst
-    , λ x t' x₁ → snd x t' (we i x fst x₁)
+  sharpen' : (P : a -> s -> b -> s -> Set) -> (x : a) (t : s) ->
+    wpState P (specState pre post) x t -> wpState P (specState pre' post') x t
+  sharpen' P x t pf
+    = sh x t (Pair.fst pf) ,
+        (λ x₁ x₂ x₃ → Pair.snd pf x₁ x₂ (we x t x₂ x₁ (Pair.fst pf) x₃))
 sharpenSpec' : {s : Set} {b : Set} ->
   (pre pre' : s -> Set) ->
-  (post post' : s -> Pair b s -> Set) ->
-  (∀ i -> pre i -> pre' i) ->
-  (∀ i o -> pre i -> post' i o -> post i o) ->
-  specState' pre post ⊑' specState' pre' post'
-sharpenSpec' {s} {b} pre pre' post post' sh we = refinement' sharpen'
+  (post post' : s -> b -> s -> Set) ->
+  (∀ t -> pre t -> pre' t) ->
+  (∀ t y t' -> pre t -> post' t y t' -> post t y t') ->
+  spec pre post ⊑' spec pre' post'
+sharpenSpec' {s} {b} pre pre' post post' sh we = refinement' λ P t x → sharpen' (\_ -> P) t x
   where
-  sharpen' : (P : Pair b s -> Set) -> (t : s) ->
-    holds P t (specState' pre post) -> holds P t (specState' pre' post')
-  sharpen' P t (fst , snd) = (sh t fst) , (λ x t' z → snd x t' (we t x fst z))
+  sharpen' : (P : s -> b -> s -> Set) -> (t : s) ->
+    ptState (P t) (spec pre post) t -> ptState (P t) (spec pre' post') t
+  sharpen' P t pf = sh t (Pair.fst pf) , λ x t' z → Pair.snd pf x t' (we t t' x (Pair.fst pf) z)
 
 -- How to refine a specification by doing a Get:
 -- the state gets passed to the first and second argument,
 -- so they should be equal.
 preGet : {s : Set} ->
   (P : s -> Set) ->
-  Pair s s -> Set
-preGet P (t , t') = Pair (t == t') (P t)
+  s -> s -> Set
+preGet P t t' = Pair (t == t') (P t)
 postGet : {s : Set} -> {b : Set} ->
-  (Q : s -> Pair b s -> Set) ->
-  Pair s s -> Pair b s -> Set
-postGet Q (t , t') o = Pair (t == t') (Q t o)
+  (Q : s -> b -> s -> Set) ->
+  s -> s -> b -> s -> Set
+postGet Q t t' x to = Pair (t == t') (Q t x to)
 
 -- Turn a general precondition into a precondition for
 -- the continuation of Put.
@@ -252,79 +246,78 @@ postGet Q (t , t') o = Pair (t == t') (Q t o)
 -- so we have to move the precondition to the postcondition.
 prePut : {s : Set} -> {b : Set} ->
   (t : s) ->
-  (P : s -> Set) -> (Q : s -> Pair b s -> Set) ->
-  Pair ⊤ s -> Set
-prePut {s} t P Q (tt , t') = (t == t')
+  (P : s -> Set) -> (Q : s -> b -> s -> Set) ->
+  ⊤ -> s -> Set
+prePut {s} t P Q tt t' = (t == t')
 postPut : {s : Set} {b : Set} ->
   (t : s) ->
-  (P : s -> Set) -> (Q : s -> Pair b s -> Set) ->
-  Pair ⊤ s -> Pair b s -> Set
-postPut {s} t P Q (tt , t') o = (t : s) -> P t -> Q t o
+  (P : s -> Set) -> (Q : s -> b -> s -> Set) ->
+  ⊤ -> s -> b -> s -> Set
+postPut {s} t P Q tt t' x to = (t : s) -> P t -> Q t x to
 
 refineGet : {s : Set} -> {b : Set} ->
   (P : s -> Set) ->
-  (Q : s -> Pair b s -> Set) ->
-  specState' P Q ⊑' (get >>= specState (preGet P) (postGet Q))
+  (Q : s -> b -> s -> Set) ->
+  spec P Q ⊑' (get >>= specState (preGet P) (postGet Q))
 refineGet {s} {b} P Q = refinement' λ P₁ t x → (Refl , Pair.fst x) , (λ x₁ x₂ x₃ → Pair.snd x x₁ x₂ (Pair.snd x₃))
 refineUnderGet : {s : Set} {b : Set} ->
   (prog prog' : s -> State s b) ->
   (prog ⊑ prog') ->
   (get >>= prog) ⊑' (get >>= prog')
 refineUnderGet prog prog' prf = refinement' λ P' t wpProg →
-  holdsBind P' get prog' t (_⊑_.proof prf (λ x → P') (t , t) wpProg)
+  _⊑_.proof prf (λ _ _ → P') t t wpProg
 refinePut : {s : Set} -> {b : Set}
   -> (P : s -> Set)
-  -> (Q : s -> Pair b s -> Set)
+  -> (Q : s -> b -> s -> Set)
   -> (t : s)
-  -> specState' P Q ⊑' (put t >>= specState (prePut t P Q) (postPut t P Q))
-refinePut {s} {b} P Q t = refinement' λ P₁ t₁ x → Refl , λ x₁ t' x₂ → (² x) x₁ t' (x₂ t₁ (¹ x))
+  -> spec P Q ⊑' (put t >>= specState (prePut t P Q) (postPut t P Q))
+refinePut {s} {b} P Q t = refinement' λ P₁ t₁ x → Refl , (λ x₁ x₂ x₃ → Pair.snd x x₁ x₂ (x₃ t₁ (Pair.fst x)))
 
 refineUnderPut : {s : Set} {b : Set} ->
   (t : s) ->
   (prog prog' : State s b) ->
   (prog ⊑' prog') ->
   (put t >>= \_ -> prog) ⊑' (put t >>= \_ -> prog')
-refineUnderPut t prog prog' prf = refinement' \P' _ wpProg ->
-  _⊑'_.proof prf P' t wpProg
+refineUnderPut t prog prog' prf = refinement' \P' _ wpProg -> _⊑'_.proof prf P' t wpProg
 
 -- The type of all implementations of a given specification.
 record Impl' {s : Set} {b : Set} (spec : State s b) : Set where
   constructor impl
   field
     prog : State s b
-    code : isCode prog
+    code : isCodeSlice prog
     refines : spec ⊑' prog
 open Impl'
 
 -- Combinators for 'easy' proofs of Impl.
 doSharpenState : {a s : Set} ->
   {pre pre' : s -> Set} ->
-  {post post' : s -> Pair a s -> Set} ->
+  {post post' : s -> a -> s -> Set} ->
   ((t : s) -> pre t -> pre' t) ->
-  ((t : s) -> (o : Pair a s) -> pre t -> post' t o -> post t o) ->
-  Impl' (specState' pre' post') ->
-  Impl' (specState' pre post)
+  ((t : s) -> (x : a) -> (t' : s) -> pre t -> post' t x t' -> post t x t') ->
+  Impl' (spec pre' post') ->
+  Impl' (spec pre post)
 doSharpenState {a} {s} {pre} {pre'} {post} {post'} x x₁ (impl prog₁ code₁ refines₁) = impl prog₁ code₁
-  ((specState' pre post ⟨ sharpenSpec' pre pre' post post' x x₁ ⟩ specState' pre' post' ⟨ refines₁ ⟩ (prog₁ ∎)) pre-⊑')
+  ((spec pre post ⟨ sharpenSpec' pre pre' post post' x x₁ ⟩ spec pre' post' ⟨ refines₁ ⟩ (prog₁ ∎)) pre-⊑')
 
 doReturnState : {a s : Set} ->
-  (post : s -> Pair a s -> Set) ->
+  (post : s -> a -> s -> Set) ->
   (x : a) ->
-  Impl' (specState' (\t -> post t (x , t)) post)
+  Impl' (spec (\t -> post t x t) post)
 doReturnState {a} {s} post x = impl
   (return x)
   tt
-  (refinement' (λ P t z → Pair.snd z (x , t) t (Pair.fst z)))
+  (refinement' (λ P t z → Pair.snd z t x (Pair.fst z)))
 
 doGet : {s : Set} -> {b : Set} ->
   {pre : s -> Set} ->
-  {post : s -> Pair b s -> Set} ->
-  ((t : s) -> Impl' (specState' (\t' -> preGet pre (t , t')) (\t' -> postGet post (t , t')))) ->
-  Impl' (specState' pre post)
+  {post : s -> b -> s -> Set} ->
+  ((t : s) -> Impl' (spec (preGet pre t) (postGet post t))) ->
+  Impl' (spec pre post)
 doGet {s} {b} {pre} {post} cases = impl
   (get >>= \t -> prog (cases t))
   (λ t → code (cases t))
-  ((specState' pre post
+  ((spec pre post
       ⟨ refineGet pre post ⟩
     (get >>= specState (preGet pre) (postGet post))
       ⟨ refineUnderGet (specState (preGet pre) (postGet post)) (\t -> prog (cases t)) (addRefinementArgument (specState (preGet pre) (postGet post)) (\t -> prog (cases t)) \t -> refines (cases t)) ⟩
@@ -333,14 +326,14 @@ doGet {s} {b} {pre} {post} cases = impl
 
 doPut : {s : Set} -> {b : Set} ->
   {pre : s -> Set} ->
-  {post : s -> Pair b s -> Set} ->
+  {post : s -> b -> s -> Set} ->
   (t : s) ->
-  Impl' (specState' (\t' -> prePut t pre post (tt , t')) (\t' -> postPut t pre post (tt , t'))) ->
-  Impl' (specState' pre post)
+  Impl' (spec (prePut t pre post tt) (postPut t pre post tt)) ->
+  Impl' (spec pre post)
 doPut {s} {b} {pre} {post} t cases = impl
   (put t >>= \_ -> prog cases)
   (const (code cases))
-  ((specState' pre post
+  ((spec pre post
       ⟨ refinePut pre post t ⟩
     (put t >>= specState (prePut t pre post) (postPut t pre post))
       ⟨ refineUnderPut t (specState (prePut t pre post) (postPut t pre post) tt) (prog cases) (refines cases) ⟩
@@ -348,14 +341,14 @@ doPut {s} {b} {pre} {post} t cases = impl
   where
 
 -- Specify the incrementation program: give the current state and update it by incrementing.
-incrPost : Nat -> Pair Nat Nat -> Set
-incrPost n (n' , n+1) = Pair (n == n') (Succ n == n+1)
+incrPost : Nat -> Nat -> Nat -> Set
+incrPost n n' n+1 = Pair (n == n') (Succ n == n+1)
 incrSpec : State Nat Nat
-incrSpec = specState' (\_ -> ⊤) incrPost
+incrSpec = spec (\_ -> ⊤) incrPost
 
 incrImpl : Impl' incrSpec
 incrImpl =
   doGet \n ->
   doPut (Succ n) (
-  doSharpenState (λ t x → x , Refl , x) (λ t o x x₁ t₁ x₂ → (Pair.fst x₂) , ((Triple.snd x₁) , (Triple.thd x₁))) (
-  doReturnState (\n+1 n,n+1 -> Triple (Succ n == n+1) (n == Pair.fst n,n+1) (Succ n == Pair.snd n,n+1)) n))
+  doSharpenState (λ t x → x , Refl , x) (λ t x t' x₁ x₂ t₁ x₃ → Pair.fst x₃ , (Triple.snd x₂ , Triple.thd x₂)) (
+  doReturnState (\n+1 n' n+1' -> Triple (Succ n == n+1) (n == n') (Succ n == n+1')) n))

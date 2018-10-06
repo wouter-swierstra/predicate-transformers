@@ -5,11 +5,6 @@ open import Level
 
 module Relations where
 
-  _⊆_ : {l : Level} {a b : Set l} ->
-    (R1 R2 : a -> b -> Set l) -> Set l
-  _⊆_ {a = a} {b = b} R1 R2 =
-    (x : a) -> (y : b) -> R1 x y -> R2 x y 
-
   wp : {l : Level} {a b : Set l} -> (R : a -> b -> Set l) -> (b -> Set l) -> (a -> Set l)
   wp {b = b} R Q = λ x → Sigma b (\y -> R x y)
 

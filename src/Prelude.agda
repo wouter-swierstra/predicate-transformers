@@ -36,6 +36,10 @@ cong f Refl = Refl
 cong2 : {a b c : Set} {x y : a} {z w : b} (f : a -> b -> c) -> x == y -> z == w -> f x z == f y w
 cong2 f Refl Refl = Refl
 
+liftPath : {a : Set} {b : a -> Set} {x x' : a} ->
+  x == x' -> b x == b x'
+liftPath Refl = Refl
+
 coerce : {a b : Set} -> a == b -> a -> b
 coerce Refl x = x
 
@@ -101,6 +105,11 @@ not : Bool -> Bool
 not True = False
 not False = True
 
+_||_ : Bool -> Bool -> Bool
+True || _ = True
+_ || True = True
+False || False = False
+
 record Pair {l l'} (a : Set l) (b : Set l') : Set (l ⊔ l') where
   constructor _,_
   field
@@ -147,6 +156,9 @@ So : Bool -> Set
 So True = ⊤
 So False = ⊥
 
+intoSo : So True
+intoSo = tt
+
 ¬ : ∀ {l} -> Set l -> Set l
 ¬ a = a -> ⊥
 
@@ -179,6 +191,19 @@ eqNat⇒== (EqSucc eq) with eqNat⇒== eq
 
 succ-inj : {a b : Nat} -> Succ a == Succ b -> a == b
 succ-inj {a} {b} Refl = Refl
+
+-- Conjugate the path q with the dependent path p.
+conjugate : {x y : Set} -> { f g : x -> y } -> ((a : x) -> f a == g a)
+  -> (a b : x) -> (g a == g b) -> (f a == f b)
+conjugate p a b q = trans (p a) (trans q (sym (p b)))
+
+plus-inj : {a b c : Nat} -> (a + c) == (b + c) -> a == b
+plus-inj {a} {b} {Zero} x = conjugate plus-zero a b x
+plus-inj {a} {b} {Succ c} x = plus-inj (succ-inj (conjugate (\x -> plus-succ x c) a b x))
+
+plus-assoc : (a b c : Nat) -> (a + b) + c == a + (b + c)
+plus-assoc (Zero) (b) (c) = Refl
+plus-assoc (Succ a) (b) (c) = cong Succ (plus-assoc a b c)
 
 data List (a : Set) : Set where
   Nil : List a
@@ -219,6 +244,13 @@ all P (Cons x xs) = Pair (So (P x)) (all P xs)
 data _∈_ {a : Set} : a -> List a -> Set where
   ∈Head : ∀ {x xs} -> x ∈ Cons x xs
   ∈Tail : ∀ {x x' xs} -> x ∈ xs -> x ∈ Cons x' xs
+
+delete : {a : Set} {x : a} (xs : List a) -> x ∈ xs -> List a
+delete (Cons x ys) ∈Head = ys
+delete (Cons y ys) (∈Tail i) = Cons y (delete ys i)
+
+deleteHead : {a : Set} {x : a} {xs : List a} -> delete (Cons x xs) ∈Head == xs
+deleteHead = Refl
 
 data _<_ : Nat -> Nat -> Set where
   Base : ∀ {n} -> Zero < Succ n
@@ -268,8 +300,17 @@ record IsMonad (m : Set -> Set) : Set₁ where
     pure : {a : Set} -> a -> m a
 open IsMonad
 
+data Id (a : Set) : Set where
+  In : a -> Id a
+out : {a : Set} -> Id a -> a
+out (In x) = x
+
 mmap : {m : Set -> Set} -> IsMonad m -> {a b : Set} -> (a -> b) -> m a -> m b
 mmap (isMonad bind pure) f mx = bind mx (\x -> pure (f x))
+
+IsMonad-Id : IsMonad Id
+bind IsMonad-Id (In x) f = f x
+pure IsMonad-Id x = In x
 
 IsMonad-List : IsMonad List
 bind IsMonad-List mx f = foldr (_++_) Nil (map f mx)

@@ -92,6 +92,15 @@ isCode (Pure _) = ⊤
 isCode {R = R} (Step c k) = (x : R c) -> isCode (k x)
 isCode (Spec _ _ _) = ⊥
 
+isCodeBind :  {C : Set} {R : C -> Set} ->
+  {a : Set} {b : Set} ->
+  (mx : Mix C R a) -> (f : a -> Mix C R b) ->
+  isCode mx -> ((x : a) -> isCode (f x)) ->
+  isCode (mx >>= f)
+isCodeBind (Pure x) f mxisC fisC = fisC x
+isCodeBind (Step c k) f mxisC fisC x = isCodeBind (k x) f (mxisC x) fisC
+isCodeBind (Spec pre post k) f ()
+
 run : {C : Set} {R : C -> Set}
   -> {tyO : Set -> Set} -> IsMonad tyO -> (handler : (c : C) -> tyO (R c))
   -> {a : Set} -> (prog : Mix C R a) -> isCode prog
@@ -158,6 +167,17 @@ given : {C : Set} {R : C -> Set} {PT : PTs C R} {a : Set} {b : a -> Set} {spec :
   -> ((x : a) -> Impl' PT (spec x)) -> Impl PT spec
 given prf = impl (λ x → Impl'.prog' (prf x)) (λ x → Impl'.code' (prf x)) (refinePointwise (λ x → Impl'.refines' (prf x)))
 
+doSharpen' : {a s : Set}
+  {C : Set} {R : C -> Set} {PT : PTs C R} ->
+  {pre pre' : Set} ->
+  {post post' : a -> Set} ->
+  ((P : a -> Set) -> Pair pre ((z : a) -> post z -> P z) -> (Pair pre' ((z : a) -> post' z -> P z))) ->
+  Impl' PT (spec' pre' post') ->
+  Impl' PT (spec' pre post)
+Impl'.prog' (doSharpen' {a} {s} {C} {R} {PT} {pre} _ (impl' prog₁ code₁ (refinement' proof'))) = prog₁
+Impl'.code' (doSharpen' {a} {s} {C} {R} {PT} {pre} _ (impl' prog₁ code₁ (refinement' proof'))) = code₁
+Refine'.proof' (Impl'.refines' (doSharpen' {a} {s} {C} {R} {PT} {pre} {pre'} {post} {post'} proof'' (impl' prog₁ code₁ (refinement' proof')))) P x = proof' P ((¹ (proof'' P x)) , λ z x₁ → Pair.snd (proof'' P x) z x₁)
+
 doSharpen : {a s : Set} -> {b : a -> Set} ->
   {C : Set} {R : C -> Set} {PT : PTs C R} ->
   {pre pre' : Pre a} ->
@@ -178,3 +198,12 @@ doReturn {a} {s} post f = impl
   (\x -> return (f x))
   (λ x → tt)
   (refinement (λ P x z → Pair.snd z (f x) (Pair.fst z)))
+
+doReturn' : {a : Set} ->
+  {C : Set} {R : C -> Set} {PT : PTs C R} ->
+  (post : a -> Set) ->
+  (x : a) -> Impl' PT (spec' (post x) post)
+doReturn' {a} {s} post x = impl'
+  (return x)
+  tt
+  (refinement' (λ P z → Pair.snd z x (Pair.fst z)))
