@@ -189,15 +189,15 @@ doSharpen : {a s : Set} -> {b : a -> Set} ->
 doSharpen {a} {s} {pre} {pre'} {post} {post'} x x₁ (impl prog₁ code₁ refines₁) = impl prog₁ code₁
   (refinement λ P x₂ x₃ → Refine.proof refines₁ P x₂ (x x₂ (Pair.fst x₃) , (λ x₄ x₅ → Pair.snd x₃ x₄ (x₁ x₂ x₄ (Pair.fst x₃) x₅))))
 
-doReturn : {a : Set} {b : a -> Set} ->
+doReturn : {bx : Set} ->
   {C : Set} {R : C -> Set} {PT : PTs C R} ->
-  (post : Post a b) ->
-  (f : (x : a) -> b x) ->
-  Impl PT (spec (\x -> post x (f x)) post)
-doReturn {a} {s} post f = impl
-  (\x -> return (f x))
-  (λ x → tt)
-  (refinement (λ P x z → Pair.snd z (f x) (Pair.fst z)))
+  {pre : Set} {post : bx -> Set} ->
+  (y : bx) -> (pre -> post y) ->
+  Impl' PT (spec' pre post)
+doReturn {a} {s} y prf = impl'
+  (return y)
+  tt
+  (refinement' (λ P z → Pair.snd z y (prf (Pair.fst z))))
 
 doReturn' : {a : Set} ->
   {C : Set} {R : C -> Set} {PT : PTs C R} ->
