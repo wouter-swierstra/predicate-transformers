@@ -30,7 +30,7 @@ trans Refl p = p
 sym : {a : Set} {x y : a} -> x == y -> y == x
 sym Refl = Refl
 
-cong : {a b : Set} {x y : a} (f : a -> b) -> x == y -> f x == f y
+cong : {l l' : Level} {a : Set l} {b : Set l'} {x y : a} (f : a -> b) -> x == y -> f x == f y
 cong f Refl = Refl
 
 cong2 : {a b c : Set} {x y : a} {z w : b} (f : a -> b -> c) -> x == y -> z == w -> f x z == f y w
@@ -40,7 +40,7 @@ liftPath : {a : Set} {b : a -> Set} {x x' : a} ->
   x == x' -> b x == b x'
 liftPath Refl = Refl
 
-coerce : {a b : Set} -> a == b -> a -> b
+coerce : {l : Level} {a b : Set l} -> a == b -> a -> b
 coerce Refl x = x
 
 infixr 2 _⟨_⟩_
@@ -229,6 +229,10 @@ filter p Nil = Nil
 filter p (Cons x xs) =
   if p x then Cons x (filter p xs) else (filter p xs)
 
+length : {a : Set} -> List a -> Nat
+length Nil = Zero
+length (Cons _ xs) = Succ (length xs)
+
 <=-dec : Nat -> Nat -> Bool
 <=-dec Zero m = True
 <=-dec (Succ n) Zero = False
@@ -251,6 +255,11 @@ delete (Cons y ys) (∈Tail i) = Cons y (delete ys i)
 
 deleteHead : {a : Set} {x : a} {xs : List a} -> delete (Cons x xs) ∈Head == xs
 deleteHead = Refl
+
+delete-length : {a : Set} {x : a} {xs : List a} (i : x ∈ xs) ->
+  Succ (length (delete xs i)) == length xs
+delete-length ∈Head = Refl
+delete-length (∈Tail i) = cong Succ (delete-length i)
 
 data _<_ : Nat -> Nat -> Set where
   Base : ∀ {n} -> Zero < Succ n

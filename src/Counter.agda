@@ -88,4 +88,7 @@ hanoiImpl (Succ n) = doBind (hanoiImpl n) λ _ →
   where -- prove stuff about binsum. This is a giant mess, but works :D
   lemma : ∀ n t (x : ⊤) t' → OnPred (λ n1 → Sigma Nat (λ n0 → ⊤ → n1 == (n0 + binsum n))) t → t' == (t + binsum n) → OnPred (λ n'' → ∀ n0 → n'' == (n0 + binsum n) → t' == (n0 + Succ (binsum n + binsum n))) t
   lemma n t x t' (onPred (fst , snd)) Refl with snd tt
-  lemma n .(Succ (fst + binsum n)) x .(Succ ((fst + binsum n) + binsum n)) (onPred (fst , snd)) Refl | Refl = onPred λ n0 x₁ → trans (plus-succ (fst + binsum n) (binsum n)) (trans (plus-assoc fst (binsum n) (Succ (binsum n))) (trans (cong (\n' -> n' + (binsum n + Succ (binsum n))) (plus-inj {fst} {n0} x₁)) (cong (λ n' → n0 + n') (sym (plus-succ (binsum n) (binsum n))))))
+  lemma n .(Succ (fst + binsum n)) x .(Succ ((fst + binsum n) + binsum n)) (onPred (fst , snd)) Refl | Refl = onPred λ n0 x₁ →
+    trans (plus-succ (fst + binsum n) (binsum n)) (
+    trans (plus-assoc fst (binsum n) (Succ (binsum n))) (
+    trans (cong (\n' -> n' + (binsum n + Succ (binsum n))) (plus-inj {fst} {n0} x₁)) (cong (λ n' → n0 + n') (sym (plus-succ (binsum n) (binsum n))))))

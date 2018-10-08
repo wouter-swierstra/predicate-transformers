@@ -16,7 +16,7 @@ module Relations where
 
   _⊑_ : {l : Level} -> {a b : Set l} -> (R R' : a -> b -> Set l) -> Set (suc l)
   _⊑_ {l} {a = a} {b = b} R R' = (P : b -> Set l) -> (x : a) -> wp R P x -> wp R' P x
-  
+
 module Free where
 
   data Free (C : Set) (R : C -> Set) (a : Set) : Set where

@@ -240,6 +240,28 @@ module AllNondet where
      lemma (Step Split k) mxProof P (fst , snd) = lemma (k False) (λ P₁ z → Pair.fst (mxProof P₁ z)) P (fst , snd) , lemma (k True) (λ P₁ z → Pair.snd (mxProof P₁ z)) P (fst , snd)
      lemma (Spec pre' post' k) mxProof P (fst , snd) = (Pair.fst (mxProof intermediate (fst , (λ x x₁ → x₁)))) , λ z x → lemma (k z) (λ P₁ z₁ → Pair.snd (mxProof P₁ z₁) z x) P (fst , snd)
 
+  doBind' : {a : Set} {b : Set} ->
+    {pre : Set} {intermediate : a -> Set} {post : b -> Set} ->
+    (mx : allImpl' (spec' ⊤ intermediate)) ->
+    (f : (x : a) -> allImpl' (spec' (intermediate x) (\y -> pre -> post y))) ->
+    allImpl' (spec' pre post)
+  doBind' {a} {b} {pre} {intermediate} {post}
+    (impl' mxProg mxCode (refinement' mxProof)) fImpl = impl'
+    (mxProg >>= fProg)
+    (isCodeBind mxProg fProg mxCode fCode)
+    (refinement' (lemma mxProg mxProof))
+   where
+     fProg : (x : a) -> L b
+     fProg x = Impl'.prog' (fImpl x)
+     fCode : (x : a) -> isCode (fProg x)
+     fCode x = Impl'.code' (fImpl x)
+     fProof = \x -> Refine'.proof' (Impl'.refines' (fImpl x))
+     lemma : (mxProg : L a) -> (mxProof : (P : a -> Set) -> Pair ⊤ ((z : a) -> intermediate z -> P z) -> ptAll P mxProg) -> (P : b -> Set) -> Pair pre ((z : b) -> post z -> P z) -> ptAll P (mxProg >>= fProg)
+     lemma (Pure x) mxProof P (fst , snd) = fProof x P (mxProof intermediate (tt , (λ x₁ x₂ → x₂)) , (λ z z₁ → snd z (z₁ fst)))
+     lemma (Step Fail k) mxProof P (fst , snd) = tt
+     lemma (Step Split k) mxProof P (fst , snd) = lemma (k False) (λ P₁ z → Pair.fst (mxProof P₁ z)) P (fst , snd) , lemma (k True) (λ P₁ z → Pair.snd (mxProof P₁ z)) P (fst , snd)
+     lemma (Spec pre' post' k) mxProof P (fst , snd) = (Pair.fst (mxProof intermediate (tt , (λ x x₁ → x₁)))) , λ z x → lemma (k z) (λ P₁ z₁ → Pair.snd (mxProof P₁ z₁) z x) P (fst , snd)
+
   selectPost : {a : Set} -> Post (List a) (\_ -> Pair a (List a))
   selectPost xs (y , ys) = Sigma (y ∈ xs) \i -> delete xs i == ys
 
@@ -258,3 +280,58 @@ module AllNondet where
       Sigma (Pair.fst y,ys ∈ Cons x xs)
       (λ i → delete (Cons x xs) i == Cons x (Pair.snd y,ys))
     lemma {a} {x} {xs} {y , ys} (fst , snd) = (∈Tail fst) , cong (Cons x) snd
+
+  doUsePre : {a : Set} ->
+    {C : Set} {R : C -> Set} {PT : PTs C R} ->
+    {pre : Set} {post : a -> Set} ->
+    (pre -> Impl' PT (spec' ⊤ post)) -> Impl' PT (spec' pre post)
+  doUsePre x = {!!}
+
+  selectVecPost : {a : Set} {n : Nat} -> Vec (Succ n) a -> (Pair a (Vec n a)) -> Set
+  selectVecPost xs (y , ys) = Sigma (y ∈v xs) \i -> deleteV xs i == ys
+  selectVecSpec : {a : Set} {n : Nat} -> Vec (Succ n) a -> L (Pair a (Vec n a))
+  selectVecSpec xs = spec' ⊤ (selectVecPost xs)
+  selectVecImpl : {a : Set} {n : Nat} -> (xs : Vec (Succ n) a) -> allImpl' (selectVecSpec xs)
+  selectVecImpl {a} {n} xs = doBind (selectImpl (Vec->List xs)) \y,ys' ->
+    let y , ys' = y,ys'; ys'' = List->Vec ys' in
+    doUsePre (\pre -> let ys = resize (lemma1 pre) ys'' in
+    doReturn (y , ys) lemma2)
+    where
+    lemma1 : ∀ {a n} {xs : Vec (Succ n) a} {y,ys' : Pair a (List a)} →
+      Sigma (Pair.fst y,ys' ∈ Vec->List xs)
+      (λ i → delete (Vec->List xs) i == Pair.snd y,ys') →
+      (length (Pair.snd y,ys')) == n
+    lemma1 {a} {n} {vCons x xs} {.x , .(Vec->List xs)} (∈Head , Refl) = Vec->List-length xs
+    lemma1 {a} {n} {vCons x xs} {fst₁ , .(Cons x (delete (Vec->List xs) fst))} (∈Tail fst , Refl) = trans (delete-length fst) (Vec->List-length xs)
+    lemma2 : ∀ {a n} {xs : Vec (Succ n) a} {y,ys' : Pair a (List a)}
+      {pre : Sigma (Pair.fst y,ys' ∈ Vec->List xs) (λ i → delete (Vec->List xs) i == Pair.snd y,ys')} →
+      ⊤ →
+      Sigma (Pair.fst y,ys' ∈v xs)
+      (λ i → deleteV xs i == resize (lemma1 pre) (List->Vec (Pair.snd y,ys')))
+    lemma2 {a} {n} {xs} {x' , .(delete (Vec->List xs) i)} {i , Refl} tt = (∈List->∈Vec i) , trans (Vec->List->Vec-eq (deleteV xs (∈List->∈Vec i))) (resize-List->Vec (Vec->List-length (deleteV xs (∈List->∈Vec i))) (lemma1 (i , Refl)) (deleteList==deleteVec' xs i))
+
+  open import Permutation
+
+  permsSpec : {a : Set} {n : Nat} -> Vec n a -> L (Vec n a)
+  permsSpec xs = spec' ⊤ (\ys -> IsPermutation xs ys)
+
+  -- We need to work with vectors to prove termination.
+  permsImpl : {a : Set} {n : Nat} -> (xs : Vec n a) -> allImpl' (permsSpec xs)
+  permsImpl {n = Zero} vNil = doReturn vNil λ _ → NilPermutation
+  permsImpl {n = Succ Zero} xs@(vCons x vNil) = -- We need an extra base case here, since selectVecImpl only works on Vec (Succ _).
+    doReturn xs λ _ → HeadPermutation (inHead , NilPermutation)
+  permsImpl {n = Succ (Succ n)} xs =
+    doBind (selectVecImpl xs) λ y,ys →
+    let (y , ys) = y,ys in
+    doBind' (permsImpl ys) \zs ->
+    doReturn (vCons y zs) lemma
+
+    where
+    lemma : ∀ {a n} {xs : Vec (Succ (Succ n)) a}
+      {y,ys : Pair a (Vec (Succ n) a)} {zs : Vec (Succ n) a} →
+      IsPermutation (Pair.snd y,ys) zs →
+      Sigma (Pair.fst y,ys ∈v xs) (λ i → deleteV xs i == Pair.snd y,ys) →
+      IsPermutation xs (vCons (Pair.fst y,ys) zs)
+    lemma {a} {n} {vCons x .(vCons y' ys)} {.x , vCons y' ys} {vCons z zs} perm (inHead , Refl) = HeadPermutation (inHead , perm)
+    lemma {a} {n} {vCons x xs} {y , vCons y' ys} {vCons z zs} (HeadPermutation (y'i , perm)) (inTail yi , p) with split-==-Cons p
+    lemma {a} {n} {vCons x xs} {y , vCons .x .(deleteV xs yi)} {vCons z zs} (HeadPermutation (xi , perm)) (inTail yi , p) | Refl , Refl = perm-cons xi yi perm

@@ -167,7 +167,7 @@ given : {C : Set} {R : C -> Set} {PT : PTs C R} {a : Set} {b : a -> Set} {spec :
   -> ((x : a) -> Impl' PT (spec x)) -> Impl PT spec
 given prf = impl (λ x → Impl'.prog' (prf x)) (λ x → Impl'.code' (prf x)) (refinePointwise (λ x → Impl'.refines' (prf x)))
 
-doSharpen' : {a s : Set}
+doSharpen' : {a : Set}
   {C : Set} {R : C -> Set} {PT : PTs C R} ->
   {pre pre' : Set} ->
   {post post' : a -> Set} ->
@@ -176,7 +176,7 @@ doSharpen' : {a s : Set}
   Impl' PT (spec' pre post)
 Impl'.prog' (doSharpen' {a} {s} {C} {R} {PT} {pre} _ (impl' prog₁ code₁ (refinement' proof'))) = prog₁
 Impl'.code' (doSharpen' {a} {s} {C} {R} {PT} {pre} _ (impl' prog₁ code₁ (refinement' proof'))) = code₁
-Refine'.proof' (Impl'.refines' (doSharpen' {a} {s} {C} {R} {PT} {pre} {pre'} {post} {post'} proof'' (impl' prog₁ code₁ (refinement' proof')))) P x = proof' P ((¹ (proof'' P x)) , λ z x₁ → Pair.snd (proof'' P x) z x₁)
+Refine'.proof' (Impl'.refines' (doSharpen' {a} {C} {R} {PT} {pre} {pre'} {post} {post'} proof'' (impl' prog₁ code₁ (refinement' proof')))) P x = proof' P ((¹ (proof'' P x)) , λ z x₁ → Pair.snd (proof'' P x) z x₁)
 
 doSharpen : {a s : Set} -> {b : a -> Set} ->
   {C : Set} {R : C -> Set} {PT : PTs C R} ->
@@ -207,3 +207,9 @@ doReturn' {a} {s} post x = impl'
   (return x)
   tt
   (refinement' (λ P z → Pair.snd z x (Pair.fst z)))
+
+doIgnorePre : {a : Set} ->
+  {C : Set} {R : C -> Set} {PT : PTs C R} ->
+  {pre : Set} {post : a -> Set} ->
+  Impl' PT (spec' ⊤ (\x -> pre -> post x)) -> Impl' PT (spec' pre post)
+doIgnorePre x = doSharpen' (λ P x₁ → tt , (λ x₂ x₃ → Pair.snd x₁ x₂ (x₃ (Pair.fst x₁)))) x
