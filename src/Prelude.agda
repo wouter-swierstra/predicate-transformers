@@ -17,6 +17,7 @@ flip f x y = f y x
 _·_ : ∀ {l l' l''} {a : Set l} {b : Set l'} {c : Set l''} ->
       (b -> c) -> (a -> b) -> a -> c
 f · g = λ x → f (g x)
+_∘_ = _·_
 
 infix 1 _==_
 data _==_ {l : Level} {a : Set l} (x : a) : a -> Set l where
