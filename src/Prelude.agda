@@ -7,7 +7,7 @@ postulate
 const : {l : Level} {a b : Set l} -> a -> b -> a
 const x _ = x
 
-id : {a : Set} -> a -> a
+id : {l : Level} {a : Set l} -> a -> a
 id x = x
 
 flip : ∀ {l : Level} {a : Set l} {b : Set l} {c : Set l}
@@ -25,10 +25,10 @@ data _==_ {l : Level} {a : Set l} (x : a) : a -> Set l where
 
 {-# BUILTIN EQUALITY _==_ #-}
 
-trans : {a : Set} {x y z : a} -> x == y -> y == z -> x == z
+trans : {l : Level} {a : Set l} {x y z : a} -> x == y -> y == z -> x == z
 trans Refl p = p
 
-sym : {a : Set} {x y : a} -> x == y -> y == x
+sym : {l : Level} {a : Set l} {x y : a} -> x == y -> y == x
 sym Refl = Refl
 
 cong : {l l' : Level} {a : Set l} {b : Set l'} {x y : a} (f : a -> b) -> x == y -> f x == f y
@@ -161,7 +161,7 @@ intoSo : So True
 intoSo = tt
 
 ¬ : ∀ {l} -> Set l -> Set l
-¬ a = a -> ⊥
+¬ {l} a = a -> ⊥
 
 Decide : ∀ {l} (a : Set l) -> Set l
 Decide a = Either a (¬ a)
@@ -206,7 +206,7 @@ plus-assoc : (a b c : Nat) -> (a + b) + c == a + (b + c)
 plus-assoc (Zero) (b) (c) = Refl
 plus-assoc (Succ a) (b) (c) = cong Succ (plus-assoc a b c)
 
-data List (a : Set) : Set where
+data List {l : Level} (a : Set l) : Set l where
   Nil : List a
   Cons : a -> List a -> List a
 
@@ -217,13 +217,18 @@ foldr : {a b : Set} -> (a -> b -> b) -> b -> List a -> b
 foldr f e Nil = e
 foldr f e (Cons x xs) = f x (foldr f e xs)
 
-_++_ :  ∀ {a} -> List a -> List a -> List a
+_++_ : {l : Level} {a : Set l} -> List a -> List a -> List a
 Nil ++ ys = ys
 Cons x xs ++ ys = Cons x (xs ++ ys)
 
-++-nil : {a : Set} (xs : List a) → xs == xs ++ Nil
+++-nil : {l : Level} {a : Set l} (xs : List a) → xs == xs ++ Nil
 ++-nil Nil = Refl
 ++-nil (Cons x xs) = cong (Cons x) (++-nil xs)
+
+++-assoc : {l : Level} {a : Set l} (xs ys zs : List a) →
+  (xs ++ (ys ++ zs)) == ((xs ++ ys) ++ zs)
+++-assoc Nil ys zs = Refl
+++-assoc (Cons x xs) ys zs = cong (Cons x) (++-assoc xs ys zs)
 
 map : {a b : Set} -> (a -> b) -> List a -> List b
 map f Nil = Nil
@@ -282,6 +287,9 @@ record Sigma {l l'} (a : Set l) (b : a -> Set l') : Set (l ⊔ l') where
     fst : a
     snd : b fst
 
+uncurryΣ : {a : Set} {b : a → Set} {c : (x : a) → b x → Set} → (f : (x : a) → (y : b x) → c x y) → (s : Sigma a b) → c (Sigma.fst s) (Sigma.snd s)
+uncurryΣ f (fst , snd) = f fst snd
+
 -- Constant function for Set
 K : {a : Set} -> Set -> (a -> Set)
 K b = \_ -> b
@@ -290,7 +298,7 @@ _⊆_ : {a : Set} -> (p q : a -> Set) -> Set
 _⊆_ {a} p q = (x : a) -> p x -> q x
 
 
-record _⇔_ (P Q : Set) : Set where
+record _⇔_ {l l' : Level} (P : Set l) (Q : Set l') : Set (l ⊔ l') where
   constructor iff
   field
     if : Q -> P
@@ -314,11 +322,11 @@ rebase : {a : Set} ->
   Sigma a P -> (x : a) -> P x
 rebase P iP (fst , snd) x = iP fst x snd
 
-all' : {a : Set} → (a → Set) → List a → Set
+all' : {l : Level} {a : Set l} → (a → Set) → List a → Set
 all' P Nil = ⊤
 all' P (Cons x xs) = Pair (P x) (all' P xs)
 
-⇔-= : {P : Set} {Q : P → Set} → {p p' : P} → p == p' → Q p ⇔ Q p'
+⇔-= : {l : Level} {P : Set l} {Q : P → Set} → {p p' : P} → p == p' → Q p ⇔ Q p'
 ⇔-= Refl = ⇔-refl
 
 ⇔-pair-⊤ : {P Q : Set} → P ⇔ Q → (Pair ⊤ P) ⇔ Q
@@ -327,7 +335,7 @@ all' P (Cons x xs) = Pair (P x) (all' P xs)
 ⇔-pair-assoc : {P Q R : Set} → Pair (Pair P Q) R ⇔ Pair P (Pair Q R)
 ⇔-pair-assoc = iff (λ z → (Pair.fst z , Pair.fst (Pair.snd z)) , Pair.snd (Pair.snd z)) (λ z → Pair.fst (Pair.fst z) , (Pair.snd (Pair.fst z) , Pair.snd z))
 
-all'-pair : {a : Set} (P : a → Set) → (xs ys : List a) → Pair (all' P xs) (all' P ys) ⇔ all' P (xs ++ ys)
+all'-pair : {l : Level} {a : Set l} (P : a → Set) → (xs ys : List a) → Pair (all' P xs) (all' P ys) ⇔ all' P (xs ++ ys)
 all'-pair P Nil ys = iff (_,_ tt) Pair.snd
 all'-pair P (Cons x xs) ys = ⇔-trans ⇔-pair-assoc (⇔-pair ⇔-refl (all'-pair P xs ys))
 
