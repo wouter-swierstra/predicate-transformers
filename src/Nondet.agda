@@ -79,11 +79,6 @@ ptAnySo P (Step Split k) prf | False | False = iff (λ x → x ((_⇔_.if (ptAny
 ptAnySo P (Spec pre post k) ()
 -}
 
-wpAll : {a : Set} {b : a -> Set} -> Post a b -> ((x : a) -> L (b x)) -> Pre a
-wpAll = wpMix allPT
-wpAny : {a : Set} {b : a -> Set} -> Post a b -> ((x : a) -> L (b x)) -> Pre a
-wpAny = wpMix anyPT
-
 -- Running a nondeterministic computation just gives a list of options.
 -- This is independent of whether we want all or any result.
 handleList : (c : C) -> List (R c)
@@ -130,14 +125,10 @@ anyCorrect P (Spec _ _ _) ()
 
 -- Refinement of nondeterministic programs, where we just want any result.
 module AnyNondet where
-  anyRefine : {a : Set} {b : a -> Set} (f g : (x : a) -> L (b x)) -> Set
+  anyRefine : {a : Set} (f g : L a) -> Set
   anyRefine = Refine anyPT
-  anyRefine' : {bx : Set} (f g : L bx) -> Set
-  anyRefine' = Refine' anyPT
-  anyImpl : {a : Set} {b : a -> Set} (spec : (x : a) -> L (b x)) -> Set
+  anyImpl : {a : Set} (spec : L a) -> Set
   anyImpl = Impl anyPT
-  anyImpl' : {bx : Set} (spec : L bx) -> Set
-  anyImpl' = Impl' anyPT
 
   preSplit : {bx : Set} -> (Bool -> Set) -> (Bool -> bx -> Set) -> Set -> (bx -> Set) -> Pre Bool
   preSplit {bx} P' Q' P Q x = (P -> P' False) -> (P -> P' True) ->
@@ -163,9 +154,9 @@ module AnyNondet where
   refineSplit : {b : Set} ->
     {pre' : Bool -> Set} {post' : Bool -> b -> Set} ->
     {pre : Set} {post : b -> Set} ->
-    anyRefine' (spec' pre post)
-      (Step Split (spec (preSplit pre' post' pre post) (postSplit pre' post' pre post)))
-  Refine'.proof' refineSplit P (pH , postH)
+    anyRefine (spec pre post)
+      (Step Split (\b -> spec (preSplit pre' post' pre post b) (postSplit pre' post' pre post b)))
+  Refine.proof refineSplit P (pH , postH)
     = weakMap (\snd -> (\p'H _ -> p'H pH) , snd) (\snd -> (\_ p'H -> p'H pH) , snd) (
     weakMap (\pf z arg12 -> pf (² arg12) z (¹ arg12)) (\pf z arg12 -> pf (² arg12) z (¹ arg12)) (
     weakInl (\arg1 z arg2 -> postH z (arg1 z (
@@ -173,67 +164,86 @@ module AnyNondet where
 
   refineUnderSplit : {a : Set} ->
     (prog prog' : Bool -> L a) ->
-    (anyRefine prog prog') ->
-    (anyRefine' (Step Split prog) (Step Split prog'))
-  Refine'.proof' (refineUnderSplit prog prog' (refinement proof)) P w
-    = weakMap (λ x₁ → proof (const P) False x₁) (λ x₁ → proof (const P) True x₁) w
-
+    ((b : Bool) → anyRefine (prog b) (prog' b)) ->
+    (anyRefine (Step Split prog) (Step Split prog'))
+  Refine.proof (refineUnderSplit prog prog' ref) P w
+    = weakMap (Refine.proof (ref False) P) (Refine.proof (ref True) P) w
   doSplit : {n : Nat} {a b : Set} ->
+
     {pre' : Bool -> Set} {post' : Bool -> b -> Set} ->
     {pre : Set} {post : b -> Set} ->
-    ((b : Bool) -> anyImpl' (spec' (preSplit pre' post' pre post b) (postSplit pre' post' pre post b))) ->
-    anyImpl' (spec' pre post)
-  doSplit {n} {a} {b} {pre'} {post'} {pre} {post} cases = impl'
-    (Step Split \c -> Impl'.prog' (cases c))
-    (λ c → Impl'.code' (cases c))
-    ((spec' pre post
+    ((b : Bool) -> anyImpl (spec (preSplit pre' post' pre post b) (postSplit pre' post' pre post b))) ->
+    anyImpl (spec pre post)
+  doSplit {n} {a} {b} {pre'} {post'} {pre} {post} cases = impl
+    (Step Split \c -> Impl.prog (cases c))
+    (λ c → Impl.code (cases c))
+    ((spec pre post
         ⟨ refineSplit {b} {pre'} {post'} ⟩
-      (Step Split (spec (preSplit pre' post' pre post) (postSplit pre' post' pre post)))
-        ⟨ refineUnderSplit (spec (preSplit pre' post' pre post) (postSplit pre' post' pre post)) (\c -> Impl'.prog' (cases c)) (refinePointwise (λ x → Impl'.refines' (cases x))) ⟩
-      (Step Split \x -> Impl'.prog' (cases x)) ∎) pre-Refine')
+      (Step Split (λ c → spec (preSplit pre' post' pre post c) (postSplit pre' post' pre post c)))
+        ⟨ refineUnderSplit
+            (λ c →
+               spec (preSplit pre' post' pre post c)
+               (postSplit pre' post' pre post c))
+            (λ c → Impl.prog (cases c)) (λ c → Impl.refines (cases c)) ⟩
+      (Step Split \x -> Impl.prog (cases x)) ∎) pre-Refine)
+    {-
+        ⟨ refineUnderSplit (λ c → spec (preSplit pre' post' pre post c) (postSplit pre' post' pre post c)) (\c -> Impl.prog (cases c)) (λ x → Impl.refines (cases x)) ⟩
+      -}
 
 module AllNondet where
   allImpl = Impl allPT
-  allImpl' = Impl' allPT
   allRefine = Refine allPT
-  allRefine' = Refine' allPT
+
+  allSemantics : Semantics C R IsMonad-List
+  allSemantics = semantics all' allPT handleList pure equiv bind
+    where
+    pure : ∀ {a} (P : a → Set) (x : a) → P x ⇔ Pair (P x) ⊤
+    pure P x = iff Pair.fst (λ z → z , tt)
+    equiv : ∀ c (P P' : R c → Set) → ((x : R c) → P x ⇔ P' x) → allPT c P ⇔ allPT c P'
+    equiv Fail P P' x = ⇔-refl
+    equiv Split P P' x = ⇔-pair (x False) (x True)
+    bind : ∀ {a} (P : a → Set) c (k : R c → List a) → allPT c (λ x → all' P (k x)) ⇔ all' P (foldr _++_ Nil (map k (handleList c)))
+    bind P Fail k = ⇔-refl
+    bind P Split k = ⇔-trans
+      (all'-pair P (k False) (k True))
+      (⇔-= {Q = all' P} (cong (_++_ (k False)) (++-nil (k True))))
 
   -- Failure always works since we only consider non-failing computations.
   doFail : {a : Set} ->
     {pre : Set} {post : a -> Set} ->
-    allImpl' (spec' pre post)
-  Impl'.prog' doFail = fail
-  Impl'.code' doFail ()
-  Refine'.proof' (Impl'.refines' doFail) P x = tt
+    allImpl (spec pre post)
+  Impl.prog doFail = fail
+  Impl.code doFail ()
+  Refine.proof (Impl.refines doFail) P x = tt
 
   doSplit : {a : Set} ->
     {pre : Set} {post : a -> Set} ->
-    (l r : allImpl' (spec' pre post)) ->
-    allImpl' (spec' pre post)
-  Impl'.prog' (doSplit (impl' progL codeL refinesL) (impl' progR codeR refinesR)) =
+    (l r : allImpl (spec pre post)) ->
+    allImpl (spec pre post)
+  Impl.prog (doSplit (impl progL codeL refinesL) (impl progR codeR refinesR)) =
     progL [] progR
-  Impl'.code' (doSplit (impl' progL codeL refinesL) (impl' progR codeR refinesR)) True = codeL
-  Impl'.code' (doSplit (impl' progL codeL refinesL) (impl' progR codeR refinesR)) False = codeR
-  Refine'.proof' (Impl'.refines' (doSplit (impl' progL codeL (refinement' proofL)) (impl' progR codeR (refinement' proofR)))) P x = (proofR P x) , (proofL P x)
+  Impl.code (doSplit (impl progL codeL refinesL) (impl progR codeR refinesR)) True = codeL
+  Impl.code (doSplit (impl progL codeL refinesL) (impl progR codeR refinesR)) False = codeR
+  Refine.proof (Impl.refines (doSplit (impl progL codeL (refinement proofL)) (impl progR codeR (refinement proofR)))) P x = (proofR P x) , (proofL P x)
 
   -- We need to define the doBind combinator here,
   -- since it relies on correctness of the predicate transformer.
   doBind : {a : Set} {b : Set} ->
     {pre : Set} {intermediate : a -> Set} {post : b -> Set} ->
-    (mx : allImpl' (spec' pre intermediate)) ->
-    (f : (x : a) -> allImpl' (spec' (intermediate x) post)) ->
-    allImpl' (spec' pre post)
+    (mx : allImpl (spec pre intermediate)) ->
+    (f : (x : a) -> allImpl (spec (intermediate x) post)) ->
+    allImpl (spec pre post)
   doBind {a} {b} {pre} {intermediate} {post}
-    (impl' mxProg mxCode (refinement' mxProof)) fImpl = impl'
+    (impl mxProg mxCode (refinement mxProof)) fImpl = impl
     (mxProg >>= fProg)
     (isCodeBind mxProg fProg mxCode fCode)
-    (refinement' (lemma mxProg mxProof))
+    (refinement (lemma mxProg mxProof))
    where
      fProg : (x : a) -> L b
-     fProg x = Impl'.prog' (fImpl x)
+     fProg x = Impl.prog (fImpl x)
      fCode : (x : a) -> isCode (fProg x)
-     fCode x = Impl'.code' (fImpl x)
-     fProof = \x -> Refine'.proof' (Impl'.refines' (fImpl x))
+     fCode x = Impl.code (fImpl x)
+     fProof = \x -> Refine.proof (Impl.refines (fImpl x))
      lemma : (mxProg : L a) -> (mxProof : (P : a -> Set) -> Pair pre ((z : a) -> intermediate z -> P z) -> ptAll P mxProg) -> (P : b -> Set) -> Pair pre ((z : b) -> post z -> P z) -> ptAll P (mxProg >>= fProg)
      lemma (Pure x) mxProof P (fst , snd) = fProof x P (mxProof intermediate (fst , (λ x₁ x₂ → x₂)) , snd)
      lemma (Step Fail k) mxProof P (fst , snd) = tt
@@ -242,20 +252,20 @@ module AllNondet where
 
   doBind' : {a : Set} {b : Set} ->
     {pre : Set} {intermediate : a -> Set} {post : b -> Set} ->
-    (mx : allImpl' (spec' ⊤ intermediate)) ->
-    (f : (x : a) -> allImpl' (spec' (intermediate x) (\y -> pre -> post y))) ->
-    allImpl' (spec' pre post)
+    (mx : allImpl (spec ⊤ intermediate)) ->
+    (f : (x : a) -> allImpl (spec (intermediate x) (\y -> pre -> post y))) ->
+    allImpl (spec pre post)
   doBind' {a} {b} {pre} {intermediate} {post}
-    (impl' mxProg mxCode (refinement' mxProof)) fImpl = impl'
+    (impl mxProg mxCode (refinement mxProof)) fImpl = impl
     (mxProg >>= fProg)
     (isCodeBind mxProg fProg mxCode fCode)
-    (refinement' (lemma mxProg mxProof))
+    (refinement (lemma mxProg mxProof))
    where
      fProg : (x : a) -> L b
-     fProg x = Impl'.prog' (fImpl x)
+     fProg x = Impl.prog (fImpl x)
      fCode : (x : a) -> isCode (fProg x)
-     fCode x = Impl'.code' (fImpl x)
-     fProof = \x -> Refine'.proof' (Impl'.refines' (fImpl x))
+     fCode x = Impl.code (fImpl x)
+     fProof = \x -> Refine.proof (Impl.refines (fImpl x))
      lemma : (mxProg : L a) -> (mxProof : (P : a -> Set) -> Pair ⊤ ((z : a) -> intermediate z -> P z) -> ptAll P mxProg) -> (P : b -> Set) -> Pair pre ((z : b) -> post z -> P z) -> ptAll P (mxProg >>= fProg)
      lemma (Pure x) mxProof P (fst , snd) = fProof x P (mxProof intermediate (tt , (λ x₁ x₂ → x₂)) , (λ z z₁ → snd z (z₁ fst)))
      lemma (Step Fail k) mxProof P (fst , snd) = tt
@@ -266,9 +276,9 @@ module AllNondet where
   selectPost xs (y , ys) = Sigma (y ∈ xs) \i -> delete xs i == ys
 
   selectSpec : {a : Set} -> List a -> L (Pair a (List a))
-  selectSpec = spec (K ⊤) selectPost
+  selectSpec xs = spec ⊤ (selectPost xs)
 
-  selectImpl : {a : Set} -> (xs : List a) -> allImpl' (selectSpec {a} xs)
+  selectImpl : {a : Set} -> (xs : List a) -> allImpl (selectSpec {a} xs)
   selectImpl {a} Nil = doFail
   selectImpl {a} (Cons x xs) = doSplit
     (doReturn (x , xs) (λ _ → ∈Head , Refl))
@@ -284,14 +294,14 @@ module AllNondet where
   doUsePre : {a : Set} ->
     {C : Set} {R : C -> Set} {PT : PTs C R} ->
     {pre : Set} {post : a -> Set} ->
-    (pre -> Impl' PT (spec' ⊤ post)) -> Impl' PT (spec' pre post)
+    (pre -> Impl PT (spec ⊤ post)) -> Impl PT (spec pre post)
   doUsePre x = {!!}
 
   selectVecPost : {a : Set} {n : Nat} -> Vec (Succ n) a -> (Pair a (Vec n a)) -> Set
   selectVecPost xs (y , ys) = Sigma (y ∈v xs) \i -> deleteV xs i == ys
   selectVecSpec : {a : Set} {n : Nat} -> Vec (Succ n) a -> L (Pair a (Vec n a))
-  selectVecSpec xs = spec' ⊤ (selectVecPost xs)
-  selectVecImpl : {a : Set} {n : Nat} -> (xs : Vec (Succ n) a) -> allImpl' (selectVecSpec xs)
+  selectVecSpec xs = spec ⊤ (selectVecPost xs)
+  selectVecImpl : {a : Set} {n : Nat} -> (xs : Vec (Succ n) a) -> allImpl (selectVecSpec xs)
   selectVecImpl {a} {n} xs = doBind (selectImpl (Vec->List xs)) \y,ys' ->
     let y , ys' = y,ys'; ys'' = List->Vec ys' in
     doUsePre (\pre -> let ys = resize (lemma1 pre) ys'' in
@@ -313,10 +323,10 @@ module AllNondet where
   open import Permutation
 
   permsSpec : {a : Set} {n : Nat} -> Vec n a -> L (Vec n a)
-  permsSpec xs = spec' ⊤ (\ys -> IsPermutation xs ys)
+  permsSpec xs = spec ⊤ (\ys -> IsPermutation xs ys)
 
   -- We need to work with vectors to prove termination.
-  permsImpl : {a : Set} {n : Nat} -> (xs : Vec n a) -> allImpl' (permsSpec xs)
+  permsImpl : {a : Set} {n : Nat} -> (xs : Vec n a) -> allImpl (permsSpec xs)
   permsImpl {n = Zero} vNil = doReturn vNil λ _ → NilPermutation
   permsImpl {n = Succ Zero} xs@(vCons x vNil) = -- We need an extra base case here, since selectVecImpl only works on Vec (Succ _).
     doReturn xs λ _ → HeadPermutation (inHead , NilPermutation)

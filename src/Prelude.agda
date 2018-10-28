@@ -221,6 +221,10 @@ _++_ :  ∀ {a} -> List a -> List a -> List a
 Nil ++ ys = ys
 Cons x xs ++ ys = Cons x (xs ++ ys)
 
+++-nil : {a : Set} (xs : List a) → xs == xs ++ Nil
+++-nil Nil = Refl
+++-nil (Cons x xs) = cong (Cons x) (++-nil xs)
+
 map : {a b : Set} -> (a -> b) -> List a -> List b
 map f Nil = Nil
 map f (Cons x xs) = Cons (f x) (map f xs)
@@ -292,6 +296,14 @@ record _⇔_ (P Q : Set) : Set where
     if : Q -> P
     onlyIf : P -> Q
 
+⇔-refl : {P : Set} → P ⇔ P
+⇔-refl = iff id id
+⇔-trans : {P Q R : Set} → P ⇔ Q → Q ⇔ R → P ⇔ R
+⇔-trans (iff qp pq) (iff rq qr) = iff (qp ∘ rq) (qr ∘ pq)
+
+⇔-pair : {P P' Q Q' : Set} → P ⇔ P' → Q ⇔ Q' → Pair P Q ⇔ Pair P' Q'
+⇔-pair (iff p'p pp') (iff q'q qq') = iff (λ z → p'p (Pair.fst z) , q'q (Pair.snd z)) (λ z → pp' (Pair.fst z) , qq' (Pair.snd z))
+
 independent : {a : Set} ->
   (P : (x : a) -> Set) ->
   Set
@@ -302,6 +314,22 @@ rebase : {a : Set} ->
   Sigma a P -> (x : a) -> P x
 rebase P iP (fst , snd) x = iP fst x snd
 
+all' : {a : Set} → (a → Set) → List a → Set
+all' P Nil = ⊤
+all' P (Cons x xs) = Pair (P x) (all' P xs)
+
+⇔-= : {P : Set} {Q : P → Set} → {p p' : P} → p == p' → Q p ⇔ Q p'
+⇔-= Refl = ⇔-refl
+
+⇔-pair-⊤ : {P Q : Set} → P ⇔ Q → (Pair ⊤ P) ⇔ Q
+⇔-pair-⊤ (iff if onlyIf) = iff (λ z → tt , if z) (λ z → onlyIf (Pair.snd z))
+
+⇔-pair-assoc : {P Q R : Set} → Pair (Pair P Q) R ⇔ Pair P (Pair Q R)
+⇔-pair-assoc = iff (λ z → (Pair.fst z , Pair.fst (Pair.snd z)) , Pair.snd (Pair.snd z)) (λ z → Pair.fst (Pair.fst z) , (Pair.snd (Pair.fst z) , Pair.snd z))
+
+all'-pair : {a : Set} (P : a → Set) → (xs ys : List a) → Pair (all' P xs) (all' P ys) ⇔ all' P (xs ++ ys)
+all'-pair P Nil ys = iff (_,_ tt) Pair.snd
+all'-pair P (Cons x xs) ys = ⇔-trans ⇔-pair-assoc (⇔-pair ⇔-refl (all'-pair P xs ys))
 
 record IsMonad (m : Set -> Set) : Set₁ where
   constructor isMonad

@@ -6,14 +6,6 @@ open import Level
 S : Set
 S = Nat
 
-K : Set -> S -> Set
-K a _ = a
-
-_⊆_ : {a : Set} ->
-  (R1 R2 : a -> Set) -> Set
-_⊆_ {a = a} R1 R2 =
-  (x : a) -> R1 x -> R2 x 
-
 -- Specifications as pre-posts conditions
 record PT (A : Set) : Set₁ where
   constructor [_,_]

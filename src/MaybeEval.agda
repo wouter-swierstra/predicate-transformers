@@ -22,10 +22,11 @@ just     = Pure
 abort  : forall { a } ->  Partial a
 abort  = Step Abort (\ ())
 
--- Lift a predicate on base values to monadic values.
+-- Lift a pure predicate to Partial.
 mustPT : PTs C R
-mustPT P Abort k = ⊥
+mustPT Abort P = ⊥
 
+-- Lift a pure predicate to Maybe.
 liftM : {a : Set} -> (a -> Set) -> Maybe a -> Set
 liftM P Nothing = ⊥
 liftM P (Just x) = P x
@@ -237,35 +238,30 @@ correct4 (Div l r) (fst , snd , thd) =
 M : Set -> Set
 M = Mix C R
 
+-- Transform pure predicates into predicates on M.
 ptM : {bx : Set} ->
   (P : bx -> Set) ->
   M bx -> Set
 ptM = ptMix mustPT
 
-wpM : {a : Set} -> {b : a -> Set} ->
-  (P : Post a b) ->
-  (f : (x : a) -> M (b x)) ->
-  (Pre a)
-wpM {a} {b} = wpMix mustPT
-
-record _⊑_ {a : Set} {b : a -> Set} (f g : (x : a) -> M (b x)) : Set1 where
+record _⊑_ {a : Set} (f g : M a) : Set1 where
     constructor refinement
     field
-      proof : ∀ P -> wpM P f ⊆ wpM P g
+      proof : ∀ P -> ptM P f → ptM P g
 
-⊑-refl : ∀ {a} {b : a -> Set} -> (f : (x : a) -> M (b x)) -> f ⊑ f
-⊑-refl f = refinement \P x H -> H
+⊑-refl : {a : Set} -> (f : M a) -> f ⊑ f
+⊑-refl f = refinement λ P x → x
 
-⊑-trans : ∀ {a} {b : a -> Set} -> {f g h : (x : a) -> M (b x)} -> f ⊑ g -> g ⊑ h -> f ⊑ h
+⊑-trans : ∀ {b} -> {f g h : M b} -> f ⊑ g -> g ⊑ h -> f ⊑ h
 ⊑-trans (record { proof = step1 }) (record { proof = step2 }) =
-  refinement \P H x -> step2 P H (step1 P H x)
+  refinement λ P x → step2 P (step1 P x)
 
-strengthenPost : {a : Set} {b : a -> Set}
-  -> (S1 S2 : Post a b)
-  -> (pre : Pre a)
-  -> ((x : a) -> S2 x ⊆ S1 x)
+strengthenPost : {a : Set}
+  -> (S1 S2 : a → Set)
+  -> (pre : Set)
+  -> (S2 ⊆ S1)
   -> (spec pre S1) ⊑ (spec pre S2)
-strengthenPost S1 S2 Pre H = refinement λ { P x (fst , snd) → fst , λ bx s2 → snd bx (H _ bx s2)}
+strengthenPost S1 S2 Pre H = refinement λ P x → Pair.fst x , (λ x₁ x₂ → Pair.snd x x₁ (H x₁ x₂))
 
 run' : (c : C) -> Maybe (R c)
 run' Abort = Nothing
@@ -275,49 +271,29 @@ runM : {a : Set}
   -> Maybe a
 runM = run Monad-Maybe run'
 
-wpPure : {a : Set} {b : a -> Set}
-  -> (f : (x : a) -> b x)
-  -> (P : (x : a) -> b x -> Set)
-  -> (x : a) -> wpM P (\x -> Pure (f x)) x -> P x (f x)
-wpPure i y P x = x
-
-accentize : {a : Set} {b : a -> Set}
-  -> (P : Post a b)
-  -> (prog : (x : a) -> M (b x)) -> (x : a)
-  -> wpM P prog x -> ptM (P x) (prog x)
-accentize _ _ _ x₁ = x₁
-unaccentize : {a : Set} {b : a -> Set}
-  -> (P : Post a b)
-  -> (prog : (x : a) -> M (b x)) -> (x : a)
-  -> ptM (P x) (prog x) -> wpM P prog x
-unaccentize _ _ _ z = z
+wpPure : {a : Set}
+  -> (x : a)
+  -> (P : a -> Set) →
+  ptM P (Pure x) → P x
+wpPure x P x₁ = x₁
 
 -- wpM always gives a valid precondtion
-runSoundness : {a : Set} {b : a -> Set}
-  -> (P : Post a b)
-  -> (prog : (x : a) -> M (b x)) -> (prf : (x : a) -> isCode (prog x))
-  -> (x : a) -> wpM P prog x -> liftM (P x) (runM (prog x) (prf x))
-runSoundness {a} {b} P prog prf x wpHolds = runSoundness' x (prog x) (prf x) (accentize P prog x wpHolds)
-  where
-  runSoundness' : (x : a) (prog' : M (b x)) -> (prf' : isCode prog') -> ptM (P x) prog' -> liftM (P x) (runM prog' prf')
-  runSoundness' x (Pure output) _ z = z
-  runSoundness' x (Spec pre post k) ()
-  runSoundness' x (Step Abort k) _ ()
+runSoundness : {a : Set}
+  -> (P : a → Set)
+  -> (prog : M a) -> (prf : isCode prog)
+  -> ptM P prog -> liftM P (runM prog prf)
+runSoundness P (Pure output) _ z = z
+runSoundness P (Spec pre post k) ()
+runSoundness P (Step Abort k) _ ()
 -- wpM gives the weakest precondition, as long as the postcondition is false on Nothing
-runCompleteness : {a : Set} {b : a -> Set}
-  -> (pre : a -> Set) -> (post : (x : a) -> (b x) -> Set)
-  -> (prog : (x : a) -> M (b x)) -> (prf : (x : a) -> isCode (prog x))
-  -> ((x : a) -> pre x -> liftM (post x) (runM (prog x) (prf x))) -- if the precondition causes the postcondition
-  -> (pre ⊆ wpM post prog) -- then the precondition implies the wp
-runCompleteness {a} {b} pre post prog prf preCausesPost x preHolds
-  = unaccentize post prog x (runCompleteness' x (prog x) (prf x) (preCausesPost x preHolds))
-  where
-  runCompleteness' : (x : a) -> (prog' : M (b x)) (prf' : isCode prog')
-    -> liftM (post x) (runM prog' prf')
-    -> ptM (post x) prog'
-  runCompleteness' x (Pure _) prf' postHolds = postHolds
-  runCompleteness' x (Spec pre post k) ()
-  runCompleteness' x (Step Abort k) prf' postHolds = postHolds
+runCompleteness : {a : Set}
+  -> (pre : Set) -> (post : a -> Set)
+  -> (prog : M a) -> (prf : isCode prog)
+  -> (pre -> liftM post (runM prog prf)) -- if the precondition causes the postcondition
+  -> (pre → ptM post prog) -- then the precondition implies the wp
+runCompleteness pre post (Pure _) prf' postHolds = postHolds
+runCompleteness P Q (Spec pre post k) ()
+runCompleteness pre post (Step Abort k) prf' postHolds = postHolds
 
 {-
 weakenPost : {a : Set} {b : a -> Set}
@@ -327,50 +303,43 @@ weakenPost : {a : Set} {b : a -> Set}
 weakenPost P post postImpliesP prog x x₂ = {!!}
 -}
 -- If the postcondition is weaker, the precondition is as well.
-weakenPost' : {a : Set} {b : a -> Set}
-  -> (x : a)
-  -> (P post : Post a b)
-  -> (post x ⊆ P x)
-  -> (prog : (x : a) -> M (b x))
-  -> wpM post prog x -> wpM P prog x
-weakenPost' {a} {b} x P post x₁ prog wpPost = unaccentize P prog x (wp'' (prog x) (accentize post prog x wpPost))
-  where
-    wp'' : (prog' : M (b x)) -> ptM (post x) prog' -> ptM (P x) prog'
-    wp'' (Pure x₂) = x₁ x₂
-    wp'' (Spec pre post k) = λ z → Pair.fst z , (λ x₂ x₃ → wp'' (k x₂) (Pair.snd z x₂ x₃))
-    wp'' (Step Abort _) z = z
+weakenPost' : {a : Set}
+  -> (P post : a → Set)
+  -> (post ⊆ P)
+  -> ptM post ⊆ ptM P
+weakenPost' P post weaker (Pure x) x₂ = weaker x x₂
+weakenPost' P post weaker (Step Abort k) x₂ = x₂
+weakenPost' P post weaker (Spec x x₁ k) (fst , snd) = fst , (λ x₂ x₃ → weakenPost' P post weaker (k x₂) (snd x₂ x₃))
 
 -- If wp P of a spec always holds, then its postcondition implies P.
-wpSpec : {a : Set} {b : a -> Set} (pre : a -> Set)
-  -> (post P : Post a b)
-  -> ((x : a) -> (wpM P (spec pre post) x))
-  -> ((i : a) -> post i ⊆ P i)
-wpSpec pre post P wpHolds input output postHolds = Pair.snd (wpHolds input) output postHolds
-wpSpec' : {a : Set} {b : a -> Set} (pre : a -> Set)
-  -> (post P : Post a b)
-  -> (x : a) -> (wpM P (spec pre post) x)
-  -> (y : (b x)) -> post x y -> P x y
-wpSpec' pre post P x x₁ y x₂ = Pair.snd x₁ y x₂
+wpSpec : {a : Set} (pre : Set)
+  -> (post P : a → Set)
+  -> ptM P (spec pre post)
+  -> post ⊆ P
+wpSpec pre post P (fst , snd) x x₂ = snd x x₂
 
 -- If the precondition of a spec holds, so does the wp of its postcondition.
-wpSpecPost : {a : Set} {b : a -> Set} (pre : a -> Set)
-  -> (post : Post a b)
-  -> (x : a) -> (pre x) -> (wpM post (spec pre post) x)
-wpSpecPost pre post x preX = preX , (λ x₁ z → z)
+wpSpecPost : {a : Set} →
+  (pre : Set) -> (post : a → Set) →
+  pre -> ptM post (spec pre post)
+wpSpecPost pre post x = x , (λ x₁ x₂ → x₂)
 
 -- If running a program on a precondition guarantees the program terminates and satisfies a postcondition,
 -- then the program refines the specification.
 -- In other words: a program is its own reference implementation.
-progRefinesItsSpec : {a : Set} {b : a -> Set}
-  -> (pre : a -> Set) (post : (x : a) -> (b x) -> Set)
-  -> (prog : (x : a) -> M (b x)) -> (prf : (x : a) -> isCode (prog x))
-  -> ((x : a) -> pre x -> liftM (post x) (runM (prog x) (prf x)))
+progRefinesItsSpec : {a : Set} →
+  (pre : Set) (post : a -> Set)
+  -> (prog : M a) -> (prf : isCode prog)
+  -> (pre -> liftM post (runM prog prf))
   -> (spec pre post) ⊑ prog
-progRefinesItsSpec {a} {b} pre post prog prf x = refinement pris'
-  where
-  pris' : (P : (x : a) -> b x -> Set) -> (i : a) -> wpM P (spec pre post) i -> wpM P prog i
-  pris' P i (fst , snd)
-    = weakenPost' i P post snd prog
-      (runCompleteness {b = b} pre post prog prf x i fst)
+progRefinesItsSpec pre post prog prf x = refinement λ P x₁ →
+  weakenPost' P post (wpSpec pre post P x₁) prog
+    (runCompleteness pre post prog prf x (Pair.fst x₁))
 
--- Combinators for writing partial programs.
+MSemantics : Semantics C R Monad-Maybe
+MSemantics = semantics liftM mustPT run' (λ _ _ → ⇔-refl) equiv bind
+  where
+  equiv : (c : C) (P P' : R c → Set) → ((x : R c) → P x ⇔ P' x) → mustPT c P ⇔ mustPT c P'
+  equiv Abort P P' x = ⇔-refl
+  bind : ∀ {a} (P : a → Set) c (k : R c → Maybe a) → mustPT c (λ x → liftM P (k x)) ⇔ liftM P (IsMonad.bind Monad-Maybe (run' c) k)
+  bind P Abort k = ⇔-refl
