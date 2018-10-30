@@ -19,75 +19,26 @@ _·_ : ∀ {l l' l''} {a : Set l} {b : Set l'} {c : Set l''} ->
 f · g = λ x → f (g x)
 _∘_ = _·_
 
+open import Relation.Binary.PropositionalEquality public
 infix 1 _==_
-data _==_ {l : Level} {a : Set l} (x : a) : a -> Set l where
-  Refl : x == x
-
-{-# BUILTIN EQUALITY _==_ #-}
-
-trans : {l : Level} {a : Set l} {x y z : a} -> x == y -> y == z -> x == z
-trans Refl p = p
-
-sym : {l : Level} {a : Set l} {x y : a} -> x == y -> y == x
-sym Refl = Refl
-
-cong : {l l' : Level} {a : Set l} {b : Set l'} {x y : a} (f : a -> b) -> x == y -> f x == f y
-cong f Refl = Refl
+_==_ = _≡_
 
 cong2 : {a b c : Set} {x y : a} {z w : b} (f : a -> b -> c) -> x == y -> z == w -> f x z == f y w
-cong2 f Refl Refl = Refl
+cong2 f refl refl = refl
 
 liftPath : {a : Set} {b : a -> Set} {x x' : a} ->
   x == x' -> b x == b x'
-liftPath Refl = Refl
+liftPath refl = refl
 
 coerce : {l : Level} {a b : Set l} -> a == b -> a -> b
-coerce Refl x = x
+coerce refl x = x
 
 infixr 2 _⟨_⟩_
 _⟨_⟩_ : {a : Set} -> (x : a) -> { y z : a} -> x == y -> y == z -> x == z
 _⟨_⟩_ x = trans
 
 _■ : forall {a : Set} (x : a) -> x == x
-_■ x = Refl
-
-data Nat : Set where
-  Zero : Nat
-  Succ : Nat -> Nat
-
-{-# BUILTIN NATURAL Nat #-}
-
-_+_ : Nat -> Nat -> Nat
-Zero + m = m
-Succ n + m = Succ (n + m)
-
-_*_ : Nat -> Nat -> Nat
-Zero * m = Zero
-Succ n * m = m + (n * m)
-
-_^_ : Nat -> Nat -> Nat
-n ^ Zero = 1
-n ^ Succ m = n * (n ^ m)
-
-pred : Nat -> Nat
-pred Zero = Zero
-pred (Succ n) = n
-
---- Natural lemmas
-
-zero-cancellative : (n : Nat) -> (n * Zero) == Zero
-zero-cancellative Zero = Refl
-zero-cancellative (Succ n) = zero-cancellative n
-
-plus-zero : (n : Nat) -> n == (n + Zero)
-plus-zero Zero = Refl
-plus-zero (Succ n) = cong Succ (plus-zero n)
-
-
-plus-succ : (x y : Nat) -> Succ (x + y) == (x + Succ y)
-plus-succ Zero y = Refl
-plus-succ (Succ x) y = cong Succ (plus-succ x y)
-
+_■ x = refl
 
 data Bool : Set where
   True : Bool
@@ -170,41 +121,40 @@ decideFrom : (b : Bool) -> Decide (So b)
 decideFrom True = Inl tt
 decideFrom False = Inr λ z → z
 
-data EqNat : (a b : Nat) -> Set where
-  EqZero : EqNat 0 0
-  EqSucc : {a b : Nat} -> EqNat a b -> EqNat (Succ a) (Succ b)
+open import Data.Nat public
+  using
+    (
+    )
+  renaming
+    ( ℕ to Nat
+    ; zero to Zero
+    ; suc to Succ
+    )
 
-succ-inj-eq : {a b : Nat} -> EqNat (Succ a) (Succ b) -> EqNat a b
-succ-inj-eq (EqSucc eq) = eq
+module NaturalLemmas where
+  open Data.Nat
+  zero-cancellative : (n : Nat) -> (n * Zero) == Zero
+  zero-cancellative Zero = refl
+  zero-cancellative (Succ n) = zero-cancellative n
 
-decideEqNat : (a b : Nat) -> Decide (EqNat a b)
-decideEqNat Zero Zero = Inl EqZero
-decideEqNat Zero (Succ b) = Inr (λ ())
-decideEqNat (Succ a) Zero = Inr (λ ())
-decideEqNat (Succ a) (Succ b) with decideEqNat a b
-... | Inl eq = Inl (EqSucc eq)
-... | Inr absurd = Inr \eq' -> absurd (succ-inj-eq eq')
+  plus-zero : (n : Nat) -> n == (n + Zero)
+  plus-zero Zero = refl
+  plus-zero (Succ n) = cong Succ (plus-zero n)
 
-eqNat⇒== : {a b : Nat} -> EqNat a b -> a == b
-eqNat⇒== EqZero = Refl
-eqNat⇒== (EqSucc eq) with eqNat⇒== eq
-... | Refl = Refl
 
-succ-inj : {a b : Nat} -> Succ a == Succ b -> a == b
-succ-inj {a} {b} Refl = Refl
+  plus-succ : (x y : Nat) -> Succ (x + y) == (x + Succ y)
+  plus-succ Zero y = refl
+  plus-succ (Succ x) y = cong Succ (plus-succ x y)
 
--- Conjugate the path q with the dependent path p.
-conjugate : {x y : Set} -> { f g : x -> y } -> ((a : x) -> f a == g a)
-  -> (a b : x) -> (g a == g b) -> (f a == f b)
-conjugate p a b q = trans (p a) (trans q (sym (p b)))
+open NaturalLemmas
 
-plus-inj : {a b c : Nat} -> (a + c) == (b + c) -> a == b
-plus-inj {a} {b} {Zero} x = conjugate plus-zero a b x
-plus-inj {a} {b} {Succ c} x = plus-inj (succ-inj (conjugate (\x -> plus-succ x c) a b x))
-
-plus-assoc : (a b c : Nat) -> (a + b) + c == a + (b + c)
-plus-assoc (Zero) (b) (c) = Refl
-plus-assoc (Succ a) (b) (c) = cong Succ (plus-assoc a b c)
+open import Data.Integer public
+  using
+    (
+    )
+  renaming
+    ( ℤ to Int
+    )
 
 data List {l : Level} (a : Set l) : Set l where
   Nil : List a
@@ -222,12 +172,12 @@ Nil ++ ys = ys
 Cons x xs ++ ys = Cons x (xs ++ ys)
 
 ++-nil : {l : Level} {a : Set l} (xs : List a) → xs == xs ++ Nil
-++-nil Nil = Refl
+++-nil Nil = refl
 ++-nil (Cons x xs) = cong (Cons x) (++-nil xs)
 
 ++-assoc : {l : Level} {a : Set l} (xs ys zs : List a) →
   (xs ++ (ys ++ zs)) == ((xs ++ ys) ++ zs)
-++-assoc Nil ys zs = Refl
+++-assoc Nil ys zs = refl
 ++-assoc (Cons x xs) ys zs = cong (Cons x) (++-assoc xs ys zs)
 
 map : {a b : Set} -> (a -> b) -> List a -> List b
@@ -264,22 +214,15 @@ delete (Cons x ys) ∈Head = ys
 delete (Cons y ys) (∈Tail i) = Cons y (delete ys i)
 
 deleteHead : {a : Set} {x : a} {xs : List a} -> delete (Cons x xs) ∈Head == xs
-deleteHead = Refl
+deleteHead = refl
 
 delete-length : {a : Set} {x : a} {xs : List a} (i : x ∈ xs) ->
   Succ (length (delete xs i)) == length xs
-delete-length ∈Head = Refl
+delete-length ∈Head = refl
 delete-length (∈Tail i) = cong Succ (delete-length i)
-
-data _<_ : Nat -> Nat -> Set where
-  Base : ∀ {n} -> Zero < Succ n
-  Step : ∀ {n m} -> n < m -> Succ n < Succ m
 
 data Inspect {a} {A : Set a} (x : A) : Set a where
     _with-≡_ : (y : A) (eq : x == y) → Inspect x
-
-inspect : ∀ {a} {A : Set a} (x : A) → Inspect x
-inspect x = x with-≡ Refl
 
 record Sigma {l l'} (a : Set l) (b : a -> Set l') : Set (l ⊔ l') where
   constructor _,_
@@ -327,7 +270,7 @@ all' P Nil = ⊤
 all' P (Cons x xs) = Pair (P x) (all' P xs)
 
 ⇔-= : {l : Level} {P : Set l} {Q : P → Set} → {p p' : P} → p == p' → Q p ⇔ Q p'
-⇔-= Refl = ⇔-refl
+⇔-= refl = ⇔-refl
 
 ⇔-pair-⊤ : {P Q : Set} → P ⇔ Q → (Pair ⊤ P) ⇔ Q
 ⇔-pair-⊤ (iff if onlyIf) = iff (λ z → tt , if z) (λ z → onlyIf (Pair.snd z))
