@@ -30,26 +30,26 @@ List->Vec (Cons x xs) = vCons x (List->Vec xs)
 
 Vec->List-length : {n : Nat} {a : Set} -> (xs : Vec n a) ->
   length (Vec->List xs) == n -- xs == coerce (cong (\n -> Vec n a) p) (Sigma.snd (List->Vec (Vec->List xs)))
-Vec->List-length vNil = Refl
+Vec->List-length vNil = refl
 Vec->List-length (vCons x xs) = cong Succ (Vec->List-length xs)
 
 resize : {n n' : Nat} {a : Set} -> n == n' -> Vec n a -> Vec n' a
-resize Refl xs = xs
+resize refl xs = xs
 resize-Cons : {n n' : Nat} {a : Set} -> (p : n == n') -> (x : a) ->
   (xs : Vec n a) (xs' : Vec n' a) -> xs' == resize p xs ->
   vCons x xs' == resize (cong Succ p) (vCons x xs)
-resize-Cons Refl x xs .xs Refl = Refl
+resize-Cons refl x xs .xs refl = refl
 
 Vec->List->Vec-eq : {n : Nat} {a : Set} -> (xs : Vec n a) ->
   xs == resize (Vec->List-length xs) (List->Vec (Vec->List xs))
-Vec->List->Vec-eq {.0} {a} vNil = Refl
+Vec->List->Vec-eq {.0} {a} vNil = refl
 Vec->List->Vec-eq {.(Succ _)} {a} (vCons x xs) =
-  trans (cong (vCons x) (Vec->List->Vec-eq xs)) (resize-Cons (Vec->List-length xs) x (List->Vec (Vec->List xs)) (resize (Vec->List-length xs) (List->Vec (Vec->List xs))) Refl)
+  trans (cong (vCons x) (Vec->List->Vec-eq xs)) (resize-Cons (Vec->List-length xs) x (List->Vec (Vec->List xs)) (resize (Vec->List-length xs) (List->Vec (Vec->List xs))) refl)
 
 resize-List->Vec : {n : Nat} {a : Set} -> {xs xs' : List a} ->
   (p : length xs == n) (q : length xs' == n) ->
   xs == xs' -> resize p (List->Vec xs) == resize q (List->Vec xs')
-resize-List->Vec Refl Refl Refl = Refl
+resize-List->Vec refl refl refl = refl
 
 data _∈v_ {a : Set} : {n : Nat} -> a -> Vec n a -> Set where
   inHead : {n : Nat} {x : a} {v : Vec n a} -> x ∈v vCons x v
@@ -76,20 +76,20 @@ deleteV {n = Succ n} {x} (vCons x' xs) (inTail i) = vCons x' (deleteV xs i)
 deleteList==deleteVec : {a : Set} {n : Nat} {x : a} ->
   (xs : Vec (Succ n) a) -> (i : x ∈v xs) ->
   Vec->List (deleteV xs i) == delete (Vec->List xs) (∈Vec->∈List i)
-deleteList==deleteVec {x = x} (vCons _ _) inHead = Refl
+deleteList==deleteVec {x = x} (vCons _ _) inHead = refl
 deleteList==deleteVec {n = Zero} {x} (vCons x' xs) (inTail ())
 deleteList==deleteVec {n = Succ n} {x} (vCons x' xs) (inTail i) = cong (Cons x') (deleteList==deleteVec xs i)
 
 deleteList==deleteVec' : {a : Set} {n : Nat} {x : a} ->
   (xs : Vec (Succ n) a) -> (i : x ∈ Vec->List (xs)) ->
   Vec->List (deleteV xs (∈List->∈Vec i)) == delete (Vec->List xs) i
-deleteList==deleteVec' {a} (vCons x₁ xs) ∈Head = Refl
+deleteList==deleteVec' {a} (vCons x₁ xs) ∈Head = refl
 deleteList==deleteVec' {a} {Zero} (vCons x vNil) (∈Tail ())
 deleteList==deleteVec' {a} {Succ n} (vCons x xs) (∈Tail i) = cong (Cons x) (deleteList==deleteVec' xs i)
 
 split-==-Cons : {a : Set} {n : Nat} {x x' : a} {xs xs' : Vec n a} ->
   vCons x xs == vCons x' xs' -> Pair (x == x') (xs == xs')
-split-==-Cons Refl = Refl , Refl
+split-==-Cons refl = refl , refl
 
 toIndex : {a : Set} {n : Nat} {x : a} {xs : Vec n a} ->
   x ∈v xs -> Fin n

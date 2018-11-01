@@ -281,7 +281,7 @@ module AllNondet where
   selectImpl : {a : Set} -> (xs : List a) -> allImpl (selectSpec {a} xs)
   selectImpl {a} Nil = doFail
   selectImpl {a} (Cons x xs) = doSplit
-    (doReturn (x , xs) (λ _ → ∈Head , Refl))
+    (doReturn (x , xs) (λ _ → ∈Head , refl))
     (doBind (selectImpl xs) λ y,ys →
       doReturn ((Pair.fst y,ys , Cons x (Pair.snd y,ys))) lemma)
     where
@@ -311,14 +311,14 @@ module AllNondet where
       Sigma (Pair.fst y,ys' ∈ Vec->List xs)
       (λ i → delete (Vec->List xs) i == Pair.snd y,ys') →
       (length (Pair.snd y,ys')) == n
-    lemma1 {a} {n} {vCons x xs} {.x , .(Vec->List xs)} (∈Head , Refl) = Vec->List-length xs
-    lemma1 {a} {n} {vCons x xs} {fst₁ , .(Cons x (delete (Vec->List xs) fst))} (∈Tail fst , Refl) = trans (delete-length fst) (Vec->List-length xs)
+    lemma1 {a} {n} {vCons x xs} {.x , .(Vec->List xs)} (∈Head , refl) = Vec->List-length xs
+    lemma1 {a} {n} {vCons x xs} {fst₁ , .(Cons x (delete (Vec->List xs) fst))} (∈Tail fst , refl) = trans (delete-length fst) (Vec->List-length xs)
     lemma2 : ∀ {a n} {xs : Vec (Succ n) a} {y,ys' : Pair a (List a)}
       {pre : Sigma (Pair.fst y,ys' ∈ Vec->List xs) (λ i → delete (Vec->List xs) i == Pair.snd y,ys')} →
       ⊤ →
       Sigma (Pair.fst y,ys' ∈v xs)
       (λ i → deleteV xs i == resize (lemma1 pre) (List->Vec (Pair.snd y,ys')))
-    lemma2 {a} {n} {xs} {x' , .(delete (Vec->List xs) i)} {i , Refl} tt = (∈List->∈Vec i) , trans (Vec->List->Vec-eq (deleteV xs (∈List->∈Vec i))) (resize-List->Vec (Vec->List-length (deleteV xs (∈List->∈Vec i))) (lemma1 (i , Refl)) (deleteList==deleteVec' xs i))
+    lemma2 {a} {n} {xs} {x' , .(delete (Vec->List xs) i)} {i , refl} tt = (∈List->∈Vec i) , trans (Vec->List->Vec-eq (deleteV xs (∈List->∈Vec i))) (resize-List->Vec (Vec->List-length (deleteV xs (∈List->∈Vec i))) (lemma1 (i , refl)) (deleteList==deleteVec' xs i))
 
   open import Permutation
 
@@ -342,6 +342,6 @@ module AllNondet where
       IsPermutation (Pair.snd y,ys) zs →
       Sigma (Pair.fst y,ys ∈v xs) (λ i → deleteV xs i == Pair.snd y,ys) →
       IsPermutation xs (vCons (Pair.fst y,ys) zs)
-    lemma {a} {n} {vCons x .(vCons y' ys)} {.x , vCons y' ys} {vCons z zs} perm (inHead , Refl) = HeadPermutation (inHead , perm)
+    lemma {a} {n} {vCons x .(vCons y' ys)} {.x , vCons y' ys} {vCons z zs} perm (inHead , refl) = HeadPermutation (inHead , perm)
     lemma {a} {n} {vCons x xs} {y , vCons y' ys} {vCons z zs} (HeadPermutation (y'i , perm)) (inTail yi , p) with split-==-Cons p
-    lemma {a} {n} {vCons x xs} {y , vCons .x .(deleteV xs yi)} {vCons z zs} (HeadPermutation (xi , perm)) (inTail yi , p) | Refl , Refl = perm-cons xi yi perm
+    lemma {a} {n} {vCons x xs} {y , vCons .x .(deleteV xs yi)} {vCons z zs} (HeadPermutation (xi , perm)) (inTail yi , p) | refl , refl = perm-cons xi yi perm
