@@ -54,9 +54,9 @@ anyPT Fail P = ⊥
 anyPT Split P = WeakEither (P False) (P True)
 
 ptAll : {a : Set} (P : a -> Set) -> L a -> Set
-ptAll = ptMix allPT
+ptAll = wpMix allPT
 ptAny : {a : Set} (P : a -> Set) -> L a -> Set
-ptAny = ptMix anyPT
+ptAny = wpMix anyPT
 
 ptAnyBool : {a : Set} (P : a -> Bool) -> (prog : L a) -> isCode prog -> Bool
 ptAnyBool P (Pure x) tt = P x
@@ -226,51 +226,24 @@ module AllNondet where
   Impl.code (doSplit (impl progL codeL refinesL) (impl progR codeR refinesR)) False = codeR
   Refine.proof (Impl.refines (doSplit (impl progL codeL (refinement proofL)) (impl progR codeR (refinement proofR)))) P x = (proofR P x) , (proofL P x)
 
-  -- We need to define the doBind combinator here,
-  -- since it relies on correctness of the predicate transformer.
-  doBind : {a : Set} {b : Set} ->
+  -- Specialize the doBind combinator via correctness of allPT
+  doBindAll : {a : Set} {b : Set} ->
     {pre : Set} {intermediate : a -> Set} {post : b -> Set} ->
     (mx : allImpl (spec pre intermediate)) ->
     (f : (x : a) -> allImpl (spec (intermediate x) post)) ->
     allImpl (spec pre post)
-  doBind {a} {b} {pre} {intermediate} {post}
-    (impl mxProg mxCode (refinement mxProof)) fImpl = impl
-    (mxProg >>= fProg)
-    (isCodeBind mxProg fProg mxCode fCode)
-    (refinement (lemma mxProg mxProof))
-   where
-     fProg : (x : a) -> L b
-     fProg x = Impl.prog (fImpl x)
-     fCode : (x : a) -> isCode (fProg x)
-     fCode x = Impl.code (fImpl x)
-     fProof = \x -> Refine.proof (Impl.refines (fImpl x))
-     lemma : (mxProg : L a) -> (mxProof : (P : a -> Set) -> Pair pre ((z : a) -> intermediate z -> P z) -> ptAll P mxProg) -> (P : b -> Set) -> Pair pre ((z : b) -> post z -> P z) -> ptAll P (mxProg >>= fProg)
-     lemma (Pure x) mxProof P (fst , snd) = fProof x P (mxProof intermediate (fst , (λ x₁ x₂ → x₂)) , snd)
-     lemma (Step Fail k) mxProof P (fst , snd) = tt
-     lemma (Step Split k) mxProof P (fst , snd) = lemma (k False) (λ P₁ z → Pair.fst (mxProof P₁ z)) P (fst , snd) , lemma (k True) (λ P₁ z → Pair.snd (mxProof P₁ z)) P (fst , snd)
-     lemma (Spec pre' post' k) mxProof P (fst , snd) = (Pair.fst (mxProof intermediate (fst , (λ x x₁ → x₁)))) , λ z x → lemma (k z) (λ P₁ z₁ → Pair.snd (mxProof P₁ z₁) z x) P (fst , snd)
+  doBindAll = doBind allPTConserves
+    where
+    allPTConserves : ∀ c {P P' : R c → Set} → ((x : R c) → P x → P' x) → allPT c P → allPT c P'
+    allPTConserves Fail i tt = tt
+    allPTConserves Split i (fst , snd) = (i False fst) , (i True snd)
 
   doBind' : {a : Set} {b : Set} ->
     {pre : Set} {intermediate : a -> Set} {post : b -> Set} ->
     (mx : allImpl (spec ⊤ intermediate)) ->
     (f : (x : a) -> allImpl (spec (intermediate x) (\y -> pre -> post y))) ->
     allImpl (spec pre post)
-  doBind' {a} {b} {pre} {intermediate} {post}
-    (impl mxProg mxCode (refinement mxProof)) fImpl = impl
-    (mxProg >>= fProg)
-    (isCodeBind mxProg fProg mxCode fCode)
-    (refinement (lemma mxProg mxProof))
-   where
-     fProg : (x : a) -> L b
-     fProg x = Impl.prog (fImpl x)
-     fCode : (x : a) -> isCode (fProg x)
-     fCode x = Impl.code (fImpl x)
-     fProof = \x -> Refine.proof (Impl.refines (fImpl x))
-     lemma : (mxProg : L a) -> (mxProof : (P : a -> Set) -> Pair ⊤ ((z : a) -> intermediate z -> P z) -> ptAll P mxProg) -> (P : b -> Set) -> Pair pre ((z : b) -> post z -> P z) -> ptAll P (mxProg >>= fProg)
-     lemma (Pure x) mxProof P (fst , snd) = fProof x P (mxProof intermediate (tt , (λ x₁ x₂ → x₂)) , (λ z z₁ → snd z (z₁ fst)))
-     lemma (Step Fail k) mxProof P (fst , snd) = tt
-     lemma (Step Split k) mxProof P (fst , snd) = lemma (k False) (λ P₁ z → Pair.fst (mxProof P₁ z)) P (fst , snd) , lemma (k True) (λ P₁ z → Pair.snd (mxProof P₁ z)) P (fst , snd)
-     lemma (Spec pre' post' k) mxProof P (fst , snd) = (Pair.fst (mxProof intermediate (tt , (λ x x₁ → x₁)))) , λ z x → lemma (k z) (λ P₁ z₁ → Pair.snd (mxProof P₁ z₁) z x) P (fst , snd)
+  doBind' mx f = doIgnorePre (doBindAll mx f)
 
   selectPost : {a : Set} -> Post (List a) (\_ -> Pair a (List a))
   selectPost xs (y , ys) = Sigma (y ∈ xs) \i -> delete xs i == ys
@@ -282,7 +255,7 @@ module AllNondet where
   selectImpl {a} Nil = doFail
   selectImpl {a} (Cons x xs) = doSplit
     (doReturn (x , xs) (λ _ → ∈Head , refl))
-    (doBind (selectImpl xs) λ y,ys →
+    (doBindAll (selectImpl xs) λ y,ys →
       doReturn ((Pair.fst y,ys , Cons x (Pair.snd y,ys))) lemma)
     where
     lemma : ∀ {a} {x : a} {xs : List a} {y,ys : Pair a (List a)} →
@@ -295,14 +268,14 @@ module AllNondet where
     {C : Set} {R : C -> Set} {PT : PTs C R} ->
     {pre : Set} {post : a -> Set} ->
     (pre -> Impl PT (spec ⊤ post)) -> Impl PT (spec pre post)
-  doUsePre x = {!!}
+  doUsePre x = impl {!!} {!!} {!!}
 
   selectVecPost : {a : Set} {n : Nat} -> Vec (Succ n) a -> (Pair a (Vec n a)) -> Set
   selectVecPost xs (y , ys) = Sigma (y ∈v xs) \i -> deleteV xs i == ys
   selectVecSpec : {a : Set} {n : Nat} -> Vec (Succ n) a -> L (Pair a (Vec n a))
   selectVecSpec xs = spec ⊤ (selectVecPost xs)
   selectVecImpl : {a : Set} {n : Nat} -> (xs : Vec (Succ n) a) -> allImpl (selectVecSpec xs)
-  selectVecImpl {a} {n} xs = doBind (selectImpl (Vec->List xs)) \y,ys' ->
+  selectVecImpl {a} {n} xs = doBindAll (selectImpl (Vec->List xs)) \y,ys' ->
     let y , ys' = y,ys'; ys'' = List->Vec ys' in
     doUsePre (\pre -> let ys = resize (lemma1 pre) ys'' in
     doReturn (y , ys) lemma2)
@@ -331,7 +304,7 @@ module AllNondet where
   permsImpl {n = Succ Zero} xs@(vCons x vNil) = -- We need an extra base case here, since selectVecImpl only works on Vec (Succ _).
     doReturn xs λ _ → HeadPermutation (inHead , NilPermutation)
   permsImpl {n = Succ (Succ n)} xs =
-    doBind (selectVecImpl xs) λ y,ys →
+    doBindAll (selectVecImpl xs) λ y,ys →
     let (y , ys) = y,ys in
     doBind' (permsImpl ys) \zs ->
     doReturn (vCons y zs) lemma

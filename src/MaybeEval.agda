@@ -242,7 +242,7 @@ M = Mix C R
 ptM : {bx : Set} ->
   (P : bx -> Set) ->
   M bx -> Set
-ptM = ptMix mustPT
+ptM = wpMix mustPT
 
 record _⊑_ {a : Set} (f g : M a) : Set1 where
     constructor refinement
