@@ -50,16 +50,16 @@ PTs : (C : Set) (R : C -> Set) -> Set
 PTs C R = (c : C) -> (P : R c -> Set) -> Set
 
 -- Given a semantics, decide whether the postcondition holds afterwards.
-ptMix : {C : Set} {R : C -> Set} {bx : Set}
+wpMix : {C : Set} {R : C -> Set} {bx : Set}
   -> PTs C R
   -> (P : bx -> Set)
   -> Mix C R bx -> Set
-ptMix PT P (Pure y) = P y
-ptMix PT P (Step c k) = PT c (\r -> ptMix PT P (k r))
-ptMix PT P (Spec {c} pre post k) = Pair pre -- if the precondition holds
+wpMix PT P (Pure y) = P y
+wpMix PT P (Step c k) = PT c (\r -> wpMix PT P (k r))
+wpMix PT P (Spec {c} pre post k) = Pair pre -- if the precondition holds
   ((z : c) -- and for all intermediate values
     -> post z -- such that the postcondition holds
-    -> ptMix PT P (k z)) -- then the continuation makes P hold
+    -> wpMix PT P (k z)) -- then the continuation makes P hold
 
 -- The weakest precondition for a monadic function.
 isCode : {C : Set} {R : C -> Set}
@@ -90,7 +90,7 @@ record Refine {C : Set} {R : C -> Set} (PT : PTs C R)
   {bx : Set} (f g : Mix C R bx) : Set₁ where
   constructor refinement
   field
-    proof : (P : bx -> Set) -> ptMix PT P f -> ptMix PT P g
+    proof : (P : bx -> Set) -> wpMix PT P f -> wpMix PT P g
 pre-Refine : {bx : Set} {C : Set} {R : C -> Set} {PT : PTs C R} -> Preorder (Refine PT {bx = bx})
 Refine.proof (pre-refl pre-Refine) _ prf = prf
 Refine.proof (pre-trans pre-Refine (refinement fg) (refinement gh)) P prf = gh P (fg P prf)
@@ -114,7 +114,7 @@ open Semantics
 transformer : {C : Set} {R : C → Set} {m : Set → Set} {M : IsMonad m} →
   (s : Semantics C R M) →
   {a : Set} → (a → Set) → (Mix C R a → Set)
-transformer s = ptMix (pt s)
+transformer s = wpMix (pt s)
 
 runner : {C : Set} {R : C → Set} {m : Set → Set} {M : IsMonad m} →
   (s : Semantics C R M) →
@@ -187,3 +187,36 @@ doIgnorePre : {a : Set} ->
   {pre : Set} {post : a -> Set} ->
   Impl PT (spec ⊤ (\x -> pre -> post x)) -> Impl PT (spec pre post)
 doIgnorePre x = doSharpen' (λ P x₁ → tt , (λ x₂ x₃ → Pair.snd x₁ x₂ (x₃ (Pair.fst x₁)))) x
+
+wpBind : {C : Set} {R : C -> Set} {PT : PTs C R} →
+  ((c : C) → {P P' : R c → Set} → ((x : R c) → P x → P' x) → PT c P → PT c P') →
+  {a b : Set} {P2 : a → Set} {P3 : b → Set} →
+  {t1 : Mix C R a} {t2 : a → Mix C R b} →
+  wpMix PT P2 t1 → ((x : a) → P2 x → wpMix PT P3 (t2 x)) →
+  wpMix PT P3 (t1 >>= t2)
+wpBind {C} {R} {PT} cPT {a} {b} {P2} {P3} {Pure x} {t2} wp1 wp2 = wp2 x wp1
+wpBind {C} {R} {PT} cPT {a} {b} {P2} {P3} {Step c k} {t2} wp1 wp2 =
+  cPT c (λ x wp1' → wpBind cPT {t1 = k x} wp1' wp2) wp1
+wpBind {C} {R} {PT} cPT {a} {b} {P2} {P3} {Spec pre post k} {t2} (fst , snd) wp2 =
+  fst , λ z x₂ → wpBind cPT {t1 = k z} (snd z x₂) wp2
+
+-- Corresponds to the _;_ operator in GCL: if we have the intermediate
+-- as a postcondition for one program and precondition for the next,
+-- then we can sequence them.
+-- We need to be sure that the predicate transformer conserves implication.
+doBind : {C : Set} {R : C -> Set} {PT : PTs C R} →
+  ((c : C) → {P P' : R c → Set} → ((x : R c) → P x → P' x) → PT c P → PT c P') →
+  {a b : Set} {P1 : Set} {P2 : a → Set} {P3 : b → Set} →
+  Impl PT (spec P1 P2) → ((x : a) → Impl PT (spec (P2 x) P3)) →
+  Impl PT (spec P1 P3)
+doBind {C} {R} {PT} cPT {a} {b} {P1} {P2} {P3} (impl prog1 code1 (refinement wp1)) t2 =
+  impl (prog1 >>= prog2) (isCodeBind _ _ code1 code2) (refinement λ P x → wpBind cPT {t1 = prog1} (wp1 P2 (Pair.fst x , (λ x₁ x₂ → x₂))) λ x₁ x₂ → wp2 x₁ P (x₂ , (Pair.snd x)))
+  where
+  prog2 : a → Mix C R b
+  prog2 x = Impl.prog (t2 x)
+  code2 : (x : a) → isCode (prog2 x)
+  code2 x = Impl.code (t2 x)
+  refines2 : (x : a) → Refine PT (spec (P2 x) P3) (prog2 x)
+  refines2 x = Impl.refines (t2 x)
+  wp2 : (x : a) → (P : b → Set) → wpMix PT P (spec (P2 x) P3) → wpMix PT P (prog2 x)
+  wp2 x = Refine.proof (refines2 x)
