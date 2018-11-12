@@ -65,8 +65,7 @@ record Propositional (a : Set) : Set where
         prove (forAll b (λ x → pre => (post' x => post x))) →
         ((P : b → a) → prove (((pre' ∧ forAll b (λ z → post' z => P z)) => wp P))) →
         prove (forAll (b → a) (λ P → (((pre ∧ forAll b (λ z → post z => P z)) => wp P))))
-    lemma' : ∀ {b} {pre : a}
-      {post P : b → a} {y : b} →
+    lemma' : (b : Set) (pre : a) (post P : b → a) (y : b) →
       prove (pre => post y) →
       prove ((pre ∧ (forAll b (λ z → post z => P z))) => P y)
 open Propositional {{...}} public
@@ -149,4 +148,4 @@ doReturn : {prop : Set₁} {{Prop : Propositional prop}} →
   {b : Set} -> {pre : prop} {post : b → prop} ->
   (y : b) -> prove (pre => post y) ->
   Impl PT (spec pre post)
-doReturn {prop} {b = b} {pre} {post} y prf = impl (Pure y) tt (refinement (_⇔_.onlyIf (prove-forAll (b → prop) (λ P → (pre ∧ forAll b λ z → post z => P z) => P y)) λ c → {!lemma' prf!}))
+doReturn {prop} {b = b} {pre} {post} y prf = impl (Pure y) tt (refinement (_⇔_.onlyIf (prove-forAll (b → prop) (λ P → (pre ∧ forAll b λ z → post z => P z) => P y)) λ c → lemma' b pre post c y prf))
