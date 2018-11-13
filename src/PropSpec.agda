@@ -59,13 +59,13 @@ record Propositional (a : Set) : Set where
       prove (x => y) → prove (y => z) → prove (x => z)
 
     -- TODO: can we split this up into simpler parts?
-    lemma : ∀ {b} {pre pre' : a} {post post' : b → a}
+    lemma-sharpen : ∀ {b} {pre pre' : a} {post post' : b → a}
           {wp : (b → a) → a} →
         prove (pre => pre') →
-        prove (forAll b (λ x → pre => (post' x => post x))) →
+        prove (forAll b (λ x → (post' x => post x))) →
         ((P : b → a) → prove (((pre' ∧ forAll b (λ z → post' z => P z)) => wp P))) →
         prove (forAll (b → a) (λ P → (((pre ∧ forAll b (λ z → post z => P z)) => wp P))))
-    lemma' : (b : Set) (pre : a) (post P : b → a) (y : b) →
+    lemma-return : (b : Set) (pre : a) (post P : b → a) (y : b) →
       prove (pre => post y) →
       prove ((pre ∧ (forAll b (λ z → post z => P z))) => P y)
 open Propositional {{...}} public
@@ -133,12 +133,12 @@ doSharpen : {prop : Set₁} {{Prop : Propositional prop}} →
   {C : Set} {R : C -> Set} {PT : PTs prop C R} ->
   {b : Set} -> {pre pre' : prop} {post post' : b → prop} ->
   prove (pre => pre') ->
-  prove (forAll b λ x → pre => post' x => post x) ->
+  prove (forAll b λ x → post' x => post x) ->
   Impl PT (spec pre' post') -> Impl PT (spec pre post)
 doSharpen {prop} {C} {R} {PT} {b} {pre} {pre'} {post} {post'} preI postI (impl prog code (refinement proof)) = impl
   prog
   code
-  (refinement (lemma preI postI proof'))
+  (refinement (lemma-sharpen preI postI proof'))
   where
   proof' : (P : b → prop) → prove ((pre' ∧ (forAll b (λ z → (post' z) => (P z)))) => wpProp PT P prog)
   proof' = _⇔_.if (prove-forAll (b → prop) (λ P → (pre' ∧ (forAll b (λ z → (post' z) => (P z)))) => wpProp PT P prog)) proof
@@ -148,4 +148,4 @@ doReturn : {prop : Set₁} {{Prop : Propositional prop}} →
   {b : Set} -> {pre : prop} {post : b → prop} ->
   (y : b) -> prove (pre => post y) ->
   Impl PT (spec pre post)
-doReturn {prop} {b = b} {pre} {post} y prf = impl (Pure y) tt (refinement (_⇔_.onlyIf (prove-forAll (b → prop) (λ P → (pre ∧ forAll b λ z → post z => P z) => P y)) λ c → lemma' b pre post c y prf))
+doReturn {prop} {b = b} {pre} {post} y prf = impl (Pure y) tt (refinement (_⇔_.onlyIf (prove-forAll (b → prop) (λ P → (pre ∧ forAll b λ z → post z => P z) => P y)) λ c → lemma-return b pre post c y prf))

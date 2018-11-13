@@ -141,6 +141,9 @@ module NaturalLemmas where
   plus-zero Zero = refl
   plus-zero (Succ n) = cong Succ (plus-zero n)
 
+  plus-assoc : (x y z : Nat) → x + (y + z) == (x + y) + z
+  plus-assoc Zero y z = refl
+  plus-assoc (Succ x) y z = cong Succ (plus-assoc x y z)
 
   plus-succ : (x y : Nat) -> Succ (x + y) == (x + Succ y)
   plus-succ Zero y = refl
