@@ -61,7 +61,6 @@ wpMix PT P (Spec {c} pre post k) = Pair pre -- if the precondition holds
     -> post z -- such that the postcondition holds
     -> wpMix PT P (k z)) -- then the continuation makes P hold
 
--- The weakest precondition for a monadic function.
 isCode : {C : Set} {R : C -> Set}
   -> {a : Set} -> Mix C R a -> Set
 isCode (Pure _) = ⊤
@@ -132,6 +131,28 @@ consistent s P (Step c k) ic = ⇔-trans
     λ x → consistent s P (k x) (ic x))
   (lifter-bind s P c λ x → runner s (k x) (ic x))
 consistent s P (Spec _ _ _) ()
+
+wpForBind : {a b : Set} →
+  {C : Set} {R : C -> Set} {PT : PTs C R} ->
+  (p : Mix C R a) → (f : a → Mix C R b) →
+  ((c : C) (P Q : R c → Set) → ((r : R c) → P r → Q r) → PT c P → PT c Q) →
+  (P : b → Set) →
+  wpMix PT P (p >>= f) ⇔ wpMix PT (λ z → wpMix PT P (f z)) p
+wpForBind (Pure x) f pt-if P =
+  iff (λ z → z) (λ z → z)
+wpForBind {PT = PT} (Step c k) f pt-if P =
+  iff (λ x → pt-if c _ _ (λ r → _⇔_.if (wpForBind (k r) f pt-if P)) x) (λ x → pt-if c _ _ (λ r → _⇔_.onlyIf (wpForBind (k r) f pt-if P)) x)
+wpForBind (Spec pre post k) f pt-if P
+  = iff (λ z → Pair.fst z , (λ x x₁ → _⇔_.if (wpForBind (k x) f pt-if P) (Pair.snd z x x₁))) (λ z → Pair.fst z , (λ x x₁ → _⇔_.onlyIf (wpForBind (k x) f pt-if P) (Pair.snd z x x₁)))
+
+refineBefore : {a b : Set} ->
+  {C : Set} {R : C -> Set} {PT : PTs C R} ->
+  (p q : Mix C R a) → (f : a → Mix C R b) →
+  ((c : C) (P Q : R c → Set) → ((r : R c) → P r → Q r) → PT c P → PT c Q) →
+  Refine PT p q →
+  Refine PT (p >>= f) (q >>= f)
+Refine.proof (refineBefore {PT = PT} p q f pt-if (refinement proof)) P wppf =
+  _⇔_.if (wpForBind q f pt-if P) (proof _ (_⇔_.onlyIf (wpForBind p f pt-if P) wppf))
 
 sharpenSpec : {b : Set} ->
   {C : Set} {R : C -> Set} {PT : PTs C R} ->
