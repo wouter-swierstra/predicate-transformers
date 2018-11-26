@@ -302,8 +302,8 @@ data Id (a : Set) : Set where
 out : {a : Set} -> Id a -> a
 out (In x) = x
 
-mmap : {m : Set -> Set} -> IsMonad m -> {a b : Set} -> (a -> b) -> m a -> m b
-mmap (isMonad bind pure) f mx = bind mx (\x -> pure (f x))
+fmap : {m : Set -> Set} → {{M : IsMonad m}} -> {a b : Set} -> (a -> b) -> m a -> m b
+fmap {{isMonad bind pure}} f mx = bind mx (\x -> pure (f x))
 
 instance
   IsMonad-Id : IsMonad Id
