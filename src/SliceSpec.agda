@@ -12,6 +12,11 @@ open import Preorder
 open IsMonad
 open Preorder.Preorder
 
+-- WHAT IS GOING ON HERE:
+-- Hom(A \to B, C) is defined(?) as Hom(A, C) \to Hom(B, C),
+-- where the Hom \to Hom morphism is in Set,
+-- and we can deal with morphisms in Set.
+
 -- Slice ⊤ should be isomorphic to Mix
 -- The meaning of Slice a C R b x is:
 --  a : type to take the slice over

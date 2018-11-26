@@ -141,10 +141,13 @@ module NaturalLemmas where
   plus-zero Zero = refl
   plus-zero (Succ n) = cong Succ (plus-zero n)
 
-
   plus-succ : (x y : Nat) -> Succ (x + y) == (x + Succ y)
   plus-succ Zero y = refl
   plus-succ (Succ x) y = cong Succ (plus-succ x y)
+
+  plus-assoc : (x y z : Nat) → (x + y) + z == x + (y + z)
+  plus-assoc Zero y z = refl
+  plus-assoc (Succ x) y z = cong Succ (plus-assoc x y z)
 
 open NaturalLemmas
 
@@ -287,7 +290,12 @@ record IsMonad (m : Set -> Set) : Set₁ where
   field
     bind : {a b : Set} -> m a -> (a -> m b) -> m b
     pure : {a : Set} -> a -> m a
-open IsMonad
+open IsMonad {{...}} public
+
+infixr 20 _>>_ _>>=_
+_>>=_ = bind
+_>>_ : {m : Set → Set} {{M : IsMonad m}} {a b : Set} → m a → m b → m b
+mx >> my = bind mx (const my)
 
 data Id (a : Set) : Set where
   In : a -> Id a
@@ -297,10 +305,12 @@ out (In x) = x
 mmap : {m : Set -> Set} -> IsMonad m -> {a b : Set} -> (a -> b) -> m a -> m b
 mmap (isMonad bind pure) f mx = bind mx (\x -> pure (f x))
 
-IsMonad-Id : IsMonad Id
-bind IsMonad-Id (In x) f = f x
-pure IsMonad-Id x = In x
+instance
+  IsMonad-Id : IsMonad Id
+  IsMonad.bind IsMonad-Id (In x) f = f x
+  IsMonad.pure IsMonad-Id x = In x
 
-IsMonad-List : IsMonad List
-bind IsMonad-List mx f = foldr (_++_) Nil (map f mx)
-pure IsMonad-List x = Cons x Nil
+  IsMonad-List : IsMonad List
+  IsMonad.bind IsMonad-List Nil f = Nil
+  IsMonad.bind IsMonad-List (Cons x xs) f = f x ++ IsMonad.bind IsMonad-List xs f
+  IsMonad.pure IsMonad-List x = Cons x Nil

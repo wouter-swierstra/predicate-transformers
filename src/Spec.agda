@@ -22,12 +22,15 @@ data Mix (C : Set) (R : C -> Set) (a : Set) : Set where
     -> (a' -> Set)
     -> (k : a' -> Mix C R a) -> Mix C R a
 
-infixl 20 _>>=_
-_>>=_ : {C : Set} {R : C -> Set} -> {a : Set} {b : Set}
-  -> Mix C R a -> (a -> Mix C R b) -> Mix C R b
-Pure x >>= f = f x
-Step c k >>= f = Step c (λ z → k z >>= f)
-Spec pre post k >>= f = Spec pre post (λ z → k z >>= f)
+instance
+  IsMonad-Mix : {C : Set} {R : C → Set} → IsMonad (Mix C R)
+  IsMonad-Mix = isMonad _>>='_ Pure
+    where
+    _>>='_ : {C : Set} {R : C -> Set} -> {a : Set} {b : Set}
+      -> Mix C R a -> (a -> Mix C R b) -> Mix C R b
+    Pure x >>=' f = f x
+    Step c k >>=' f = Step c (λ z → k z >>=' f)
+    Spec pre post k >>=' f = Spec pre post (λ z → k z >>=' f)
 
 fromCode : {C : Set} {R : C -> Set} {a : Set}
   -> Free.Free C R a -> Mix C R a
@@ -241,3 +244,9 @@ doBind {C} {R} {PT} cPT {a} {b} {P1} {P2} {P3} (impl prog1 code1 (refinement wp1
   refines2 x = Impl.refines (t2 x)
   wp2 : (x : a) → (P : b → Set) → wpMix PT P (spec (P2 x) P3) → wpMix PT P (prog2 x)
   wp2 x = Refine.proof (refines2 x)
+
+spec' : {C : Set} {R : C → Set} {PT : PTs C R} →
+  {a a' : Set} (pre : Set) (post : a' → Set) →
+  (k : (prog : Mix C R a') → (pre → wpMix PT post prog) → Mix C R a) →
+  Mix C R a
+spec' pre post k = {!!}

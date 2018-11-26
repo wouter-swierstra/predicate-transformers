@@ -3,92 +3,98 @@ module Counter where
 
 open import Prelude hiding (_⟨_⟩_)
 open import Preorder
-open import SliceSpec
+open import MonadSpec
+
+State : Set → Set → Set
+State s a = s → Pair a s
+
+instance
+  IsMonad-State : {s : Set} → IsMonad (State s)
+  IsMonad-State {s} = isMonad bind' _,_
+    where
+    bind' : {a b : Set} → State s a → (a → State s b) → State s b
+    bind' mx f t = uncurry f (mx t)
+
+Pre' = Pre (State Nat)
+Post' = Post (State Nat)
 
 data C : Set where
   Tick : C
 R : C -> Set
 R Tick = ⊤
-Count = Slice Nat C R
+Count = Mix C R (State Nat)
 
 tick : Count ⊤
-tick = Step Tick return
+tick = Step Tick Pure
+tickAfter : {a : Set} → State Nat a → State Nat a
+tickAfter mx n = Pair.fst (mx n) , Succ (Pair.snd (mx n))
 
-ptCount : PTs Nat C R
-ptCount Tick P n = P tt (Succ n)
+-- Define the predicate transformer.
+-- Although the only operations are to leave the counter alone
+-- or increment it,
+-- we need to ensure incrementing happens after running.
+ptCount : (c : C) → (R c → Pre') → Pre'
+ptCount Tick P mx = P tt (tickAfter mx)
 
--- We want to express this as a theorem on ptSlice,
--- since a theorem on Refine doesn't allow us to go specify
--- the value given after binding when we want to go into recursion.
-ptAndBind : {b c : Set} -> {pre : Nat -> Set} {int : b -> Nat -> Set} {post : c -> Nat -> Set} ->
-  (mx : Count b) -> (f : b -> Count c) ->
-  ((n : Nat) -> pre n -> ptSlice ptCount int mx n) ->
-  ((y : b) (n' : Nat) -> int y n' -> ptSlice ptCount post (f y) n') ->
-  (n : Nat) -> pre n -> ptSlice ptCount post (mx >>= f) n
-ptAndBind (Pure x₃) f x x₁ n x₂ = x₁ x₃ n (x n x₂)
-ptAndBind (Step Tick k) f x x₁ n x₂ = ptAndBind (k tt) f (λ n₁ z → z) x₁ (Succ n) (x n x₂)
-ptAndBind (Spec pre post k) f x x₁ n x₂ = Pair.fst (x n x₂) , (λ x₃ x₄ x₅ → ptAndBind (k x₄) f (λ n₁ z → z) x₁ x₃ (Pair.snd (x n x₂) x₃ x₄ x₅))
+pt-implies : (c : C) → {P P' : R c → Pre (State Nat)} → ((x : R c) (i : State Nat ⊤) → P x i → P' x i) → (i : State Nat ⊤) → ptCount c P i → ptCount c P' i
+pt-implies Tick x mx x₁ = x tt (tickAfter mx) x₁
 
-refineBind : {b c : Set} -> {pre : Nat -> Set} {int : Nat -> b -> Nat -> Set} ->
-  (mx : Count b) -> (f : b -> Count c) ->
-  Refine ptCount (spec pre int) mx ->
-  Refine ptCount (spec pre int >>= f) (mx >>= f)
-refineBind mx f x = refinement (λ P x₁ z → ptAndBind mx f (λ n z₁ → z₁) (λ y n' z₁ → z₁) x₁ (Refine.proof x (λ _ z₁ → ptSlice ptCount (P x₁) (f z₁)) x₁ (Pair.fst z , Pair.snd z)))
+Semantics-Count : Semantics C R (State Nat)
+Semantics-Count = semantics ptCount handler pt-implies lifter-bind
+  where
+  handler : (c : C) → State Nat (R c)
+  handler Tick = tickAfter (pure tt)
+  lifter-bind : {a : Set} (P : Post (State Nat) a) (c : C)
+    (k : R c → State Nat a) (i : State Nat ⊤) →
+    ptCount c (λ r o → P (o >> k r)) i ⇔ P (i >> handler c >>= k)
+  lifter-bind P Tick k i with k tt
+  ... | mx = ⇔-refl
 
-doBind : {b c : Set} -> {pre : Nat -> Set} {int : Nat -> b -> Nat -> Set} ->
-  {post : Nat -> c -> Nat -> Set} ->
-  Impl ptCount (spec pre int) ->
-  ((y : b) -> Impl ptCount (spec (\n1 -> Sigma Nat (\n0 -> pre n0 -> int n0 y n1)) (\n1 z n2 -> (n0 : Nat) -> int n0 y n1 -> post n0 z n2))) ->
-  Impl ptCount (spec pre post)
-doBind {pre = pre} {int = int} {post = post} mx@(impl xprog xcode (refinement xproof)) f = impl
-  (xprog >>= λ z → Impl.prog (f z))
-  (isCodeBind xprog (\z -> Impl.prog (f z)) xcode (λ y → Impl.code (f y)))
-  ((spec pre post
-    ⟨ (refinement λ P x x₁ → Pair.fst x₁ , λ x' z x₂ → Refine.proof (Impl.refines (f z)) (λ _ → P x) x' ((x , (λ x₃ → x₂)) , (λ x₃ x₄ x₅ → Pair.snd x₁ x₃ x₄ (x₅ x x₂)))) ⟩
-  spec pre int >>= (\z -> Impl.prog (f z))
-    ⟨ refineBind xprog (λ z → Impl.prog (f z)) (refinement (λ P x z → xproof P x z)) ⟩
-  (xprog >>= \z -> Impl.prog (f z)) ∎) pre-Refine)
+pointwise : {a : Set} → (Q : Nat → a → Nat → Set) → State Nat a → Set
+pointwise Q mx = (i : Nat) → (Q i) (Pair.fst (mx i)) (Pair.snd (mx i))
 
-data OnPred (P : Nat -> Set) : Nat -> Set where
-  onPred : {n : Nat} -> P n -> OnPred P (Succ n)
-fromPred : {n : Nat} {P : Nat -> Set} -> OnPred P (Succ n) -> P n
-fromPred (onPred x) = x
+data OnPred {a : Set} (P : State Nat a → Set) : State Nat a → Set where
+  onPred : {mx : State Nat a} → P mx → OnPred P (tickAfter mx)
 
-doTick : {pre : Nat -> Set} {post : Nat -> ⊤ -> Nat -> Set} ->
-  Impl ptCount (spec (OnPred pre) (\n y n' -> OnPred (\n'' -> post n'' y n') n)) ->
-  Impl ptCount (spec pre post)
-doTick (impl prog code (refinement proof)) = impl
+doTick : {P : Pre'} {Q : Post' ⊤} ->
+  Impl ptCount (spec (OnPred P) Q) ->
+  Impl ptCount (spec P Q)
+doTick (impl prog code (refine proof)) = impl
   (tick >>= (λ _ → prog))
   (λ r → code)
-  (refinement λ P x x₁ → proof (λ _ → P x) (Succ x) ((onPred (Pair.fst x₁)) , λ x' z x₂ → Pair.snd x₁ x' z (fromPred x₂)))
+  (refine λ i R x → proof (tickAfter i) R (onPred (Pair.fst x) , Pair.snd x))
 
-rep : Nat -> Slice Nat C R ⊤ -> Slice Nat C R ⊤
-rep Zero m = return tt
+rep : {m : Set → Set} {{M : IsMonad m}} → Nat -> m ⊤ -> m ⊤
+rep Zero m = pure tt
 rep (Succ n) m = m >>= \_ -> rep n m
 
 hanoi : Nat -> Count ⊤
-hanoi Zero = return tt
+hanoi Zero = pure tt
 hanoi (Succ n) = hanoi n >>= \_ -> tick >>= \_ -> hanoi n
 
+open import Data.Nat.Base
+open NaturalLemmas
 -- Sum of the first $n$ powers of $2$: $2^n - 1$.
 binsum : Nat -> Nat
 binsum Zero = 0
 binsum (Succ n) = 1 + (binsum n + binsum n)
 
 hanoiSpec : Nat -> Count ⊤
-hanoiSpec n = spec (K ⊤) (λ i _ o → o == i + binsum n)
+hanoiSpec n = spec (λ mx → ⊤) (pointwise λ i _ o → o == i + binsum n)
 
 hanoiImpl : (n : Nat) -> Impl ptCount (hanoiSpec n)
-hanoiImpl Zero = doReturn tt λ i o → plus-zero i
-hanoiImpl (Succ n) = doBind (hanoiImpl n) λ _ →
+hanoiImpl Zero = doReturn' tt λ i x i₁ → trans {!!} (plus-zero i₁)
+hanoiImpl (Succ n) = doBind pt-implies (hanoiImpl n) λ _ →
   doTick (
-  doSharpen (λ t _ → tt) (lemma n) (
-  doBind (hanoiImpl n) \_ ->
-  doReturn tt λ t x n0 x₁ → x₁ ))
-  where -- prove stuff about binsum. This is a giant mess, but works :D
+  doSharpen (λ i x → {!!}) {!!} (
+  doBind pt-implies (hanoiImpl n) \_ ->
+  doReturn tt ))
+  where
+  {-
   lemma : ∀ n t (x : ⊤) t' → OnPred (λ n1 → Sigma Nat (λ n0 → ⊤ → n1 == (n0 + binsum n))) t → t' == (t + binsum n) → OnPred (λ n'' → ∀ n0 → n'' == (n0 + binsum n) → t' == (n0 + Succ (binsum n + binsum n))) t
-  lemma n t x t' (onPred (fst , snd)) Refl with snd tt
-  lemma n .(Succ (fst + binsum n)) x .(Succ ((fst + binsum n) + binsum n)) (onPred (fst , snd)) Refl | Refl = onPred λ n0 x₁ →
+  lemma n t x t' (onPred (fst , snd)) refl with snd tt
+  lemma n .(Succ (fst + binsum n)) x .(Succ ((fst + binsum n) + binsum n)) (onPred (fst , snd)) refl | refl = onPred λ n0 x₁ →
     trans (plus-succ (fst + binsum n) (binsum n)) (
     trans (plus-assoc fst (binsum n) (Succ (binsum n))) (
-    trans (cong (\n' -> n' + (binsum n + Succ (binsum n))) (plus-inj {fst} {n0} x₁)) (cong (λ n' → n0 + n') (sym (plus-succ (binsum n) (binsum n))))))
+    trans (cong (\n' -> n' + (binsum n + Succ (binsum n))) ({!!} {fst} {n0} x₁)) (cong (λ n' → n0 + n') (sym (plus-succ (binsum n) (binsum n))))))
+  -}

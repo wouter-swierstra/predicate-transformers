@@ -10,12 +10,15 @@ fmap : forall {  C R a b } ->  (a -> b) -> Free C R a -> Free C R b
 fmap f (Pure x)    = Pure (f x)
 fmap f (Step c k)  = Step c (\ r -> fmap f (k r))
 
+IsMonad-Free : {C : Set} {R : C → Set} → IsMonad (Free C R)
+IsMonad-Free = isMonad _>>='_ Pure
+  where
+  _>>='_ : forall {  C R a b } ->  Free C R a -> (a -> Free C R b) -> Free C R b
+  Pure x   >>=' f  = f x
+  Step c x >>=' f  = Step c (\ r -> x r >>=' f)
+
 return : forall {  C R a } ->  a -> Free C R a
 return = Pure
-
-_>>=_ : forall {  C R a b } ->  Free C R a -> (a -> Free C R b) -> Free C R b
-Pure x   >>= f  = f x
-Step c x >>= f  = Step c (\ r -> x r >>= f)
 
 wp : {a : Set} {b : a -> Set} -> ((x : a) -> b x -> Set) -> ((f : (x : a) -> b x) -> a -> Set)
 wp P f = \ a -> P a (f a)
