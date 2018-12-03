@@ -6,6 +6,10 @@ data Vec : Nat -> Set -> Set where
   vNil : {a : Set} -> Vec 0 a
   vCons : {n : Nat} {a : Set} -> a -> Vec n a -> Vec (Succ n) a
 
+infixr 10 _::_
+_::_ : {n : Nat} {a : Set} -> a -> Vec n a -> Vec (Succ n) a
+_::_ = vCons
+
 data Fin : Nat -> Set where
   F0 : {n : Nat} -> Fin (Succ n)
   FS : {n : Nat} -> Fin n -> Fin (Succ n)
@@ -106,3 +110,12 @@ fin-≤ : {n : Nat} -> Fin n -> Fin n -> Bool
 fin-≤ F0 _ = True
 fin-≤ (FS i) F0 = False
 fin-≤ (FS i) (FS j) = fin-≤ i j
+
+vmap : {a b : Set} {n : Nat} → (a → b) → Vec n a → Vec n b
+vmap f vNil = vNil
+vmap f (vCons x xs) = vCons (f x) (vmap f xs)
+
+index-map : {a b : Set} {n : Nat} (i : Fin n) (f : a → b) (xs : Vec n a) →
+  vmap f xs !! i == f (xs !! i)
+index-map F0 f (vCons x xs) = refl
+index-map (FS i) f (vCons x xs) = index-map i f xs
