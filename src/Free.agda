@@ -6,16 +6,21 @@ data Free (C : Set) (R : C -> Set) (a : Set) : Set where
   Pure : a -> Free C R a
   Step : (c : C) -> (R c -> Free C R a) -> Free C R a
 
+{-
 fmap : forall {  C R a b } ->  (a -> b) -> Free C R a -> Free C R b
 fmap f (Pure x)    = Pure (f x)
 fmap f (Step c k)  = Step c (\ r -> fmap f (k r))
+-}
 
-return : forall {  C R a } ->  a -> Free C R a
-return = Pure
-
-_>>=_ : forall {  C R a b } ->  Free C R a -> (a -> Free C R b) -> Free C R b
-Pure x   >>= f  = f x
-Step c x >>= f  = Step c (\ r -> x r >>= f)
+instance
+  IsMonad-Free : {C : Set} {R : C → Set} → IsMonad (Free C R)
+  IsMonad-Free {C} {R} = isMonad bind' return refl
+    where
+    return : forall {  C R a } ->  a -> Free C R a
+    return = Pure
+    bind' : forall {  C R a b } ->  Free C R a -> (a -> Free C R b) -> Free C R b
+    bind' (Pure x)    f  = f x
+    bind' (Step c x)  f  = Step c (\ r -> bind' (x r) f)
 
 wp : {a : Set} {b : a -> Set} -> ((x : a) -> b x -> Set) -> ((f : (x : a) -> b x) -> a -> Set)
 wp P f = \ a -> P a (f a)

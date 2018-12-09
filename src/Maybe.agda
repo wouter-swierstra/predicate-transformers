@@ -13,7 +13,8 @@ liftJust P (Just x) = P x
 
 instance
   Monad-Maybe : IsMonad Maybe
-  IsMonad.bind Monad-Maybe (Just x) f = f x
-  IsMonad.bind Monad-Maybe Nothing f = Nothing
-  IsMonad.pure Monad-Maybe x = Just x
-  IsMonad.left-identity Monad-Maybe = refl
+  Monad-Maybe = isMonad bind' Just refl
+    where
+    bind' : ∀ {a b} → Maybe a → (a → Maybe b) → Maybe b
+    bind' (Just x) f = f x
+    bind' Nothing f = Nothing

@@ -22,12 +22,15 @@ data Mix (C : Set) (R : C -> Set) (a : Set) : Set where
     -> (a' -> Set)
     -> (k : a' -> Mix C R a) -> Mix C R a
 
-infixl 20 _>>=_
-_>>=_ : {C : Set} {R : C -> Set} -> {a : Set} {b : Set}
-  -> Mix C R a -> (a -> Mix C R b) -> Mix C R b
-Pure x >>= f = f x
-Step c k >>= f = Step c (λ z → k z >>= f)
-Spec pre post k >>= f = Spec pre post (λ z → k z >>= f)
+instance
+  IsMonad-Mix : {C : Set} {R : C → Set} → IsMonad (Mix C R)
+  IsMonad-Mix {C} {R} = isMonad bind' Pure refl
+    where
+    bind' : {C : Set} {R : C -> Set} -> {a : Set} {b : Set}
+      -> Mix C R a -> (a -> Mix C R b) -> Mix C R b
+    bind' (Pure x) f = f x
+    bind' (Step c k) f = Step c (λ z → bind' (k z) f)
+    bind' (Spec pre post k) f = Spec pre post (λ z → bind' (k z) f)
 
 fromCode : {C : Set} {R : C -> Set} {a : Set}
   -> Free.Free C R a -> Mix C R a
