@@ -122,12 +122,13 @@ open import Relation.Nullary public using
     ; no
     )
 
-Decide : ∀ {l} (a : Set l) -> Set l
-Decide a = Either a (¬ a)
+if'_then_else : ∀ {l k} {P : Set l} {a : Set k} → Dec P → (P → a) → (¬ P → a) → a
+if' yes x then t else f = t x
+if' no x then t else f = f x
 
-decideFrom : (b : Bool) -> Decide (So b)
-decideFrom True = Inl tt
-decideFrom False = Inr λ z → z
+decideFrom : (b : Bool) -> Dec (So b)
+decideFrom True = yes tt
+decideFrom False = no λ z → z
 
 open import Data.Nat public
   using
