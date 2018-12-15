@@ -13,8 +13,11 @@ liftJust P (Just x) = P x
 
 instance
   Monad-Maybe : IsMonad Maybe
-  Monad-Maybe = isMonad bind' Just refl
+  Monad-Maybe = isMonad bind' Just refl r-id
     where
     bind' : ∀ {a b} → Maybe a → (a → Maybe b) → Maybe b
     bind' (Just x) f = f x
     bind' Nothing f = Nothing
+    r-id : ∀ {a} {mx : Maybe a} → bind' mx Just == mx
+    r-id {mx = Just x} = refl
+    r-id {mx = Nothing} = refl

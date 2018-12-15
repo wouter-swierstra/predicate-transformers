@@ -23,6 +23,10 @@ open import Relation.Binary.PropositionalEquality public
 infix 1 _==_
 _==_ = _≡_
 
+postulate
+  extensionality : {a : Set} {b : a → Set} {f g : (x : a) → b x} →
+    ((x : a) → f x == g x) → f == g
+
 cong2 : {a b c : Set} {x y : a} {z w : b} (f : a -> b -> c) -> x == y -> z == w -> f x z == f y w
 cong2 f refl refl = refl
 
@@ -99,7 +103,7 @@ data Either {l : Level} (a b : Set l) : Set l where
 record ⊤ : Set where
   constructor tt
 
-data ⊥ : Set where
+open import Data.Empty public
 
 magic : ∀ {l} {a : Set l} -> ⊥ -> a
 magic ()
@@ -111,8 +115,12 @@ So False = ⊥
 intoSo : So True
 intoSo = tt
 
-¬ : ∀ {l} -> Set l -> Set l
-¬ {l} a = a -> ⊥
+open import Relation.Nullary public using
+    ( ¬_
+    ; Dec
+    ; yes
+    ; no
+    )
 
 Decide : ∀ {l} (a : Set l) -> Set l
 Decide a = Either a (¬ a)
@@ -156,6 +164,8 @@ open import Data.Integer public
     ( ℤ to Int
     )
 
+infixr 5 _::_
+infixr 6 _++_
 data List {l : Level} (a : Set l) : Set l where
   Nil : List a
   Cons : a -> List a -> List a
@@ -288,6 +298,7 @@ record IsMonad (m : Set -> Set) : Set₁ where
     bind : {a b : Set} -> m a -> (a -> m b) -> m b
     pure : {a : Set} -> a -> m a
     left-identity : ∀ {a b} {x : a} {f : a → m b} → bind (pure x) f == f x
+    right-identity : ∀ {a} {mx : m a} → bind mx pure == mx
 open IsMonad {{...}} public
 
 infixr 20 _>>_ _>>=_
@@ -301,16 +312,21 @@ out : {a : Set} -> Id a -> a
 out (In x) = x
 
 fmap : {m : Set -> Set} → {{M : IsMonad m}} -> {a b : Set} -> (a -> b) -> m a -> m b
-fmap {{isMonad bind pure _}} f mx = bind mx (\x -> pure (f x))
+fmap {{isMonad bind pure _ _}} f mx = bind mx (\x -> pure (f x))
 
 instance
   IsMonad-Id : IsMonad Id
   IsMonad.bind IsMonad-Id (In x) f = f x
   IsMonad.pure IsMonad-Id x = In x
   IsMonad.left-identity IsMonad-Id = refl
+  IsMonad.right-identity IsMonad-Id {mx = In x} = refl
 
   IsMonad-List : IsMonad List
-  IsMonad.bind IsMonad-List Nil f = Nil
-  IsMonad.bind IsMonad-List (Cons x xs) f = f x ++ IsMonad.bind IsMonad-List xs f
-  IsMonad.pure IsMonad-List x = Cons x Nil
-  IsMonad.left-identity IsMonad-List {x = x} {f} = sym (++-nil (f x))
+  IsMonad-List = isMonad bind' (λ x → Cons x Nil) (sym (++-nil _)) r-id
+    where
+    bind' : {a b : Set} → List a → (a → List b) → List b
+    bind' Nil f = Nil
+    bind' (x :: xs) f = f x ++ bind' xs f
+    r-id : ∀ {a} {mx : List a} → bind' mx (λ x → x :: Nil) ≡ mx
+    r-id {mx = Nil} = refl
+    r-id {mx = x :: mx} = cong (x ::_) r-id
