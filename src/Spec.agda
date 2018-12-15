@@ -24,13 +24,17 @@ data Mix (C : Set) (R : C -> Set) (a : Set) : Set where
 
 instance
   IsMonad-Mix : {C : Set} {R : C → Set} → IsMonad (Mix C R)
-  IsMonad-Mix {C} {R} = isMonad bind' Pure refl
+  IsMonad-Mix {C} {R} = isMonad bind' Pure refl r-id
     where
     bind' : {C : Set} {R : C -> Set} -> {a : Set} {b : Set}
       -> Mix C R a -> (a -> Mix C R b) -> Mix C R b
     bind' (Pure x) f = f x
     bind' (Step c k) f = Step c (λ z → bind' (k z) f)
     bind' (Spec pre post k) f = Spec pre post (λ z → bind' (k z) f)
+    r-id : ∀ {C R a} {mx : Mix C R a} → bind' mx Pure == mx
+    r-id {mx = Pure x} = refl
+    r-id {mx = Step c k} = cong (Step c) (extensionality (λ x → r-id))
+    r-id {mx = Spec pre post k} = cong (Spec pre post) (extensionality (λ x → r-id))
 
 fromCode : {C : Set} {R : C -> Set} {a : Set}
   -> Free.Free C R a -> Mix C R a

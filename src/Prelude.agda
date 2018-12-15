@@ -168,40 +168,42 @@ infixr 5 _::_
 infixr 6 _++_
 data List {l : Level} (a : Set l) : Set l where
   Nil : List a
-  Cons : a -> List a -> List a
+  _::_ : a -> List a -> List a
+Cons : {l : Level} {a : Set l} → a → List a → List a
+Cons = _::_
 
 -- [_] : ∀ {a} -> a -> List a
 -- [ x ] = Cons x Nil
 
 foldr : {a b : Set} -> (a -> b -> b) -> b -> List a -> b
 foldr f e Nil = e
-foldr f e (Cons x xs) = f x (foldr f e xs)
+foldr f e (x :: xs) = f x (foldr f e xs)
 
 _++_ : {l : Level} {a : Set l} -> List a -> List a -> List a
 Nil ++ ys = ys
-Cons x xs ++ ys = Cons x (xs ++ ys)
+(x :: xs) ++ ys = Cons x (xs ++ ys)
 
 ++-nil : {l : Level} {a : Set l} (xs : List a) → xs == xs ++ Nil
 ++-nil Nil = refl
-++-nil (Cons x xs) = cong (Cons x) (++-nil xs)
+++-nil (x :: xs) = cong (Cons x) (++-nil xs)
 
 ++-assoc : {l : Level} {a : Set l} (xs ys zs : List a) →
   (xs ++ (ys ++ zs)) == ((xs ++ ys) ++ zs)
 ++-assoc Nil ys zs = refl
-++-assoc (Cons x xs) ys zs = cong (Cons x) (++-assoc xs ys zs)
+++-assoc (x :: xs) ys zs = cong (Cons x) (++-assoc xs ys zs)
 
 map : {a b : Set} -> (a -> b) -> List a -> List b
 map f Nil = Nil
-map f (Cons x xs) = Cons (f x) (map f xs)
+map f (x :: xs) = Cons (f x) (map f xs)
 
 filter : {a : Set} -> (a -> Bool) -> List a -> List a
 filter p Nil = Nil
-filter p (Cons x xs) =
+filter p (x :: xs) =
   if p x then Cons x (filter p xs) else (filter p xs)
 
 length : {a : Set} -> List a -> Nat
 length Nil = Zero
-length (Cons _ xs) = Succ (length xs)
+length (_ :: xs) = Succ (length xs)
 
 <=-dec : Nat -> Nat -> Bool
 <=-dec Zero m = True
@@ -213,15 +215,15 @@ length (Cons _ xs) = Succ (length xs)
 
 all : {a : Set} -> (P : a -> Bool) -> List a -> Set
 all P Nil = ⊤
-all P (Cons x xs) = Pair (So (P x)) (all P xs) 
+all P (x :: xs) = Pair (So (P x)) (all P xs)
 
 data _∈_ {a : Set} : a -> List a -> Set where
   ∈Head : ∀ {x xs} -> x ∈ Cons x xs
   ∈Tail : ∀ {x x' xs} -> x ∈ xs -> x ∈ Cons x' xs
 
 delete : {a : Set} {x : a} (xs : List a) -> x ∈ xs -> List a
-delete (Cons x ys) ∈Head = ys
-delete (Cons y ys) (∈Tail i) = Cons y (delete ys i)
+delete (x :: ys) ∈Head = ys
+delete (y :: ys) (∈Tail i) = Cons y (delete ys i)
 
 deleteHead : {a : Set} {x : a} {xs : List a} -> delete (Cons x xs) ∈Head == xs
 deleteHead = refl
@@ -277,7 +279,7 @@ rebase P iP (fst , snd) x = iP fst x snd
 
 all' : {l : Level} {a : Set l} → (a → Set) → List a → Set
 all' P Nil = ⊤
-all' P (Cons x xs) = Pair (P x) (all' P xs)
+all' P (x :: xs) = Pair (P x) (all' P xs)
 
 ⇔-= : {l : Level} {P : Set l} {Q : P → Set} → {p p' : P} → p == p' → Q p ⇔ Q p'
 ⇔-= refl = ⇔-refl
@@ -290,7 +292,7 @@ all' P (Cons x xs) = Pair (P x) (all' P xs)
 
 all'-pair : {l : Level} {a : Set l} (P : a → Set) → (xs ys : List a) → Pair (all' P xs) (all' P ys) ⇔ all' P (xs ++ ys)
 all'-pair P Nil ys = iff (_,_ tt) Pair.snd
-all'-pair P (Cons x xs) ys = ⇔-trans ⇔-pair-assoc (⇔-pair ⇔-refl (all'-pair P xs ys))
+all'-pair P (x :: xs) ys = ⇔-trans ⇔-pair-assoc (⇔-pair ⇔-refl (all'-pair P xs ys))
 
 record IsMonad (m : Set -> Set) : Set₁ where
   constructor isMonad
