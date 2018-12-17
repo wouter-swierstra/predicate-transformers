@@ -119,3 +119,6 @@ index-map : {a b : Set} {n : Nat} (i : Fin n) (f : a → b) (xs : Vec n a) →
   vmap f xs !! i == f (xs !! i)
 index-map F0 f (x :: xs) = refl
 index-map (FS i) f (x :: xs) = index-map i f xs
+
+uncons : ∀ {a n} → Vec (Succ n) a → Pair a (Vec n a)
+uncons (x :: xs) = x , xs

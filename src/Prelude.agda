@@ -142,6 +142,17 @@ open import Data.Nat public
 
 module NaturalLemmas where
   open Data.Nat
+  succ-inj : (i j : Nat) → Succ i == Succ j → i == j
+  succ-inj i .i refl = refl
+
+  eq-Nat : (i j : Nat) → Dec (i == j)
+  eq-Nat zero zero = yes refl
+  eq-Nat zero (suc j) = no (λ ())
+  eq-Nat (suc i) zero = no (λ ())
+  eq-Nat (suc i) (suc j) with eq-Nat i j
+  eq-Nat (suc i) (suc j) | yes x = yes (cong Succ x)
+  eq-Nat (suc i) (suc j) | no x = no (λ z → x (succ-inj i j z))
+
   zero-cancellative : (n : Nat) -> (n * Zero) == Zero
   zero-cancellative Zero = refl
   zero-cancellative (Succ n) = zero-cancellative n
@@ -150,12 +161,72 @@ module NaturalLemmas where
   plus-zero Zero = refl
   plus-zero (Succ n) = cong Succ (plus-zero n)
 
-
   plus-succ : (x y : Nat) -> Succ (x + y) == (x + Succ y)
   plus-succ Zero y = refl
   plus-succ (Succ x) y = cong Succ (plus-succ x y)
 
-open NaturalLemmas
+  +-assoc : ∀ a b c → a + (b + c) == (a + b) + c
+  +-assoc zero b c = refl
+  +-assoc (suc a) b c = cong Succ (+-assoc a b c)
+
+  ≤-refl : ∀ {x} → x ≤ x
+  ≤-refl {zero} = z≤n
+  ≤-refl {suc x} = s≤s ≤-refl
+  ≤-trans : ∀ {x y z} → x ≤ y → y ≤ z → x ≤ z
+  ≤-trans z≤n x₂ = z≤n
+  ≤-trans (s≤s x₁) (s≤s x₂) = s≤s (≤-trans x₁ x₂)
+
+  ≤-succ : ∀ {i j} → i ≤ j → i ≤ Succ j
+  ≤-succ z≤n = z≤n
+  ≤-succ (s≤s x) = s≤s (≤-succ x)
+
+  ≤-+ : ∀ {a b} c → a ≤ b → a + c ≤ b + c
+  ≤-+ {zero} {zero} c x = ≤-refl
+  ≤-+ {zero} {suc b} c x = ≤-succ (≤-+ {Zero} {b} c z≤n)
+  ≤-+ {suc a} {zero} c ()
+  ≤-+ {suc a} {suc b} c (s≤s x) = s≤s (≤-+ c x)
+
+  _lt_ : (i j : Nat) → Dec (i < j)
+  _ lt Zero = no (λ ())
+  Zero lt Succ j = yes (s≤s z≤n)
+  Succ i lt Succ j with i lt j
+  suc i lt suc j | yes x = yes (s≤s x)
+  suc i lt suc j | no x = no (λ z → x (≤-pred z))
+
+  antisymm : ∀ x y → x < y → y < x → ⊥
+  antisymm zero y x₁ ()
+  antisymm (suc x) zero () x₂
+  antisymm (suc x) (suc y) (s≤s x₁) (s≤s x₂) = antisymm x y x₁ x₂
+
+  +-succ : ∀ a b → a + Succ b == Succ (a + b)
+  +-succ zero b = refl
+  +-succ (suc a) b = cong Succ (+-succ a b)
+
+  =-≤-= : ∀ {i j k l} → i == j → j ≤ k → k == l → i ≤ l
+  =-≤-= refl x refl = x
+
+module NumberTheory where
+  even : Nat → Bool
+  even 0 = True
+  even 1 = False
+  even (Succ (Succ n)) = even n
+
+  half : Nat → Nat
+  half 0 = 0
+  half 1 = 1
+  half (Succ (Succ n)) = Succ (half n)
+
+  double : Nat → Nat
+  double 0 = 0
+  double (Succ n) = Succ (Succ (double n))
+
+  open import Data.Nat.Divisibility
+
+  _eq_ : Nat → Nat → Bool
+  Zero eq Zero = True
+  Zero eq Succ b = False
+  Succ a eq Zero = False
+  Succ a eq Succ b = a eq b
 
 open import Data.Integer public
   using
@@ -246,6 +317,18 @@ record Sigma {l l'} (a : Set l) (b : a -> Set l') : Set (l ⊔ l') where
 uncurryΣ : {a : Set} {b : a → Set} {c : (x : a) → b x → Set} → (f : (x : a) → (y : b x) → c x y) → (s : Sigma a b) → c (Sigma.fst s) (Sigma.snd s)
 uncurryΣ f (fst , snd) = f fst snd
 
+filter' : ∀ {l} {a : Set l} {P : a → Set} → ((x : a) → Dec (P x)) → List a → List (Sigma a P)
+filter' p Nil = Nil
+filter' p (x :: xs) with p x
+filter' p (x :: xs) | yes px = (x , px) :: filter' p xs
+filter' p (x :: xs) | no np = filter' p xs
+
+filter-shortens : ∀ {a} {P : a → Set} (p : (x : a) → Dec (P x)) (xs : List a) → length xs Data.Nat.≥ length (filter' p xs)
+filter-shortens p Nil = Data.Nat.z≤n
+filter-shortens p (x :: xs) with p x
+filter-shortens p (x :: xs) | yes x₁ = Data.Nat.s≤s (filter-shortens p xs)
+filter-shortens p (x :: xs) | no x₁ = NaturalLemmas.≤-succ (filter-shortens p xs)
+
 -- Constant function for Set
 K : {a : Set} -> Set -> (a -> Set)
 K b = \_ -> b
@@ -333,3 +416,11 @@ instance
     r-id : ∀ {a} {mx : List a} → bind' mx (λ x → x :: Nil) ≡ mx
     r-id {mx = Nil} = refl
     r-id {mx = x :: mx} = cong (x ::_) r-id
+
+fmap-preserves-length : ∀ {a b} (f : a → b) (xs : List a) → length xs == length (fmap f xs)
+fmap-preserves-length f Nil = refl
+fmap-preserves-length f (x :: xs) = cong Succ (fmap-preserves-length f xs)
+
+sum : ∀ {l} {a : Set l} (f : a → Nat) (xs : List a) → Nat
+sum f Nil = 0
+sum f (x :: xs) = f x Data.Nat.+ sum f xs
