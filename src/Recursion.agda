@@ -156,35 +156,36 @@ partial-expr f-spec (Step c k) P = f-spec c (λ x → partial-expr f-spec (k x) 
 -- We can derive a predicate transformer from a relation between input and output values.
 pt : ∀ {I O} (R : (i : I) → O i → Set) → PTs I O
 pt R i P = ∀ o → R i o → P o
--- The predicate transformer asserts that all potential output values satisfy the predicate.
-partial-correctness : ∀ {I O} (R : (i : I) → O i → Set) → (f : I ⇝ O) → I → Set
-partial-correctness R f i = partial-expr (pt R) (f i) (R i)
+-- Partial correctness means that evaluating one step along f
+-- preserves the correctness of the predicate.
+partial-correctness : ∀ {I O} (s : PTs I O) → (f : I ⇝ O) → I → Set
+partial-correctness s f i = ∀ P → s i P → partial-expr s (f i) P
 
 -- Partial correctness plus termination implies total correctness.
 -- However, we need both correctness of the function for all arguments,
 -- and for the expression that we are substituting the expression into.
-correctness : ∀ {I O a} (R : (i : I) → O i → Set) (f : I ⇝ O) (p : Free I O a) (P : a → Set) → ((i : I) → partial-correctness R f i) → partial-expr (pt R) p P → (t : terminates f p) → P (compute f p t)
-correctness R f (Pure x) P p-f p-p t = p-p
-correctness R f (Step c k) P p-f p-p (zero , ())
-correctness R f (Step c k) P p-f p-p (suc fst , snd) = correctness R f (f c >>= k) P p-f (bind-pt R f c k P p-p p-f) (fst , snd)
+correctness : ∀ {I O a} →
+  (s : PTs I O) (cS : ∀ c P P' → (∀ x → P x → P' x) → s c P → s c P') →
+  (f : I ⇝ O) (p : Free I O a) (P : a → Set) → ((i : I) → partial-correctness s f i) → partial-expr s p P → (t : terminates f p) → P (compute f p t)
+correctness s cS f (Pure x) P p-f p-p t = p-p
+correctness s cS f (Step c k) P p-f p-p (zero , ())
+correctness s cS f (Step c k) P p-f p-p (suc fst , snd) = correctness s cS f (f c >>= k) P p-f (bind-nested-partial s cS (f c) k P (p-f c _ p-p)) (fst , snd)
   where
-  bind-partial : ∀ {I O a} (R : (i : I) → O i → Set) (P : a → Set) →
-    (c : I) (p : Free I O (O c)) (k : O c → Free I O a) →
-    partial-expr (pt R) p (R c) →
-    ((o : O c) → R c o → partial-expr (pt R) (k o) P) →
-    partial-expr (pt R) (p >>= k) P
-  bind-partial R P c (Pure x) k p-p p-k = p-k x p-p
-  bind-partial R P c (Step c' k') k p-p p-k o x = bind-partial R P c (k' o) k (p-p o x) p-k
-
-  bind-pt : ∀ {I O a} (R : (i : I) → O i → Set) (f : I ⇝ O) (c : I) (k : O c → Free I O a) (P : a → Set) →
-    pt R c (λ x → partial-expr (pt R) (k x) P) →
-    ((i : I) → partial-correctness R f i) →
-    partial-expr (pt R) (f c >>= k) P
-  bind-pt R f c k P p-p p-f = bind-partial R P c (f c) k (p-f c) p-p
+  bind-nested-partial : ∀ {I O a b}
+    (s : PTs I O) (cS : ∀ c P P' → (∀ x → P x → P' x) → s c P → s c P') →
+    (p : Free I O a) (k : a → Free I O b) (P : b → Set) →
+    partial-expr s p (λ x → partial-expr s (k x) P) →
+    partial-expr s (p >>= k) P
+  bind-nested-partial s cS (Pure x) k P p-p-k = p-p-k
+  bind-nested-partial s cS (Step c' k') k P p-p-k = cS c' _ _ (λ x → bind-nested-partial s cS (k' x) k P) p-p-k
 
 -- Correctness for functions: if a function is partially correct on all arguments,
 -- and it terminates on the given argument,
 -- then it terminates with a correct answer.
 -- (We need partial correctness on all arguments to carry the proof through the recursive calls.)
-correctness' : ∀ {I O} (R : (i : I) → O i → Set) (f : I ⇝ O) (i : I) → ((i : I) → partial-correctness R f i) → (t : terminates' f i) → R i (compute' f i t)
-correctness' R f i x t = correctness R f (f i) (λ o → R i o) x (x i) t
+correctness' : ∀ {I O} →
+  (s : PTs I O) (cS : ∀ c P P' → (∀ x → P x → P' x) → s c P → s c P') →
+  (f : I ⇝ O) (i : I) →
+  ((i : I) → partial-correctness s f i) → (t : terminates' f i) →
+  (P : O i → Set) → s i P → P (compute' f i t)
+correctness' s cS f i x t P pt = correctness s cS f (f i) P x (x i P pt) t
