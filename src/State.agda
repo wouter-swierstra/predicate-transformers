@@ -24,22 +24,25 @@ fmapS f (fst , snd) = f fst , snd
 prfmapS : {a s : Set} -> {b : a -> Set}
   -> (f : (x : a) -> b x) -> (x : Pair a s)
   -> f (Pair.fst x) == Pair.fst (fmapS f x)
-prfmapS f (fst , snd) = Refl
+prfmapS f (fst , snd) = refl
 
 State : (s : Set) (b : Set) -> Set
 State s b = Slice s (C s) (R s) b
 
-Monad-State : {s : Set} -> IsMonad (\a -> s -> Pair a s)
-IsMonad.bind Monad-State mx f t = uncurry f (mx t)
-IsMonad.pure Monad-State x t = x , t
+instance
+  Monad-State : {s : Set} -> IsMonad (\a -> s -> Pair a s)
+  IsMonad.bind Monad-State mx f t = uncurry f (mx t)
+  IsMonad.pure Monad-State x t = x , t
+  IsMonad.left-identity Monad-State = refl
+  IsMonad.right-identity Monad-State = refl
 
 -- Smart constructors for State.
 get : {s : Set} -> State s s
-get = Step Get return
+get = Step Get Pure
 put : {s : Set} -> s -> State s ⊤
-put x = Step (Put x) (λ _ → return tt)
+put x = Step (Put x) (λ _ → Pure tt)
 modify : {s : Set} -> (s -> s) -> State s s
-modify f = Step Get (\t -> Step (Put (f t)) \_ -> return t)
+modify f = Step Get (\t -> Step (Put (f t)) \_ -> Pure t)
 specState : {s : Set} {a : Set} {b : Set} ->
   (a -> s -> Set) -> (a -> s -> b -> s -> Set) -> a -> State s b
 specState pre post x = spec (pre x) (post x)
@@ -259,7 +262,7 @@ refineGet : {s : Set} -> {b : Set} ->
   (P : s -> Set) ->
   (Q : s -> b -> s -> Set) ->
   spec P Q ⊑' (get >>= specState (preGet P) (postGet Q))
-refineGet {s} {b} P Q = refinement' λ P₁ t x → (Refl , Pair.fst x) , (λ x₁ x₂ x₃ → Pair.snd x x₁ x₂ (Pair.snd x₃))
+refineGet {s} {b} P Q = refinement' λ P₁ t x → (refl , Pair.fst x) , (λ x₁ x₂ x₃ → Pair.snd x x₁ x₂ (Pair.snd x₃))
 refineUnderGet : {s : Set} {b : Set} ->
   (prog prog' : s -> State s b) ->
   (prog ⊑ prog') ->
@@ -271,7 +274,7 @@ refinePut : {s : Set} -> {b : Set}
   -> (Q : s -> b -> s -> Set)
   -> (t : s)
   -> spec P Q ⊑' (put t >>= specState (prePut t P Q) (postPut t P Q))
-refinePut {s} {b} P Q t = refinement' λ P₁ t₁ x → Refl , (λ x₁ x₂ x₃ → Pair.snd x x₁ x₂ (x₃ t₁ (Pair.fst x)))
+refinePut {s} {b} P Q t = refinement' λ P₁ t₁ x → refl , (λ x₁ x₂ x₃ → Pair.snd x x₁ x₂ (x₃ t₁ (Pair.fst x)))
 
 refineUnderPut : {s : Set} {b : Set} ->
   (t : s) ->
@@ -305,7 +308,7 @@ doReturnState : {a s : Set} ->
   (x : a) ->
   Impl' (spec (\t -> post t x t) post)
 doReturnState {a} {s} post x = impl
-  (return x)
+  (Pure x)
   tt
   (refinement' (λ P t z → Pair.snd z t x (Pair.fst z)))
 
@@ -350,5 +353,5 @@ incrImpl : Impl' incrSpec
 incrImpl =
   doGet \n ->
   doPut (Succ n) (
-  doSharpenState (λ t x → x , Refl , x) (λ t x t' x₁ x₂ t₁ x₃ → Pair.fst x₃ , (Triple.snd x₂ , Triple.thd x₂)) (
+  doSharpenState (λ t x → x , refl , x) (λ t x t' x₁ x₂ t₁ x₃ → Pair.fst x₃ , (Triple.snd x₂ , Triple.thd x₂)) (
   doReturnState (\n+1 n' n+1' -> Triple (Succ n == n+1) (n == n') (Succ n == n+1')) n))

@@ -6,6 +6,7 @@ open import Level
 
 module Relations where
 
+{-
   _⊆_ : {l : Level} {a b : Set l} ->
     (R1 R2 : a -> b -> Set l) -> Set l
   _⊆_ {a = a} {b = b} R1 R2 =
@@ -22,7 +23,9 @@ module Relations where
 
   _⊑_ : {l : Level} -> {a b : Set l} -> (R R' : a -> b -> Set l) -> Set (suc l)
   _⊑_ {l} {a = a} {b = b} R R' = (P : b -> Set l) -> (x : a) -> wp R P x -> wp R' P x
+  -}
   
+{-
 module Free where
 
   data Free (C : Set) (R : C -> Set) (a : Set) : Set where
@@ -54,11 +57,12 @@ module Free where
   fold alg pure spec (Pure x) = pure x
   fold alg pure spec (Step c k) = alg c (\r -> fold alg pure spec (k r))
   fold alg pure spec (Spec {c} P k) = spec P (\r -> fold alg pure spec (k r))
+  -}
 
 module Maybe where
 
   -- Define our free monad
-  open Free
+  open import Spec
 
   data C : Set where
     Nothing : C
@@ -67,7 +71,7 @@ module Maybe where
   R Nothing = ⊥
 
   Maybe : Set -> Set
-  Maybe = Free C R
+  Maybe = Mix C R
 
   -- Define smart constructors
   just : ∀ {a : Set} -> a -> Maybe a
@@ -76,14 +80,11 @@ module Maybe where
   nothing : ∀ {a : Set} -> Maybe a
   nothing = Step Nothing λ()
 
-  spec : ∀ {a : Set} -> (P : a -> Set) -> Maybe a
-  spec P = Spec P Pure
-
   -- Define a propositional handler 
   handle : ∀ {a} -> (P : a -> Set) -> Maybe a -> Set
   handle P (Pure x) = P x
   handle P (Step Nothing x) = ⊥
-  handle {a} P (Spec {b} Q k) = Sigma b \x -> Pair (Q x) (handle P (k x))
+  handle {a} P (Spec {b} pre post k) = Pair pre ((x : b) -> Pair (post x) (handle P (k x)))
 
   -- Compute wp for kleisli arrows
   wpMaybe : ∀ {a b : Set} -> (a -> Maybe b) -> (a -> b -> Set) -> (a -> Set)
@@ -98,14 +99,7 @@ module Maybe where
       handle Q (c >>= f)
   >>-property (Pure x) f P Q p q = q x p
   >>-property (Step Nothing x) f P Q () q
-  >>-property (Spec H k) f P Q (x , (h1 , h2)) q = x , (h1 , {!q x ?!})
-
-  >>-property' : ∀ {a b} -> (c : Maybe a) -> (f : a -> Maybe b) ->
-    (P : a -> Set) -> (Q : a -> b -> Set) ->
-      handle P c ->
-      ((x : a) -> P x -> wpMaybe f Q x) ->
-      handle {!!} (c >>= f)
-  >>-property' c f P Q p q = {!!}
+  >>-property (Spec pre post k) f P Q (x , y) q = x , (λ x₁ → Pair.fst (y x₁) , >>-property (k x₁) f P Q (Pair.snd (y x₁)) q)
 
 
 --   -- Another example

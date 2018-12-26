@@ -28,10 +28,10 @@ f91-spec i o with 100 lt i
 f91-spec i o | yes _ = o == i - 10
 f91-spec i o | no _ = o == 91
 
-f91-proof : (n : Nat) → partial-correctness f91-spec f91 n
-f91-proof n with 100 lt n
-f91-proof n | yes p = refl
-f91-proof n | no ¬p = lemma n ¬p
+f91-proof : (n : Nat) → partial-correctness (pt f91-spec) f91 n
+f91-proof n P pf with 100 lt n
+f91-proof n P pf | yes p = pf (n ∸ 10) refl
+f91-proof n P pf | no ¬p = λ o z o₁ z₁ → pf o₁ (lemma n ¬p o z o₁ z₁)
   where
   plusminus : ∀ n k → n + Succ k ∸ k == Succ n
   plusminus zero zero = refl

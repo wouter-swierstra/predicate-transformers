@@ -337,9 +337,9 @@ progRefinesItsSpec pre post prog prf x = refinement λ P x₁ →
     (runCompleteness pre post prog prf x (Pair.fst x₁))
 
 MSemantics : Semantics C R Monad-Maybe
-MSemantics = semantics liftM mustPT run' (λ _ _ → ⇔-refl) equiv bind
+MSemantics = semantics liftM mustPT run' (λ _ _ → ⇔-refl) equiv bind'
   where
   equiv : (c : C) (P P' : R c → Set) → ((x : R c) → P x ⇔ P' x) → mustPT c P ⇔ mustPT c P'
   equiv Abort P P' x = ⇔-refl
-  bind : ∀ {a} (P : a → Set) c (k : R c → Maybe a) → mustPT c (λ x → liftM P (k x)) ⇔ liftM P (IsMonad.bind Monad-Maybe (run' c) k)
-  bind P Abort k = ⇔-refl
+  bind' : ∀ {a} (P : a → Set) c (k : R c → Maybe a) → mustPT c (λ x → liftM P (k x)) ⇔ liftM P (IsMonad.bind Monad-Maybe (run' c) k)
+  bind' P Abort k = ⇔-refl

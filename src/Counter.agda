@@ -12,7 +12,7 @@ R Tick = ⊤
 Count = Slice Nat C R
 
 tick : Count ⊤
-tick = Step Tick return
+tick = Step Tick Pure
 
 ptCount : PTs Nat C R
 ptCount Tick P n = P tt (Succ n)
@@ -63,13 +63,15 @@ doTick (impl prog code (refinement proof)) = impl
   (refinement λ P x x₁ → proof (λ _ → P x) (Succ x) ((onPred (Pair.fst x₁)) , λ x' z x₂ → Pair.snd x₁ x' z (fromPred x₂)))
 
 rep : Nat -> Slice Nat C R ⊤ -> Slice Nat C R ⊤
-rep Zero m = return tt
+rep Zero m = pure tt
 rep (Succ n) m = m >>= \_ -> rep n m
 
 hanoi : Nat -> Count ⊤
-hanoi Zero = return tt
+hanoi Zero = pure tt
 hanoi (Succ n) = hanoi n >>= \_ -> tick >>= \_ -> hanoi n
 
+open import Data.Nat
+open NaturalLemmas
 -- Sum of the first $n$ powers of $2$: $2^n - 1$.
 binsum : Nat -> Nat
 binsum Zero = 0
@@ -88,7 +90,8 @@ hanoiImpl (Succ n) = doBind (hanoiImpl n) λ _ →
   where -- prove stuff about binsum. This is a giant mess, but works :D
   lemma : ∀ n t (x : ⊤) t' → OnPred (λ n1 → Sigma Nat (λ n0 → ⊤ → n1 == (n0 + binsum n))) t → t' == (t + binsum n) → OnPred (λ n'' → ∀ n0 → n'' == (n0 + binsum n) → t' == (n0 + Succ (binsum n + binsum n))) t
   lemma n t x t' (onPred (fst , snd)) Refl with snd tt
-  lemma n .(Succ (fst + binsum n)) x .(Succ ((fst + binsum n) + binsum n)) (onPred (fst , snd)) Refl | Refl = onPred λ n0 x₁ →
+  lemma n .(Succ (fst + binsum n)) x .(Succ ((fst + binsum n) + binsum n)) (onPred (fst , snd)) refl | refl = onPred λ n0 x₁ →
     trans (plus-succ (fst + binsum n) (binsum n)) (
-    trans (plus-assoc fst (binsum n) (Succ (binsum n))) (
-    trans (cong (\n' -> n' + (binsum n + Succ (binsum n))) (plus-inj {fst} {n0} x₁)) (cong (λ n' → n0 + n') (sym (plus-succ (binsum n) (binsum n))))))
+    trans (sym (+-assoc fst (binsum n) (Succ (binsum n)))) (
+    trans (cong (λ n' → n' + _) (+-inj-left fst n0 (binsum n) x₁) )
+      (sym (cong (_+_ n0) (plus-succ (binsum n) (binsum n))))))

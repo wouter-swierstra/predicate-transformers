@@ -20,6 +20,7 @@ f · g = λ x → f (g x)
 _∘_ = _·_
 
 open import Relation.Binary.PropositionalEquality public
+  hiding (preorder)
 infix 1 _==_
 _==_ = _≡_
 
@@ -204,6 +205,13 @@ module NaturalLemmas where
 
   =-≤-= : ∀ {i j k l} → i == j → j ≤ k → k == l → i ≤ l
   =-≤-= refl x refl = x
+
+  +-inj-left : ∀ a b c → a + c == b + c → a == b
+  +-inj-left a b Zero pf = trans (plus-zero a) (trans pf (sym (plus-zero b)))
+  +-inj-left a b (Succ c) pf = succ-inj a b (+-inj-left (Succ a) (Succ b) c (trans (sym (+-succ a c)) (trans pf (+-succ b c))))
+  +-inj-right : ∀ a b c → a + b == a + c → b == c
+  +-inj-right Zero b c refl = refl
+  +-inj-right (Succ a) b c pf = +-inj-right a b c (succ-inj (a + b) (a + c) pf)
 
 module NumberTheory where
   even : Nat → Bool

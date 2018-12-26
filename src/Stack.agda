@@ -8,25 +8,25 @@ Stack = List
 
 pop : ∀ {a} -> Stack a -> Partial (Pair a (Stack a))
 pop Nil = abort
-pop (Cons x xs) = return (x , xs)
+pop (x :: xs) = pure (x , xs)
 
 PopSpec : Stack Nat -> (Pair Nat (Stack Nat)) -> Set
 PopSpec xs (y , ys) = xs == Cons y ys
 
-K : {a : Set} -> Set -> (a -> Set)
-K A _ = A
-
-popSpec : (xs : Stack Nat) -> M {Stack Nat} (\_ -> Pair Nat (Stack Nat))
+popSpec : (xs : Stack Nat) -> M (Stack Nat) (\_ -> Pair Nat (Stack Nat))
 popSpec xs = spec (\q -> q == Nil -> ⊥) PopSpec
 
+{-
 fromCode : ∀ {a b : Set} -> (Partial a) -> M {b} (\_ -> a)
 fromCode (Pure y) = Pure (Done y)
 fromCode (Step Abort x) = Step Abort \()
+-}
 
 popCorrect : popSpec ⊑ \xs -> fromCode {Pair Nat (Stack Nat)} (pop xs)
-popCorrect = refinement λ { P Nil (fst , snd) → magic (fst Refl)
-                          ; P (Cons x xs) (fst , snd) → snd _ Refl}
+popCorrect = refinement λ { P Nil (fst , snd) → magic (fst refl)
+                          ; P (x :: xs) (fst , snd) → snd _ refl}
 
+open import Data.Nat
 data AddSpec : Stack Nat -> Stack Nat -> Set where
   AddThem : ∀ {x1 x2 : Nat} {xs : Stack Nat} -> AddSpec (Cons x1 (Cons x2 xs)) (Cons (x1 + x2) xs)
 
@@ -36,7 +36,7 @@ null? _ = ⊥
 
 single? : Stack Nat -> Set
 single? Nil = ⊥
-single? (Cons x xs) = null? xs
+single? (x :: xs) = null? xs
 
 addSpec : Stack Nat -> M {Stack Nat} (\_ -> Stack Nat)
 addSpec (xs) = spec (\xs -> Pair (null? xs -> ⊥) (single? xs -> ⊥)) AddSpec
@@ -45,15 +45,15 @@ add : Stack Nat -> M {Stack Nat} (\_ -> Stack Nat)
 add xs =
   pop xs >>= \{ (x1 , xs) -> 
   pop xs >>= \{ (x2 , xs) ->
-  return (Done (Cons (x1 + x2) xs))}}
+  return (Pure (Cons (x1 + x2) xs))}}
 
 addCorrect : addSpec ⊑ add
 addCorrect = refinement prf
   where
-  prf : (P : Stack Nat -> Stack Nat -> Set) -> wpM P addSpec ⊆ wpM P add
+  prf : (P : Stack Nat -> Stack Nat -> Set) -> wpMix P addSpec ⊆ wpMix P add
   prf P Nil ((fst , _) , _) = fst _
-  prf P (Cons x Nil) ((_ , snd) , _) = snd _
-  prf P (Cons x (Cons x₁ xs)) H = Pair.snd H _ AddThem
+  prf P (x :: Nil) ((_ , snd) , _) = snd _
+  prf P (x :: x₁ :: xs) H = Pair.snd H _ AddThem
 
 -- Can we do calculation in this style?
 
@@ -71,23 +71,23 @@ explicitDerivation =
     where
       step1 : addSpec ⊑ (\xs -> pop xs >>= \ { (x1 , xs) -> spec (\xs -> Pair (null? xs -> ⊥) (single? xs -> ⊥)) ((\as bs -> AddSpec as bs))})
       step1 = refinement λ { P Nil ((fst , _) , snd) → magic (fst _)
-                            ; P (Cons x Nil) ((_ , fst) , snd) → magic (fst _)
-                            ; P (Cons x (Cons x₁ xs)) (H , snd) → H , snd}
+                            ; P (x :: Nil) ((_ , fst) , snd) → magic (fst _)
+                            ; P (x :: x₁ :: xs) (H , snd) → H , snd}
       step2 : (\xs -> pop xs >>= \ { (x1 , xs) -> spec (\xs -> Pair (null? xs -> ⊥) (single? xs -> ⊥)) AddSpec})
               ⊑
               (\xs -> pop xs >>= \ { (x1 , xs) ->
                       pop xs >>= \ { (x2 , xs) ->
                       spec (\xs -> ⊤) AddSpec}})
       step2 = refinement λ { P Nil ()
-                            ; P (Cons x Nil) ((_ , fst) , snd) → magic (fst _)
-                            ; P (Cons x (Cons x₁ i)) (fst , snd) → tt , snd}
+                            ; P (x :: Nil) ((_ , fst) , snd) → magic (fst _)
+                            ; P (x :: x1 :: xs) (fst , snd) → tt , snd}
       step3 : (\xs -> pop xs >>= \ { (x1 , xs) ->
                       pop xs >>= \ { (x2 , xs) ->
                       spec (\xs -> ⊤) AddSpec}})
               ⊑ add
       step3 = refinement λ { P Nil ()
-                            ; P (Cons x Nil) ()
-                            ; P (Cons x1 (Cons x2 xs)) (fst , snd) → snd (Cons (x1 + x2) xs) AddThem}
+                            ; P (x :: Nil) ()
+                            ; P (x1 :: x2 :: xs) (fst , snd) → snd (Cons (x1 + x2) xs) AddThem}
 
 --  -- Rephrasing things a bit...
 

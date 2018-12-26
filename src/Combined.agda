@@ -21,7 +21,7 @@ data Free {n : Nat} (Cs : Vec n Effect) (a : Set) : Set where
 
 instance
   IsMonad-Free : {n : Nat} {Cs : Vec n Effect} → IsMonad (Free Cs)
-  IsMonad-Free {n} {Cs} = isMonad b Pure refl
+  IsMonad-Free {n} {Cs} = isMonad b Pure refl ?
     where
     b : {a : Set} {b : Set} → Free Cs a → (a → Free Cs b) → Free Cs b
     b (Pure x) f = f x
@@ -29,7 +29,7 @@ instance
 
 _++_ : {k n : Nat} {a : Set} → Vec k a → Vec n a → Vec (k + n) a
 vNil ++ ys = ys
-vCons x xs ++ ys = vCons x (xs ++ ys)
+(x :: xs) ++ ys = vCons x (xs ++ ys)
 
 -- Add additional potential effects (that we will not use).
 lift : {n : Nat} {a : Set} {e : Effect} {es : Vec n Effect} →
@@ -48,8 +48,8 @@ record EffectHandler (m : Set → Set) : Set where
 handle : ∀ {n m} (es : Vec n (EffectHandler m)) →
   (i : Fin n) → Handler m ((vmap EffectHandler.e es) !! i)
 handle vNil ()
-handle (vCons (eh e h) es) F0 c = h c
-handle (vCons e es) (FS i) c = handle es i c
+handle ((eh e h) :: es) F0 c = h c
+handle (e :: es) (FS i) c = handle es i c
 
 run : {m : Set → Set} {{M : IsMonad m}} →
   {n : Nat} {es : Vec n Effect} {a : Set} →
@@ -319,11 +319,11 @@ module Exceptions where
     (P → terminates (lift (Impl.prog t)) → wp (spec P' Q') Q) →
     (P → ¬ (terminates (lift (Impl.prog t))) → wp (spec P'' Q'') Q) →
     Impl (spec P Q)
-  try impl t rt catch impl c rc [ ok , no ] = impl (Step F0 Catch (caseRole t c)) λ P x → let
+  try impl t rt catch impl c rc [ ok , bad ] = impl (Step F0 Catch (caseRole t c)) λ P x → let
       p = Pair.fst x
     in (
       λ tryOK → rt P (Pair.fst (ok p tryOK) , λ x₁ x₂ → Pair.snd x x₁ (Pair.snd (ok p tryOK) x₁ x₂))) ,
-      λ tryNo → rc P (Pair.fst (no p tryNo) , λ x₁ x₂ → Pair.snd x x₁ (Pair.snd (no p tryNo) x₁ x₂))
+      λ tryNo → rc P (Pair.fst (bad p tryNo) , λ x₁ x₂ → Pair.snd x x₁ (Pair.snd (bad p tryNo) x₁ x₂))
     where
     caseRole : {b : Set} (t c : b) → Role → b
     caseRole t _ Try = t
@@ -331,15 +331,15 @@ module Exceptions where
 
   slowProd : (xs : List Nat) → Nat
   slowProd Nil = 1
-  slowProd (Cons x xs) = x * slowProd xs
+  slowProd (x :: xs) = x * slowProd xs
 
   isProd : (xs : List Nat) → (y : Nat) → Set
   isProd xs y = slowProd xs == y
 
   isProdZero : (xs : List Nat) → 0 ∈ xs → isProd xs 0
   isProdZero Nil ()
-  isProdZero (Cons .0 xs) ∈Head = refl
-  isProdZero (Cons x xs) (∈Tail i) = times-zero (slowProd xs) x (isProdZero xs i)
+  isProdZero (.0 :: xs) ∈Head = refl
+  isProdZero (x :: xs) (∈Tail i) = times-zero (slowProd xs) x (isProdZero xs i)
     where
     times-zero : (m n : Nat) → m == 0 → n * m == 0
     times-zero .0 zero refl = refl
@@ -378,22 +378,22 @@ module Exceptions where
     where
     isProd-cons : (x p : Nat) (xs : List Nat) → isProd xs p → isProd (Cons x xs) (x * p)
     isProd-cons x .1 Nil refl = refl
-    isProd-cons x .(x₂ * slowProd xs) (Cons x₂ xs) refl = refl
+    isProd-cons x .(x₂ * slowProd xs) (x₂ :: xs) refl = refl
 
     go : (xs : List Nat) → Impl (spec (¬ (0 ∈ xs)) (isProd xs))
     go Nil = doReturn 1 (const refl)
-    go (Cons zero xs) = doFail λ x → Pair.fst x ∈Head
-    go (Cons x@(suc _) xs) = doBind (doSharpen (λ z z₁ → z (∈Tail z₁)) (λ x₁ x₂ x₃ → x₃) (go xs)) λ prod → doReturn (x * prod) λ x₁ → isProd-cons x prod xs x₁
+    go (zero :: xs) = doFail λ x → Pair.fst x ∈Head
+    go (x@(suc _) :: xs) = doBind (doSharpen (λ z z₁ → z (∈Tail z₁)) (λ x₁ x₂ x₃ → x₃) (go xs)) λ prod → doReturn (x * prod) λ x₁ → isProd-cons x prod xs x₁
 
     ex-falso : {a : Set} → ⊥ → a
     ex-falso ()
 
     go-terminates : (xs : List Nat) → terminates (lift (Impl.prog (go xs))) → ¬ (0 ∈ xs)
     go-terminates Nil _ ()
-    go-terminates (Cons .0 xs) () ∈Head
-    go-terminates (Cons zero xs) () (∈Tail i)
-    go-terminates (Cons (suc x) xs) t (∈Tail i) = go-terminates xs {!!} i
+    go-terminates (.0 :: xs) () ∈Head
+    go-terminates (zero :: xs) () (∈Tail i)
+    go-terminates ((suc x) :: xs) t (∈Tail i) = go-terminates xs {!!} i
     go-diverges : (xs : List Nat) → ¬ (terminates (lift (Impl.prog (go xs)))) → 0 ∈ xs
     go-diverges Nil x = ex-falso (x tt)
-    go-diverges (Cons zero xs) x = ∈Head
-    go-diverges (Cons (suc x₁) xs) x = ∈Tail (go-diverges xs λ x₂ → x {!!})
+    go-diverges (zero :: xs) x = ∈Head
+    go-diverges (suc x₁ :: xs) x = ∈Tail (go-diverges xs λ x₂ → x {!!})

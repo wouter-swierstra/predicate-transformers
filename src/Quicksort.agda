@@ -172,10 +172,10 @@ perm-++ ys ys' zs zs' (PCons x .ys xs' .ys' ys'' pys x₁ x₂) pzs = PCons x (y
 perm-filter-< : ∀ x (xs ys zs : List Nat) → Permutation (fmap Sigma.fst (filter' (_lt x) xs)) ys → Permutation (fmap Sigma.fst (filter' (x lt_) xs)) zs → Permutation xs (ys ++ zs)
 perm-filter-< = {!!}
 
-qs-sorts : ∀ xs → partial-correctness sorted quicksort xs
-qs-sorts Nil = Nil , Empty
-qs-sorts (x :: xs) ys' (perm-ys , sort-ys) zs' (perm-zs , sort-zs) = PCons x (x :: xs) xs (ys' ++ Cons x zs') (ys' ++ zs')
+qs-sorts : ∀ xs → partial-correctness (pt sorted) quicksort xs
+qs-sorts Nil P pf = pf Nil (Nil , Empty)
+qs-sorts (x :: xs) P pf ys' (perm-ys , sort-ys) zs' (perm-zs , sort-zs) = pf (ys' ++ (x :: zs')) (PCons x (x :: xs) xs (ys' ++ Cons x zs') (ys' ++ zs')
   (perm-filter-< x xs ys' zs' perm-ys perm-zs) (delHead x xs) (del-++-l x ys' (Cons x zs') zs' (delHead x zs')) ,
   inOrder-++ ys' zs' sort-ys sort-zs
     (perm-pred (_< x) perm-ys λ x' x'∈ys → filter'-pred xs (_< x) (_lt x) x' x'∈ys)
-    (perm-pred (x <_) perm-zs λ x' x'∈zs → filter'-pred xs (x <_) (x lt_) x' x'∈zs)
+    (perm-pred (x <_) perm-zs λ x' x'∈zs → filter'-pred xs (x <_) (x lt_) x' x'∈zs))

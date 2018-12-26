@@ -195,16 +195,16 @@ module AllNondet where
   allRefine = Refine allPT
 
   allSemantics : Semantics C R IsMonad-List
-  allSemantics = semantics all' allPT handleList pure equiv bind
+  allSemantics = semantics all' allPT handleList pure' equiv bind'
     where
-    pure : ∀ {a} (P : a → Set) (x : a) → P x ⇔ Pair (P x) ⊤
-    pure P x = iff Pair.fst (λ z → z , tt)
+    pure' : ∀ {a} (P : a → Set) (x : a) → P x ⇔ Pair (P x) ⊤
+    pure' P x = iff Pair.fst (λ z → z , tt)
     equiv : ∀ c (P P' : R c → Set) → ((x : R c) → P x ⇔ P' x) → allPT c P ⇔ allPT c P'
     equiv Fail P P' x = ⇔-refl
     equiv Split P P' x = ⇔-pair (x False) (x True)
-    bind : ∀ {a} (P : a → Set) c (k : R c → List a) → allPT c (λ x → all' P (k x)) ⇔ all' P (foldr _++_ Nil (map k (handleList c)))
-    bind P Fail k = ⇔-refl
-    bind P Split k = ⇔-trans
+    bind' : ∀ {a} (P : a → Set) c (k : R c → List a) → allPT c (λ x → all' P (k x)) ⇔ all' P (handleList c >>= k)
+    bind' P Fail k = ⇔-refl
+    bind' P Split k = ⇔-trans
       (all'-pair P (k False) (k True))
       (⇔-= {Q = all' P} (cong (_++_ (k False)) (++-nil (k True))))
 
@@ -253,7 +253,7 @@ module AllNondet where
 
   selectImpl : {a : Set} -> (xs : List a) -> allImpl (selectSpec {a} xs)
   selectImpl {a} Nil = doFail
-  selectImpl {a} (Cons x xs) = doSplit
+  selectImpl {a} (x :: xs) = doSplit
     (doReturn (x , xs) (λ _ → ∈Head , refl))
     (doBindAll (selectImpl xs) λ y,ys →
       doReturn ((Pair.fst y,ys , Cons x (Pair.snd y,ys))) lemma)
@@ -284,8 +284,8 @@ module AllNondet where
       Sigma (Pair.fst y,ys' ∈ Vec->List xs)
       (λ i → delete (Vec->List xs) i == Pair.snd y,ys') →
       (length (Pair.snd y,ys')) == n
-    lemma1 {a} {n} {vCons x xs} {.x , .(Vec->List xs)} (∈Head , refl) = Vec->List-length xs
-    lemma1 {a} {n} {vCons x xs} {fst₁ , .(Cons x (delete (Vec->List xs) fst))} (∈Tail fst , refl) = trans (delete-length fst) (Vec->List-length xs)
+    lemma1 {a} {n} {x :: xs} {.x , .(Vec->List xs)} (∈Head , refl) = Vec->List-length xs
+    lemma1 {a} {n} {x :: xs} {fst₁ , .(Cons x (delete (Vec->List xs) fst))} (∈Tail fst , refl) = trans (delete-length fst) (Vec->List-length xs)
     lemma2 : ∀ {a n} {xs : Vec (Succ n) a} {y,ys' : Pair a (List a)}
       {pre : Sigma (Pair.fst y,ys' ∈ Vec->List xs) (λ i → delete (Vec->List xs) i == Pair.snd y,ys')} →
       ⊤ →
@@ -301,7 +301,7 @@ module AllNondet where
   -- We need to work with vectors to prove termination.
   permsImpl : {a : Set} {n : Nat} -> (xs : Vec n a) -> allImpl (permsSpec xs)
   permsImpl {n = Zero} vNil = doReturn vNil λ _ → NilPermutation
-  permsImpl {n = Succ Zero} xs@(vCons x vNil) = -- We need an extra base case here, since selectVecImpl only works on Vec (Succ _).
+  permsImpl {n = Succ Zero} xs@(x :: vNil) = -- We need an extra base case here, since selectVecImpl only works on Vec (Succ _).
     doReturn xs λ _ → HeadPermutation (inHead , NilPermutation)
   permsImpl {n = Succ (Succ n)} xs =
     doBindAll (selectVecImpl xs) λ y,ys →
@@ -315,6 +315,6 @@ module AllNondet where
       IsPermutation (Pair.snd y,ys) zs →
       Sigma (Pair.fst y,ys ∈v xs) (λ i → deleteV xs i == Pair.snd y,ys) →
       IsPermutation xs (vCons (Pair.fst y,ys) zs)
-    lemma {a} {n} {vCons x .(vCons y' ys)} {.x , vCons y' ys} {vCons z zs} perm (inHead , refl) = HeadPermutation (inHead , perm)
-    lemma {a} {n} {vCons x xs} {y , vCons y' ys} {vCons z zs} (HeadPermutation (y'i , perm)) (inTail yi , p) with split-==-Cons p
-    lemma {a} {n} {vCons x xs} {y , vCons .x .(deleteV xs yi)} {vCons z zs} (HeadPermutation (xi , perm)) (inTail yi , p) | refl , refl = perm-cons xi yi perm
+    lemma {a} {n} {x :: .(y' :: ys)} {.x , (y' :: ys)} {z :: zs} perm (inHead , refl) = HeadPermutation (inHead , perm)
+    lemma {a} {n} {x :: xs} {y , (y' :: ys)} {z :: zs} (HeadPermutation (y'i , perm)) (inTail yi , p) with split-==-Cons p
+    lemma {a} {n} {x :: xs} {y , (.x :: .(deleteV xs yi))} {z :: zs} (HeadPermutation (xi , perm)) (inTail yi , p) | refl , refl = perm-cons xi yi perm

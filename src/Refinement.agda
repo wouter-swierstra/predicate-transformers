@@ -3,12 +3,6 @@ module Refinement where
 open import Level hiding (lift)
 open import Prelude
 
-_⊆_ : {a : Set} ->
-  (R1 R2 : a -> Set) -> Set
-_⊆_ {a = a} R1 R2 =
-  (x : a) -> R1 x -> R2 x 
-
-
 module Total where
   wp : {l : Level} {a b : Set l} ->
     (f : a -> b) -> (b -> Set l) -> (a -> Set l)
@@ -23,12 +17,12 @@ module Total where
   --  they are equal on all points
   ⊑-eq : {l : Level} -> {a b : Set l} ->
     (f g : a -> b) -> f ⊑ g -> (x : a) -> f x == g x
-  ⊑-eq f g R x = R (\y -> f x == y) x Refl
+  ⊑-eq f g R x = R (\y -> f x == y) x refl
 
   eq-⊑ :  {l : Level} -> {a b : Set l} ->
     (f g : a -> b) -> ((x : a) -> f x == g x) ->  f ⊑ g
   eq-⊑ f g eq P x H with f x | g x | eq x
-  ... | _ | _ | Refl = H
+  ... | _ | _ | refl = H
 
 module Maybe where
   data Maybe (a : Set) : Set where
@@ -57,14 +51,14 @@ module Maybe where
   ⊑-eq : {a b : Set} ->
     (f g : a -> Maybe b) -> f ⊑ g -> LT f g
   ⊑-eq f g R x with f x | g x | R (\y -> f x == Just y) x
-  ⊑-eq f g R x | Just y | Just x₁ | H = Inl (H Refl)
-  ⊑-eq f g R x | Just y | Nothing | H = magic (H Refl)
-  ⊑-eq f g R x | Nothing | _ | H = Inr Refl
+  ⊑-eq f g R x | Just y | Just x₁ | H = Inl (H refl)
+  ⊑-eq f g R x | Just y | Nothing | H = magic (H refl)
+  ⊑-eq f g R x | Nothing | _ | H = Inr refl
 
   eq-⊑ : {a b : Set} ->
     (f g : a -> Maybe b) -> LT f g ->  f ⊑ g
-  eq-⊑ f g eq P x H with f x | g x | eq x 
-  eq-⊑ f g eq P x H | Just y | Just .y | Inl Refl = H
+  eq-⊑ f g eq P x H with f x | g x | eq x
+  eq-⊑ f g eq P x H | Just y | Just .y | Inl refl = H
   eq-⊑ f g eq P x H | Just y | Nothing | Inl ()
   eq-⊑ f g eq P x H | Just y | _ | Inr ()
   eq-⊑ f g eq P x () | Nothing | _ | _
@@ -79,7 +73,7 @@ module Nondet where
   data Elem {a : Set} (x : a) : ND a -> Set where
       Here : Elem x (Return x)
       Left : ∀ {l r} -> Elem x l -> Elem x (Amb l r)
-      Right : ∀ {l r} -> Elem x r -> Elem x (Amb l r)      
+      Right : ∀ {l r} -> Elem x r -> Elem x (Amb l r)
 
   Subset : ∀ {a : Set} -> (f g : ND a) -> Set
   Subset {a} nd1 nd2 = (y : a) -> Elem y nd2 -> Elem y nd1
@@ -178,8 +172,8 @@ module Nondet where
     ⊑-R : {a b : Set} ->
       (f g : a -> ND b) -> f ⊑ g -> (x : a) -> Subset (g x) (f x)
     ⊑-R {a} {b} f g h x y elem with
-      let IH = (h (_==_ y) x (exists (f x) elem Refl)) in lookup (g x) IH
-    ⊑-R {a} {b} f g h x y elem | .y , (Refl , p) = p
+      let IH = (h (_==_ y) x (exists (f x) elem refl)) in lookup (g x) IH
+    ⊑-R {a} {b} f g h x y elem | .y , (refl , p) = p
     
     R-⊑ : {a b : Set} ->
       (f g : a -> ND b) -> ((x : a) -> Subset (g x) (f x)) -> f ⊑ g

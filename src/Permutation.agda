@@ -29,7 +29,7 @@ perm-to-in (inTail x₁) (HeadPermutation (fst , snd)) = in-delete-to-in fst (pe
 in-delete-tail : ∀ {a n} {x x' : a} {xs : Vec n a} ->
   (i : x' ∈v xs) -> x ∈v deleteV (vCons x xs) (inTail i)
 in-delete-tail {xs = vNil} ()
-in-delete-tail {xs = vCons x₁ xs} i = inHead
+in-delete-tail {xs = x :: xs} i = inHead
 
 perm-cons : ∀ {a n} {x y : a} {xs ys : Vec (Succ n) a} ->
   (ix : x ∈v ys) (iy : y ∈v xs) ->

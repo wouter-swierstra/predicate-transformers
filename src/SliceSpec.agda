@@ -25,21 +25,25 @@ data Slice (a : Set) (C : Set) (R : C -> Set) (b : Set) : Set where
     (pre : a -> Set) (post : a -> b' -> a -> Set) ->
     (k : b' -> Slice a C R b) -> Slice a C R b
 
-infixl 20 _>>=_
-_>>=_ : {a : Set} {C : Set} {R : C -> Set} ->
-  {b : Set} {c : Set} ->
-  Slice a C R b -> (b -> Slice a C R c) -> Slice a C R c
-Pure x >>= f = f x
-Step c k >>= f = Step c λ z → k z >>= f
-Spec pre post k >>= f = Spec pre post λ z → k z >>= f
+instance
+  IsMonad-Slice : ∀ {a C R} → IsMonad (Slice a C R)
+  IsMonad-Slice = isMonad _>>='_ Pure refl right-identity'
+    where
+    _>>='_ : {a : Set} {C : Set} {R : C -> Set} ->
+      {b : Set} {c : Set} ->
+      Slice a C R b -> (b -> Slice a C R c) -> Slice a C R c
+    Pure x >>=' f = f x
+    Step c k >>=' f = Step c λ z → k z >>=' f
+    Spec pre post k >>=' f = Spec pre post λ z → k z >>=' f
+    right-identity' : ∀ {a C R b} {mx : Slice a C R b} → mx >>=' Pure == mx
+    right-identity' {mx = Pure x} = refl
+    right-identity' {mx = Step c k} = cong (Step c) (extensionality (λ x → right-identity'))
+    right-identity' {mx = Spec pre post k} = cong (Spec pre post) (extensionality (λ x → right-identity'))
 
-return : {a b : Set} {C : Set} {R : C -> Set} ->
-  b -> Slice a C R b
-return y = Pure y
 spec : {a : Set} {b : Set} {C : Set} {R : C -> Set} ->
   (P : a -> Set) (Q : a -> b -> a -> Set) ->
   Slice a C R b
-spec P Q = Spec P Q return
+spec P Q = Spec P Q Pure
 
 PTs : (a : Set) -> (C : Set) (R : C -> Set) -> Set
 PTs a C R = (c : C) -> (P : R c -> a -> Set) -> a -> Set

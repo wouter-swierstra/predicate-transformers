@@ -1,7 +1,9 @@
-module Tick where
+module ticks where
+
+  open import Prelude
 
   -- Define a free monad
-  open Free
+  open import Free
 
   data C : Set where
     Tick : C
@@ -10,11 +12,11 @@ module Tick where
   R t = ⊤
 
   Ticked : Set -> Set
-  Ticked = Free C R 
+  Ticked = Free C R
 
   -- Define smart constructors
   tick : Ticked ⊤
-  tick = Step Tick return 
+  tick = Step Tick Pure
 
   -- Here we could define
   --  wp : ∀ {a b : Set} -> (a -> Ticked b) -> (a -> b -> Set) -> (a -> Set)
