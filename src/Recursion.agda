@@ -3,7 +3,7 @@ module Recursion where
 
 open import Prelude
 open NaturalLemmas
-open import Free
+open import Free public
 open import Maybe
 open import Spec
 

@@ -264,6 +264,7 @@ module AllNondet where
       (λ i → delete (Cons x xs) i == Cons x (Pair.snd y,ys))
     lemma {a} {x} {xs} {y , ys} (fst , snd) = (∈Tail fst) , cong (Cons x) snd
 
+{-
   doUsePre : {a : Set} ->
     {C : Set} {R : C -> Set} {PT : PTs C R} ->
     {pre : Set} {post : a -> Set} ->
@@ -292,6 +293,7 @@ module AllNondet where
       Sigma (Pair.fst y,ys' ∈v xs)
       (λ i → deleteV xs i == resize (lemma1 pre) (List->Vec (Pair.snd y,ys')))
     lemma2 {a} {n} {xs} {x' , .(delete (Vec->List xs) i)} {i , refl} tt = (∈List->∈Vec i) , trans (Vec->List->Vec-eq (deleteV xs (∈List->∈Vec i))) (resize-List->Vec (Vec->List-length (deleteV xs (∈List->∈Vec i))) (lemma1 (i , refl)) (deleteList==deleteVec' xs i))
+  -}
 
   open import Permutation
 

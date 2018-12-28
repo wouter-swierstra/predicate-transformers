@@ -14,10 +14,9 @@ flip : ∀ {l : Level} {a : Set l} {b : Set l} {c : Set l}
   -> (a -> b -> c) -> (b -> a -> c)
 flip f x y = f y x
 
-_·_ : ∀ {l l' l''} {a : Set l} {b : Set l'} {c : Set l''} ->
+_∘_ : ∀ {l l' l''} {a : Set l} {b : Set l'} {c : Set l''} ->
       (b -> c) -> (a -> b) -> a -> c
-f · g = λ x → f (g x)
-_∘_ = _·_
+f ∘ g = λ x → f (g x)
 
 open import Relation.Binary.PropositionalEquality public
   hiding (preorder)
