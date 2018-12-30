@@ -146,3 +146,83 @@ match-partially-correct .Nil .(r *) (inStarNil r) = tt
 
 match-partially-correct Nil .(r *) (inStarCons .Nil r pf) = tt
 match-partially-correct (x :: xs) .(r *) (inStarCons .(x :: xs) r pf) = λ pf₁ → tt
+
+
+-- Now we show an alternative matching strategy, using derivatives.
+
+-- First, we need to be able to decide whether the regex matches the empty string.
+matches-empty : (r : Regex) → Dec (Nil ∈[ r ])
+matches-empty Empty = no (λ ())
+matches-empty Epsilon = yes inEpsilon
+matches-empty (Singleton c) = no (λ ())
+matches-empty (l ∪ r) with matches-empty l Pair., matches-empty r
+matches-empty (l ∪ r) | yes p , mr = yes (inUnionL Nil l r p)
+matches-empty (l ∪ r) | no ¬l , yes p = yes (inUnionR Nil l r p)
+matches-empty (l ∪ r) | no ¬l , no ¬r = no (unInUnion ¬l ¬r)
+  where
+  unInUnion : ∀ {a xs l r} → (xs ∈[ l ] → a) → (xs ∈[ r ] → a) → xs ∈[ l ∪ r ] → a
+  unInUnion f g (inUnionL xs l r iu) = f iu
+  unInUnion f g (inUnionR xs l r iu) = g iu
+matches-empty (l · r) with matches-empty l Pair., matches-empty r
+matches-empty (l · r) | yes p , yes p' = yes (inConcat Nil Nil Nil l r refl p p')
+matches-empty (l · r) | yes p , no ¬p = no (unInConcatR λ ys zs x x₁ → ¬p (coerce (cong (_∈[ r ]) (Pair.snd (when-++-is-nil ys zs x))) x₁))
+  where
+  unInConcatR : ∀ {a xs l r} → (∀ ys zs → xs == ys ++ zs → zs ∈[ r ] → a) → xs ∈[ l · r ] → a
+  unInConcatR f (inConcat xs ys zs l r x icl icr) = f ys zs x icr
+matches-empty (l · r) | no ¬p , mr = no (unInConcatL λ ys zs x x₁ → ¬p (coerce (cong (_∈[ l ]) (Pair.fst (when-++-is-nil ys zs x))) x₁))
+  where
+  unInConcatL : ∀ {a xs l r} → (∀ ys zs → xs == ys ++ zs → ys ∈[ l ] → a) → xs ∈[ l · r ] → a
+  unInConcatL f (inConcat xs ys zs l r x icl icr) = f ys zs x icl
+matches-empty (r *) = yes (inStarNil r)
+
+-- The derivative of a regular language (expression) with respect to a character c is
+-- the set of all strings x such that c :: x is in the original language.
+infix 21 d_/d_
+d_/d_ : Regex → Char → Regex
+d Empty /d c = Empty
+d Epsilon /d c = Empty
+d Singleton x /d c with c ≟ x
+... | yes refl = Epsilon
+... | no _ = Empty
+d l ∪ r /d c = d l /d c ∪ d r /d c
+d l · r /d c with matches-empty l
+... | yes _ = (d l /d c · r) ∪ d r /d c
+... | no _ = d l /d c · r
+d r * /d c = d r /d c · (r *)
+
+-- Prove that the above definition of the derivative is correct.
+derivative-correct-if : ∀ x xs r → (x :: xs) ∈[ r ] → xs ∈[ d r /d x ]
+derivative-correct-if x xs r (inSingleton c) with c ≟ c
+... | yes refl = inEpsilon
+... | no ¬p = magic (¬p refl)
+derivative-correct-if x xs _ (inUnionL .(_ :: _) l r x₁) = inUnionL _ (d l /d x) (d r /d x) (derivative-correct-if x xs l x₁)
+derivative-correct-if x xs _ (inUnionR .(_ :: _) l r x₁) = inUnionR _ (d l /d x) (d r /d x) (derivative-correct-if x xs r x₁)
+derivative-correct-if x xs _ (inConcat .(_ :: _) ys zs l r x₁ x₂ x₃) with matches-empty l
+derivative-correct-if x xs _ (inConcat .(x :: xs) Nil .(x :: xs) l r refl x₂ x₃) | yes p = inUnionR xs ((d l /d x) · r) (d r /d x) (derivative-correct-if x xs r x₃)
+derivative-correct-if x .(ys ++ zs) _ (inConcat .(x :: ys ++ zs) (.x :: ys) zs l r refl x₂ x₃) | yes p = inUnionL (ys ++ zs) _ _ (inConcat (ys ++ zs) ys zs _ _ refl (derivative-correct-if x ys l x₂) x₃)
+derivative-correct-if x xs _ (inConcat .(x :: xs) Nil zs l r x₁ x₂ x₃) | no ¬p = magic (¬p x₂)
+derivative-correct-if x .(ys ++ zs) _ (inConcat .(x :: ys ++ zs) (.x :: ys) zs l r refl x₂ x₃) | no ¬p = inConcat (ys ++ zs) ys zs _ _ refl (derivative-correct-if x ys l x₂) x₃
+derivative-correct-if x xs _ (inStarCons .(x :: xs) r (inConcat .(x :: xs) Nil .(x :: xs) .r .(r *) refl x₂ x₃)) = derivative-correct-if x xs (r *) x₃
+derivative-correct-if x .(ys ++ zs) _ (inStarCons .(x :: ys ++ zs) r (inConcat .(x :: ys ++ zs) (.x :: ys) zs .r .(r *) refl x₂ x₃)) = inConcat (ys ++ zs) ys zs (d r /d x) (r *) refl (derivative-correct-if x ys r x₂) x₃
+derivative-correct-onlyIf : ∀ x xs r → xs ∈[ d r /d x ] → (x :: xs) ∈[ r ]
+derivative-correct-onlyIf x xs Empty ()
+derivative-correct-onlyIf x xs Epsilon ()
+derivative-correct-onlyIf x xs (Singleton c) pf with x ≟ c
+derivative-correct-onlyIf x .Nil (Singleton .x) inEpsilon | yes refl = inSingleton x
+derivative-correct-onlyIf x xs (Singleton c) () | no ¬p
+derivative-correct-onlyIf x xs (l ∪ r) (inUnionL .xs .(d l /d x) .(d r /d x) pf) = inUnionL (x :: xs) l r (derivative-correct-onlyIf x xs l pf)
+derivative-correct-onlyIf x xs (l ∪ r) (inUnionR .xs .(d l /d x) .(d r /d x) pf) = inUnionR (x :: xs) l r (derivative-correct-onlyIf x xs r pf)
+derivative-correct-onlyIf x xs (l · r) pf with matches-empty l
+derivative-correct-onlyIf x .(ys ++ zs) (l · r) (inUnionL .(ys ++ zs) .((d l /d x) · r) .(d r /d x) (inConcat .(ys ++ zs) ys zs .(d l /d x) .r refl pf pf₁)) | yes p = inConcat (x :: ys ++ zs) (x :: ys) zs l r refl (derivative-correct-onlyIf x ys l pf) pf₁
+derivative-correct-onlyIf x xs (l · r) (inUnionR .xs .((d l /d x) · r) .(d r /d x) pf) | yes p = inConcat (x :: xs) Nil (x :: xs) l r refl p (derivative-correct-onlyIf x xs r pf)
+derivative-correct-onlyIf x .(ys ++ zs) (l · r) (inConcat .(ys ++ zs) ys zs .(d l /d x) .r refl pf pf₁) | no ¬p = inConcat (x :: ys ++ zs) (x :: ys) zs l r refl (derivative-correct-onlyIf x ys l pf) pf₁
+derivative-correct-onlyIf x xs (r *) (inConcat .xs ys zs .(d r /d x) .(r *) x₁ pf pf₁) = inStarCons (x :: xs) r (inConcat (x :: xs) (x :: ys) zs r (r *) (cong (x ::_) x₁) (derivative-correct-onlyIf x ys r pf) pf₁)
+
+
+-- Use the derivative to find a match.
+derivative-match : NondetRec (Pair String Regex) (uncurry _∈[_])
+derivative-match (Nil , r) with matches-empty r
+... | yes p = Pure p
+... | no ¬p = fail
+derivative-match ((x :: xs) , r) = Step (FS (FS F0)) (xs , (d r /d x)) λ xs∈dr/dx →
+  Pure (derivative-correct-onlyIf x xs r xs∈dr/dx)

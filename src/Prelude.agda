@@ -266,6 +266,11 @@ Nil ++ ys = ys
 ++-nil Nil = refl
 ++-nil (x :: xs) = cong (Cons x) (++-nil xs)
 
+when-++-is-nil : ∀ {l} {a : Set l} (ys zs : List a) → Nil == ys ++ zs → Pair (ys == Nil) (zs == Nil)
+when-++-is-nil Nil Nil x = refl , refl
+when-++-is-nil Nil (z :: zs) ()
+when-++-is-nil (y :: ys) zs ()
+
 ++-assoc : {l : Level} {a : Set l} (xs ys zs : List a) →
   (xs ++ (ys ++ zs)) == ((xs ++ ys) ++ zs)
 ++-assoc Nil ys zs = refl
