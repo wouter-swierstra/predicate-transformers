@@ -1,7 +1,6 @@
 \documentclass[acmsmall, nonacm]{acmart}
 \settopmatter{printfolios=false,printccs=false,printacmref=false}
 
-%include polycode.fmt
 %include agda.fmt
 %include handlers.fmt
 
@@ -48,8 +47,8 @@ no longer exploit referential transparency to reason about
 subexpressions regardless of their context.
 
 In recent years, \emph{algebraic effects} have emerged as a technique
-to incorporate effectful operations in a purely functional language.
-%\todo{Citations}
+to incorporate effectful operations in a purely functional
+language~\cite{plotkin2002notions,pretnar2010logic}.
 Algebraic effects clearly separate the
 syntax of effectful operations and their semantics, described by
 \emph{effect handlers}. In contrast to existing approaches such as
@@ -58,9 +57,11 @@ order using a series of handlers.
 
 This paper explores how to define a predicate transformer semantics
 for effectful programs. It presents a general framework for deriving
-verified effectful programs their specifications. We will sketch the
-key techniques developed herein, before illustrating them with
-numerous examples:
+verified effectful programs their specifications, inspired by existing
+work on the refinement
+calculus\cite{back2012refinement,morgan1994programming}. We will
+sketch the key techniques developed herein, before illustrating them
+with numerous examples:
 
 % What is the specification of a program written using algebraic
 % effects?  How can we show that a program satisfies a specification? Or
@@ -71,27 +72,28 @@ numerous examples:
 \item We show how the syntax of effects may be given by a free monad
   in type theory. The semantics of these effects are given by a
   \emph{handler}, that assigns meaning to the syntactic operations
-  provided by the free monad. Such handlers typically execute the
-  effects to produce some \emph{result value}. We show how we can also
-  describe the behaviour of a program more abstractly by writing
-  handlers that compute a \emph{proposition}, capturing the expected
-  behaviour without having to execute the corresponding effects. These
-  handlers may then be used to transform predicates on the result
-  values of an effectful computation to a predicate on the entire
-  computation.
+  provided by the free monad. 
+  % We show how we can
+  % also describe the behaviour of a program more abstractly by writing
+  % handlers that compute a \emph{proposition}, capturing the expected
+  % behaviour without having to execute the corresponding effects. These
+  % handlers may then be used to transform predicates on the result
+  % values of an effectful computation to a predicate on the entire
+  % computation.
 \item Next we show how to assign \emph{predicate transformer
     semantics} to computations arising from Kleisli arrows on such
-  free monads. Together with a propositional handler, this gives us
-  the machinery to specify the desired outcome of an effectful
-  computation and assign it a weakest precondition semantics.
+  free monads. This enables us to specify the desired outcome of an
+  effectful computation and assign it a weakest precondition
+  semantics.
 \item Using these weakest precondition semantics, we can define a
   notion of \emph{refinement} on computations using algebraic
   effects. Finally, we show how to use this refinement relation to
   calculate a program from its specification.
 \end{itemize}
 These principles are applicable to a range of different effects,
-including exceptions (Section~\todo{?}), non-determinism
-(Section~\todo{?}), state (Section~\todo{?}), \todo{and ?}.
+including exceptions (Section~\ref{sec:maybe}), non-determinism
+(Section~\ref{sec:non-det}), state (Section~\ref{sec:state}), and
+general recursion (Section~\ref{sec:recursion}).
 
 The examples, theorems and proofs have all been formally verified in
 the dependently typed programming language Agda~\cite{agda}, but they
@@ -100,7 +102,7 @@ dependent types such as Idris~\cite{brady} or Coq~\cite{coq}. The sources
 associated with our our development are available
 online.\footnote{\todo{url}}
 
-\section{Warm-up}
+\section{Background}
 \label{sec:intro}
 %if style == newcode
 \begin{code}
@@ -115,9 +117,10 @@ module Free where
 \end{code}
 %endif
 
-\section*{Free monads}
+\subsection*{Free monads}
+\label{sec:free-monads}
 
-We begin by defining a data type for free monads in Agda in the style
+We begin by defining a datatype for free monads in the style
 of \citet{hancock-setzer-I, hancock-setzer-II}:
 \begin{code}
   data Free (C : Set) (R : C -> Set) (a : Set) : Set where
@@ -130,7 +133,7 @@ result of type |a| or issues a command |c : C|. For each |c : C|,
 there is a set of responses |R c|. The second argument of the |Step|
 constructor corresponds to the continuation, describing how to proceed
 after receiving a response of type |R c|. It is straightforward to
-show that the |Free| data type is indeed a monad:
+show that the |Free| datatype is indeed a monad:
 \begin{code}
   fmap : (Forall (C R a b)) (a -> b) -> Free C R a -> Free C R b
   fmap f (Pure x)    = Pure (f x)
@@ -138,9 +141,10 @@ show that the |Free| data type is indeed a monad:
 
   return : (Forall (C R a)) a -> Free C R a
   return = Pure
+
   _>>=_ : (Forall (C R a b)) Free C R a -> (a -> Free C R b) -> Free C R b
-  Pure x   >>= f  = f x
-  Step c x >>= f  = Step c (\ r -> x r >>= f)
+  Pure x    >>= f  = f x
+  Step c x  >>= f  = Step c (\ r -> x r >>= f)
 \end{code}
 % Finally, we will sometimes \emph{fold} over elements of |Free C R a|
 % using the following recursion principle:
@@ -149,50 +153,69 @@ show that the |Free| data type is indeed a monad:
 %   fold alg pure (Pure x)    = pure x
 %   fold alg pure (Step c k)  = alg c (fold alg pure . k)
 % \end{code}
+The examples of effects studied in this paper will be phrased in terms
+of such free monads.
 
-\subsection{Weakest preconditions}
+\subsection*{Weakest precondition semantics}
 
-We can define the weakest precondition semantics of pure functions as follows:
+Weakest precondition semantics have a rich history, dating back to
+Dijkstra's Guarded Command Language~\citeyearpar{gcl}. In this section, we
+recall the key notions that we will use throughout the remainder of
+the paper.
+
+There are many different ways to specify the behaviour of a function
+|f : a -> b|. One might provide a reference implementation, define a
+relation |R : a -> b -> Set|, or write contracts and tests cases. In
+this paper, we will, however, focus on \emph{predicate transformer
+  semantics}. Where these predicate transformers traditionally relate
+the state space of an (imperative) program, they can be readily
+adapted to the functional setting.
+
+The weakest precondition semantics, given by the function |wp| below,
+maps a function |f : a -> b| and a desired postcondition on the
+function's output, |b -> Set|, to the weakest precondition |a -> Set|
+on the function's input that ensures the postcondition will be
+satisfied:
 \begin{spec}
   wp : (f : a -> b) -> (b -> Set) -> (a -> Set)
-  wp f P = \ a -> P (f a)
+  wp f P = \ x -> P (f x)
 \end{spec}
 
-When relating such semantics, we will sometimes use the following notation:
-
+This definition is often too restrictive. In particular, there is no
+way to specify that the output is related in a particular way to the
+input. This can be addressed easily enough by allowing the function
+|f| to be \emph{dependent}, yielding the following definition for
+weakest preconditions:
+\begin{code}
+  wp : (Forall(a : Set)) (implicit(b : a -> Set)) (f : (x : a) -> b x) -> ((x : a) -> b x -> Set) -> (a -> Set)
+  wp f P = \ x -> P x (f x)
+\end{code}
+When working with predicates and predicate transformers, we will
+sometimes use the following shorthand notation:
 \begin{code}
   _⊆_ : (implicit(a : Set)) (a -> Set) -> (a -> Set) -> Set
   P ⊆ Q = ∀ x -> P x -> Q x  
 \end{code}
 
-But this is too restrictive. Oftentimes, we want to talk about
-\emph{dependent functions}:
+One reason to use weakest precondition semantics is that they give
+rise to a notion of \emph{refinement}:
 \begin{code}
-  wp : {a : Set} {b : a -> Set} -> (f : (x : a) -> b x) -> ((x : a) -> b x -> Set) -> (a -> Set)
-  wp f P = \ a -> P a (f a)
-\end{code}
-
-\begin{spec}
   _⊑_ : (f g : (x : a) -> b x) -> Set
-  f ⊑ g = forall (P : (x : a) -> b x -> Set) (x : a) -> wp f P x -> wp g P x
-\end{spec}
-%if style == newcode
-\begin{code}
-  _⊑_ : {a : Set} {b : a -> Set} (f g : (x : a) -> b x) -> Set1
-  _⊑_ {a} {b} f g = forall (P : (x : a) -> b x -> Set) (x : a) -> wp f P x -> wp g P x
+  f ⊑ g = forall P -> wp f P ⊆ wp g P
 \end{code}
-%endif
-
-
-
+In a pure setting, this refinement relation is not particularly
+interesting: the refinement relation corresponds to extensional
+equality between functions. The following lemma follows from the
+`Leibniz rule' for equality in intensional type theory:
 
 \begin{lemma*}
-  For all functions, |f : a -> b| and |g : a -> b|, we show that |f ⊑
-  g| holds if and only iff for all |x : a|, |f x == g x|.
+  For all functions, |f : a -> b| and |g : a -> b|, the refinement
+  |f ^^ ⊑ ^^ g| holds if and only if |f x == g x| for all |x : a|.
 \end{lemma*}
-\begin{proof}
-  Leibniz.
-\end{proof}
+
+Although these definitions work for arbitrary functions, we have not
+yet mentioned effects at all. We will now explore how to use and adapt
+these definitions to specify, verify, and calculate effectful programs.
 
 \section{Partiality}
 \label{sec:maybe}
@@ -206,8 +229,9 @@ module Maybe where
 \end{code}
 %endif
 
-We can define the data type for |Partial| computations, corresponding
-to |Maybe| monad, by making the following choice for |C| and |R|:
+We can define the datatype for |Partial| computations, corresponding
+to |Maybe| monad, by making the following choice for commands |C| and
+responses |R| in our |Free| datatype:
 \begin{code}
   data C : Set where
     Abort : C
@@ -225,8 +249,10 @@ sometimes convenient to define a smart constructor for failure:
   abort  : (Forall(a)) Partial a
   abort  = Step Abort (\ ())
 \end{code}
-A computation of type |Partial a| will either return a value of type |a|
-or fail, issuing the |abort| command.
+A computation of type |Partial a| will either return a value of type
+|a| or fail, issuing the |abort| command. With the syntax in place, we
+can turn our attention to verifying programs using a suitable
+predicate transformer semantics.
 
 
 \subsection*{Example: division}
@@ -257,7 +283,7 @@ errors:
 \end{code}
 The division operator from the standard library (|div|) requires an
 implicit proof that the divisor is non-zero. In the case when the
-divisor is |Zero|, we fail explicitly by returning |Abort|.
+divisor is |Zero|, we fail explicitly.
 
 Alternatively, we can specify the semantics of our language using a
 \emph{relation}:
@@ -266,11 +292,11 @@ Alternatively, we can specify the semantics of our language using a
     Base : (Forall(x)) Val x ⇓ x
     Step : (Forall(l r v1 v2)) l ⇓ v1 -> r ⇓ (Succ v2) -> Div l r ⇓ (v1 div (Succ v2))
 \end{code}
-In this definition, we rule out erroneous results by asserting that
+In this definition, we rule out erroneous results by requiring that
 the divisor always evaluates to a non-zero value.
 
 How can we relate these two definitions? We can define a weakest
-precondition semantics using the |wp| function defined previously:
+precondition semantics using the |wp| function defined previously
 to computations of type |Partial b|:
 \begin{code}
   wpPartial : (implicit (a : Set)) (implicit (b : a -> Set)) (f : (x : a) -> Partial (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
@@ -280,14 +306,15 @@ to computations of type |Partial b|:
     mustPT P _ (Pure x)          = P _ x
     mustPT P _ (Step Abort _)    = ⊥
 \end{code}
-To call |wp|, however, we need to show how to transform a predicate |P
-: b -> Set| to a predicate on partial results, |Partial b -> Set|.  To
-do so, we define the auxiary function |mustPT|; the proposition
-|mustPT P c| holds when a computation |c| of type |Partial b|
-successfully returns a value of type |b| that satisfies |P|.
+To call the |wp| function we defined previously, we need to show how
+to transform a predicate |P : b -> Set| to a predicate on partial
+results, |Partial b -> Set|.  To do so, we define the auxiary function
+|mustPT|; the proposition |mustPT P c| holds when a computation |c| of
+type |Partial b| successfully returns a value of type |b| that
+satisfies |P|.
 
-We can define the following predicate characterizing when evaluating
-an expression will produce a result:
+As a first attempt, we might define the following predicate
+characterizing when evaluation is guaranteed to produce a result:
 \begin{code}
   SafeDiv : Expr -> Set
   SafeDiv (Val x)       = (Val x ⇓ Zero) -> ⊥
@@ -296,7 +323,7 @@ an expression will produce a result:
 We can now show that |SafeDiv| is a sufficient condition for our two
 notions of evaluation to coincide:
 \begin{code}
-  correct : (e : Expr) -> SafeDiv e -> wpPartial ⟦_⟧ _⇓_ e
+  correct : SafeDiv ⊆ wpPartial ⟦_⟧ _⇓_
 \end{code}
 %if style == newcode
 \begin{code}
@@ -308,12 +335,14 @@ notions of evaluation to coincide:
   correct (Div e1 e2) (nz , (h1 , h2)) | Step Abort x | v2 | () | ih2
 \end{code}
 %endif
-That is, we can \emph{compute} the weakest precondition |wpPartial f P
-x| that guarantees that a partial computation, |f x|, returns a result
-satisfying |P|. The |wpPartial| function assigns a \emph{predicate
-  transformer semantics} to Kleisli arrows; the above lemma relates
-the two semantics, expressed as a relation and an evaluator, for those
-expressions that satisfy the |SafeDiv| property.
+That is, we can \emph{compute} the weakest precondition |wpPartial ⟦_⟧
+_⇓_| that guarantees that a partial computation, here the evaluation
+|⟦ e ⟧| of some expression |e|, returns a result satisfying the
+behaviour specified by the relation |_⇓_|. The |wpPartial| function
+assigns a \emph{predicate transformer semantics} to Kleisli arrows;
+the above lemma relates the two semantics, expressed as a relation and
+an evaluator, for those expressions that satisfy the |SafeDiv|
+property.
 
 We may not want to define predicates such as |SafeDiv|
 ourselves. Instead, we can define the more general predicate
@@ -373,74 +402,25 @@ agree precisely:
     rewrite eq = magic ih1
 \end{code}
 %endif
-Both proofs proceed by induction on the argument expression.
+Both proofs proceed by induction on the argument expression; despite
+the necessity of a handful of auxiliary lemmas, they are
+fairly straightforward.
 
 \subsection*{Refinement}
 
-Our weakest precondition semantics on partial computations gives rise
-to a refinement relation on Kleisli arrows of the form |a -> Partial
-b|. We can characterize this relation by proving the following lemma.
+The weakest precondition semantics on partial computations defined
+above gives rise to a refinement relation on Kleisli arrows of the
+form |a -> Partial b|. We can characterize this relation by proving
+the following lemma.
 \begin{lemma*}
-  For all functions, |f : a -> Partial b| and |g : a -> Partial b|, we
-  show that |f ⊑ g| holds if and only if for all |x : a|, |f x == g
-  x| or |f x == Abort|.
+  For all functions, |f : a -> Partial b| and |g : a -> Partial b|,
+  the refinement relation |f ⊑ g| holds if and only if for all |x :
+  a|, |f x == g x| or |f x == Abort|.
 \end{lemma*}  
-\begin{proof}
-  Case analysis and Leibniz.
-\end{proof}
-
 Why care about this refinement relation? Although we can use it to
-compare Kleisli morphisms, we can extend it slightly to help
-\emph{derive} a program from its specification.
+compare Kleisli morphisms, it can be extended slightly to relate a
+program to a specification, given by a pre- and postcondition.
 
-The problem is that a value of type |Free C R a| is a \emph{complete}
-syntax tree, which returns a value or issues the next command --
-leaving no room to describe unfinished parts of the program that we
-wish to calculate. To achieve this however, we can define the
-following two types:
-
-\begin{code}
-  data I (a : Set) : Set1 where
-    Done : a -> I a
-    Spec : (a -> Set) -> I a
-
-  M : Set -> Set1
-  M a = Partial (I a)
-\end{code}
-A value of type |I a| is either a result of type |a| or a
-specification of type |a -> Set|, corresponding to an unfinished part
-of our program calculation. The type |M a| then corresponds to
-computations that \emph{mix} code and specifications.  We can easily
-extend our notion of refinement to work over such a mix of code and
-specification:
-\begin{code}
-  wpI : (implicit(a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> I (b x) -> Set
-  wpI P _ (Done y)  = P _ y
-  wpI P x (Spec Q)  = Q ⊆ P x
-\end{code}
-\todo{This is not quite right... Need that there is some
-  implementation of Q}
-
-
-
-We can use this notion of weakest precondition on |I| to define a
-notion of weakest precondition for the computations in |M|, that mix
-specifications and code:
-\begin{code}
-  wpM : {a : Set} -> {b : a -> Set} ->
-    (f : (x : a) -> M (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
-  wpM f = wp f · mustPT · wpI
-\end{code}
-Finally, we can revisit our notion of refinement to use these weakest
-precondition semantics:
-\begin{code}  
-  _⊑_ : {a : Set} {b : a -> Set} (f g : (x : a) -> M (b x)) -> Set1
-  f ⊑ g = ∀ P -> wpM f P ⊆ wpM g P
-\end{code}
-This refinement relation lets us compare two (possibly unfinished)
-derivation fragments, consisting of a mix of code and specification.
-
-How can we use this? Let's see another example.
 
 \subsection*{\textsc{Add}}
 
@@ -956,6 +936,58 @@ non-determinism and prove appropriate soundness results.
   
 % \end{code}
 
+\section{Incremental refinement}
+
+The problem is that a value of type |Free C R a| is a \emph{complete}
+syntax tree, which returns a value or issues the next command --
+leaving no room to describe unfinished parts of the program that we
+wish to calculate. To achieve this however, we can define the
+following two types:
+
+\begin{code}
+  data I (a : Set) : Set1 where
+    Done : a -> I a
+    Spec : (a -> Set) -> I a
+
+  M : Set -> Set1
+  M a = Partial (I a)
+\end{code}
+A value of type |I a| is either a result of type |a| or a
+specification of type |a -> Set|, corresponding to an unfinished part
+of our program calculation. The type |M a| then corresponds to
+computations that \emph{mix} code and specifications.  We can easily
+extend our notion of refinement to work over such a mix of code and
+specification:
+\begin{code}
+  wpI : (implicit(a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> I (b x) -> Set
+  wpI P _ (Done y)  = P _ y
+  wpI P x (Spec Q)  = Q ⊆ P x
+\end{code}
+\todo{This is not quite right... Need that there is some
+  implementation of Q}
+
+
+
+We can use this notion of weakest precondition on |I| to define a
+notion of weakest precondition for the computations in |M|, that mix
+specifications and code:
+\begin{code}
+  wpM : {a : Set} -> {b : a -> Set} ->
+    (f : (x : a) -> M (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
+  wpM f = wp f · mustPT · wpI
+\end{code}
+Finally, we can revisit our notion of refinement to use these weakest
+precondition semantics:
+\begin{code}  
+  _⊑_ : {a : Set} {b : a -> Set} (f g : (x : a) -> M (b x)) -> Set1
+  f ⊑ g = ∀ P -> wpM f P ⊆ wpM g P
+\end{code}
+This refinement relation lets us compare two (possibly unfinished)
+derivation fragments, consisting of a mix of code and specification.
+
+How can we use this? Let's see another example.
+
+
 
 \section{Open questions}
 \label{sec:questions}
@@ -983,6 +1015,8 @@ non-determinism and prove appropriate soundness results.
   the program is deterministic.
 
   
+\item Relation with Dijkstra monad?
+  
 \end{itemize}
 
 \section{Discussion}
@@ -1003,7 +1037,6 @@ non-determinism and prove appropriate soundness results.
 
 \todo{Size doesn't matter}
 
-\nocite{*}
 \DeclareRobustCommand{\tussenvoegsel}[2]{#2}
 \bibliography{handlers}
 

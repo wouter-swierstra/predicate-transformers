@@ -2,7 +2,7 @@
 
 module Expr where
 
-open import Prelude
+open import Prelude hiding (fmap; _>>=_; _⊆_; _⟨_⟩_; _■)
 open import Level hiding (lift)
 
 module Free where
@@ -75,7 +75,7 @@ module Maybe where
   correct (Div e1 e2) (nz , (h1 , h2)) | Step Abort x | v2 | () | ih2
   dom : {a : Set} -> { b : a -> Set} -> ((x : a) -> Partial (b x)) -> (a -> Set)
   dom f = wpPartial f (\ _ _ -> ⊤)
-  complete  : wpPartial ⟦_⟧ _⇓_    ⊆   dom ⟦_⟧
+--  complete  : wpPartial ⟦_⟧ _⇓_    ⊆   dom ⟦_⟧
   sound     : dom ⟦_⟧              ⊆   wpPartial ⟦_⟧ _⇓_
   sound (Val x) h = Base
   sound (Div e1 e2) h with ⟦ e1 ⟧ | ⟦ e2 ⟧ | sound e1 | sound e2
@@ -92,72 +92,45 @@ module Maybe where
   inDom (Div e1 e2) () | Pure _ | Step Abort _
   inDom (Div e1 e2) () | Step Abort _ | _
 
-  wpPartial1 : {e1 e2 : Expr} -> wpPartial ⟦_⟧ _⇓_ (Div e1 e2) -> wpPartial ⟦_⟧ _⇓_ e1
-  wpPartial1 {e1} {e2} h with inspect ⟦ e1 ⟧
-  wpPartial1 {e1} {e2} h | Pure x with-≡ eq = sound e1 (inDom e1 eq)
-  wpPartial1 {e1} {e2} h | Step Abort x with-≡ eq rewrite eq = magic h
-
-  wpPartial2 : {e1 e2 : Expr} -> wpPartial ⟦_⟧ _⇓_ (Div e1 e2) -> wpPartial ⟦_⟧ _⇓_ e2
-  wpPartial2 {e1} {e2} h with inspect ⟦ e1 ⟧ | inspect ⟦ e2 ⟧
-  wpPartial2 {e1} {e2} h | Pure v1 with-≡ eq1 | Pure v2 with-≡ eq2
-    = sound e2 (inDom e2 eq2)
-  wpPartial2 {e1} {e2} h | Pure _ with-≡ eq1 | Step Abort _ with-≡ eq2
-    rewrite eq1 | eq2 = magic h
-  wpPartial2 {e1} {e2} h | Step Abort x with-≡ eq | _ rewrite eq = magic h
-
-  complete (Val x) h = tt
-  complete (Div e1 e2) h
-    with inspect ⟦ e1 ⟧ | inspect ⟦ e2 ⟧
-      | complete e1 (wpPartial1 {e1} {e2} h)
-      | complete e2 (wpPartial2 {e1} {e2} h)
-  complete (Div e1 e2) h | Pure v1 with-≡ eq1 | Pure Zero with-≡ eq2 | ih1 | ih2
-    rewrite eq1 | eq2 = magic h
-  complete (Div e1 e2) h | Pure v1 with-≡ eq1 | Pure (Succ v2) with-≡ eq2 | ih1 | ih2
-    rewrite eq1 | eq2 = tt 
-  complete (Div e1 e2) h | Pure _ with-≡ _ | Step Abort _ with-≡ eq | _ | ih2
-    rewrite eq = magic ih2
-  complete (Div e1 e2) h | Step Abort _ with-≡ eq | _ | ih1 | _
-    rewrite eq = magic ih1
-
-  data I (a : Set) : Set1 where
-    Done : a -> I a
-    Spec : (a -> Set) -> I a
+  data I (b : Set) : Set1 where
+    Done :  b -> I b
+    Spec : (pre : Set) -> (b -> Set) -> I b
 
   M : Set -> Set1
   M a = Partial (I a)
 
-  isCode : ∀ {a} -> M a -> Set
+  isCode : ∀ {b : Set} -> M b -> Set
   isCode (Pure (Done x)) = ⊤
-  isCode (Pure (Spec x)) = ⊥
+  isCode (Pure (Spec pre post)) = ⊥
   isCode (Step Abort x) = ⊤
-
   
-  done : ∀ {a} -> (m : M a) -> isCode m -> Partial a
-  done (Pure (Done x)) p = Pure x
-  done (Pure (Spec x)) ()
-  done (Step Abort k) p = Step Abort λ ()
+--  done : ∀ {a} {b : a -> Set} -> (m : M b) -> isCode m -> Partial b
+--  done (Pure (Done x)) p = Pure x
+--  done (Pure (Spec pre post)) ()
+--  done (Step Abort k) p = Step Abort λ ()
 
   fromCode : ∀ {a} -> Partial a -> M a
   fromCode (Pure x) = Pure (Done x)
   fromCode (Step Abort x) = Step Abort \()
 
-  spec : ∀ {a} -> (P : a -> Set) -> M a
-  spec P = Pure (Spec P)
+  spec : ∀ {a} -> Set -> (P : a -> Set) -> M a
+  spec Pre Post = Pure (Spec Pre Post)
+
+  Not : Set -> Set
+  Not a = a -> ⊥
 
   existsC : (a : Set) (b : a -> Set) -> Set
   existsC a b = Not ((x : a) -> Not (b x))
 
   wpI : {a : Set} -> {b : a -> Set} -> (P : (x : a) -> b x -> Set) -> (x : a) -> I (b x) -> Set
   wpI P i (Done o)  = P i o
-  wpI {a} {b} P i (Spec Q)  =
+  wpI {a} {b} P i (Spec pre post)  =
     Pair
-      {!!}
-      (Q ⊆ P i)
+      pre (post ⊆ P i)
 
   wpM : {a : Set} -> {b : a -> Set} ->
     (f : (x : a) -> M (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
-  wpM f = wp f · mustPT · wpI
-
+  wpM f x = wp f (mustPT (wpI x))
 
   record _⊑_ {a : Set} {b : a -> Set} (f g : (x : a) -> M (b x)) : Set1 where
     constructor refinement
@@ -171,12 +144,10 @@ module Maybe where
   ⊑-trans (record { proof = step1 }) (record { proof = step2 }) =
     refinement \P H x -> step2 P H (step1 P H x)
 
-
-  strengthenSpec : {a : Set} {b : a -> Set} (S S' : (x : a) -> b x -> Set) ->
+  strengthenSpec : {P : Set} {a : Set} {b : a -> Set} (S S' : (x : a) -> b x -> Set) ->
     ((x : a) -> S' x ⊆ S x) ->
-    (λ x → Pure (Spec (S x))) ⊑ (\x -> Pure (Spec (S' x)))
-  strengthenSpec S S' H = refinement λ {P x (h1 , h2) → {!!} , λ bx s'bx → h2 bx (H _ _ s'bx)}
-
+    (λ x → Pure (Spec P (S x))) ⊑ (\x -> Pure (Spec P (S' x)))
+  strengthenSpec S S' H = refinement λ {P x (h1 , h2) → h1 , λ bx s'bx → h2 bx (H _ _ s'bx)}
 
   infixr 2 _⟨_⟩_
   _⟨_⟩_ : forall {a : Set} {b : a -> Set}
@@ -190,23 +161,31 @@ module Maybe where
 
   pop : ∀ {a} -> Stack a -> Partial (Pair a (Stack a))
   pop Nil = abort
-  pop (Cons x xs) = return (x , xs)
+  pop (x :: xs) = return (x , xs)
 
   PopSpec : Stack Nat -> (Pair Nat (Stack Nat)) -> Set
   PopSpec xs (y , ys) = xs == Cons y ys
 
-  popSpec : Stack Nat -> M (Pair Nat (Stack Nat))
-  popSpec xs = spec (PopSpec xs)
+  not-null : {a : Set} -> List a -> Set
+  not-null xs = Not (xs == Nil)
 
-  popCorrect : popSpec ⊑ (fromCode · pop)
-  popCorrect = refinement \ { P Nil (fst , snd) → fst (λ x ())
-                            ; P (Cons x xs) (fst , snd) → snd (x , xs) Refl}
+  popSpec : Stack Nat -> M (Pair Nat (Stack Nat))
+  popSpec xs = spec (Not (xs == Nil)) (PopSpec xs)
+
+  popCorrect : popSpec ⊑ (\x -> fromCode (pop x))
+  popCorrect = refinement \ { P Nil (fst , snd) → fst refl 
+                            ; P (x :: xs) (fst , snd) → snd (x , xs) refl }
+
+  _+_ : Nat -> Nat -> Nat
+  Zero + m = m
+  Succ k + m = Succ (k + m)
 
   data AddSpec : Stack Nat -> Stack Nat -> Set where
     AddThem : ∀ {x1 x2 : Nat} {xs : Stack Nat} -> AddSpec (Cons x1 (Cons x2 xs)) (Cons (x1 + x2) xs)
 
   addSpec : Stack Nat -> M (Stack Nat)
-  addSpec (xs) = spec (AddSpec xs)
+  addSpec (xs) =
+    spec (Pair (Not (xs == Nil)) (Not (Sigma Nat (\x -> xs == Cons x Nil)))) (AddSpec xs)
 
   add : Stack Nat -> M (Stack Nat)
   add xs =
@@ -218,45 +197,9 @@ module Maybe where
   addCorrect = refinement prf
     where
     prf : (P : Stack Nat -> Stack Nat -> Set) -> wpM addSpec P ⊆ wpM add P
-    prf P Nil (fst , snd) = fst \xs -> λ ()
-    prf P (Cons x Nil) (fst , snd) = fst λ x₁ () 
-    prf P (Cons x (Cons x₁ xs)) H = Pair.snd H (Cons _ xs) AddThem
-
- -- Can we do calculation in this style?
-
-  explicitDerivation : addSpec ⊑ add
-  explicitDerivation =
-    addSpec
-      ⟨ step1 ⟩
-    (\xs -> pop xs >>= \ { (x1 , xs) -> spec (AddSpec (Cons x1 xs))})
-      ⟨ step2 ⟩
-    (\xs -> pop xs >>= \ { (x1 , xs) ->
-            pop xs >>= \ { (x2 , xs) ->
-            spec (AddSpec (Cons x1 (Cons x2 xs)))
-                         }})
-      ⟨ step3 ⟩
-    add ■
-      where
-        step1 : addSpec ⊑ (\xs -> pop xs >>= \ { (x1 , xs) -> Pure (Spec (AddSpec (Cons x1 xs)))})
-        step1 = refinement \ { P Nil (fst , snd) → fst λ x () ; P (Cons x xs) H → H}
-        step2 : (\xs -> pop xs >>= \ { (x1 , xs) -> spec (AddSpec (Cons x1 xs))})
-                ⊑
-                (\xs -> pop xs >>= \ { (x1 , xs) ->
-                        pop xs >>= \ { (x2 , xs) ->
-                        spec (AddSpec (Cons x1 (Cons x2 xs)))}})
-        step2 = refinement \ { P Nil ()
-                             ; P (Cons x Nil) (fst , snd) → fst \x ()
-                             ; P (Cons x (Cons x₁ xs)) H → H}
-        step3 : (\xs -> pop xs >>= \ { (x1 , xs) ->
-                        pop xs >>= \ { (x2 , xs) ->
-                        spec (AddSpec (Cons x1 (Cons x2 xs)))}})
-                ⊑ add
-        step3 = refinement \ { P Nil () ; P (Cons x Nil) ()
-                             ; P (Cons x1 (Cons x2 xs)) (fst , snd) →
-                                 snd (Cons (x1 + x2) xs) AddThem }
-
-  -- Rephrasing things a bit...
-
+    prf P Nil ((fst , snd₁) , snd) = fst refl -- fst \xs -> λ ()
+    prf P (x :: Nil) ((fst , snd₁) , snd) = snd₁ (x , refl) -- fst λ x₁ () 
+    prf P (x :: x₁ :: xs) (H , snd) = snd (Cons _ xs) AddThem -- snd (Cons _ xs) AddThem 
 
   Σ : (a : Set) -> (b : a -> Set) -> Set
   Σ = Sigma
@@ -267,33 +210,74 @@ module Maybe where
   _>=>_ : ∀ {a b c} -> (I a -> M b) -> (I b -> M c) -> (I a -> M c)
   _>=>_ c1 c2 = \x ->  c1 x >>= c2
 
+ -- Can we do calculation in this style?
+
+  explicitDerivation : addSpec ⊑ add
+  explicitDerivation =
+    addSpec
+      ⟨ step1 ⟩
+    (\xs -> pop xs >>= \ { (x1 , xs) -> spec (not-null xs) (AddSpec (x1 :: xs))})
+      ⟨ step2 ⟩
+    (\xs -> pop xs >>= \ { (x1 , xs) ->
+            pop xs >>= \ { (x2 , xs) ->
+            spec ⊤ (AddSpec (Cons x1 (Cons x2 xs)))
+                         }})
+      ⟨ step3 ⟩
+    add ■
+      where
+        step1 : addSpec ⊑
+                (\xs -> pop xs >>= \ { (x1 , xs) ->
+                        Pure (Spec (not-null xs) (AddSpec (x1 :: xs)))})
+        step1 = refinement \ { P Nil ((fst , snd₁) , snd) → magic (fst refl)
+                             ; P (x :: xs) ((fst , snd₁) , snd) →
+                               (λ notNull → snd₁ (x , cong (_::_ x) notNull))
+                               , snd }
+        step2 : (\xs -> pop xs >>= \ { (x1 , xs) -> spec {!!} (AddSpec (Cons x1 xs))})
+                ⊑
+                (\xs -> pop xs >>= \ { (x1 , xs) ->
+                        pop xs >>= \ { (x2 , xs) ->
+                        spec {!!} (AddSpec (Cons x1 (Cons x2 xs)))}})
+        step2 = refinement \ { P Nil ()
+                             ; P (x :: Nil) (fst , snd) → {!!} -- fst \x ()
+                             ; P (x :: (x₁ :: xs)) H → {!!}} -- H
+        step3 : (\xs -> pop xs >>= \ { (x1 , xs) ->
+                        pop xs >>= \ { (x2 , xs) ->
+                        spec {!!} (AddSpec (Cons x1 (Cons x2 xs)))}})
+                ⊑ add
+        step3 = refinement \ { P Nil () ; P (x :: Nil) ()
+                             ; P (x1 :: (x2 :: xs)) (fst , snd) →
+                                 snd (Cons (x1 + x2) xs) AddThem }
+
+  -- Rephrasing things a bit...
+
+
   popIt : (S : Stack Nat -> Stack Nat -> Set) ->
           Σ (Pair Nat (Stack Nat) -> M (Stack Nat))
             (\g -> 
               (P : Stack Nat -> Stack Nat -> Set) ->
-              wpM (spec · S) P ⊆ wpM (\xs -> pop xs >>= g) P) ->
-          Σ (Stack Nat -> M (Stack Nat)) (\f -> (spec · S) ⊑ f)
+              wpM (\xs -> spec (not-null xs) (S xs)) P ⊆ wpM (\xs -> pop xs >>= g) P) ->
+          Σ (Stack Nat -> M (Stack Nat)) (\f -> (\x -> spec (not-null x) (S x)) ⊑ f)
   popIt S (g , H) = (\xs -> pop xs >>= g) , refinement H
 
 
   returnStep : ∀ {P : Stack Nat -> Stack Nat -> Set} ->
     ((xs : Stack Nat) -> P xs xs) ->
-    Σ (Stack Nat -> M (Stack Nat)) (\f -> (\x -> spec (P x)) ⊑ f)    
+    Σ (Stack Nat -> M (Stack Nat)) (\f -> (\x -> spec ⊤ (P x)) ⊑ f)    
   returnStep H = (\xs -> Pure (Done xs)) , refinement λ { P ys (fst , snd) → snd ys (H ys)}
 
-  popStep : (S : Stack Nat -> Stack Nat -> Set) ->
-          (S' : Pair Nat (Stack Nat) -> Stack Nat -> Set) ->
-          ((x : Nat) (xs : Stack Nat) -> S (Cons x xs) ⊆ S' (x , xs)) ->
-          ((x : Nat) (xs : Stack Nat) -> S' (x , xs) ⊆ S (Cons x xs)) ->          
-          Σ (Pair Nat (Stack Nat) -> M (Stack Nat))
-            (\g -> (spec · S') ⊑ g) ->
-          Σ (Stack Nat -> M (Stack Nat)) (\f -> (spec · S) ⊑ f)
-  popStep S S' H1 H2 (g , proof) =
-    (\xs -> pop xs >>= g) , {!!}
+  -- popStep : (S : Stack Nat -> Stack Nat -> Set) ->
+  --         (S' : Pair Nat (Stack Nat) -> Stack Nat -> Set) ->
+  --         ((x : Nat) (xs : Stack Nat) -> S (Cons x xs) ⊆ S' (x , xs)) ->
+  --         ((x : Nat) (xs : Stack Nat) -> S' (x , xs) ⊆ S (Cons x xs)) ->          
+  --         Σ (Pair Nat (Stack Nat) -> M (Stack Nat))
+  --           (\g -> (\x -> spec {!!} ( S' x)) ⊑ g) ->
+  --         Σ (Stack Nat -> M (Stack Nat)) (\f -> (\x -> spec {!!} (S x)) ⊑ f)
+  -- popStep S S' H1 H2 (g , proof) =
+  --   (\xs -> pop xs >>= g) , refinement (λ P x x₁ → {!!})
 
 
   derivation : Σ (Stack Nat -> M (Stack Nat)) (\f -> addSpec ⊑ f)
-  derivation =  {!!}
+  derivation =  {!popIt!}
 
   feasible : {a : Set} -> {b : a -> Set} ->
     (f : (x : a) -> M (b x)) -> Set
@@ -304,249 +288,249 @@ module Maybe where
   infeasible f = feasible f -> ⊥
 
 
-module State (s : Set) where
-  open Free hiding (_⊑_)
+-- module State (s : Set) where
+--   open Free hiding (_⊑_)
 
-  data C : Set where
-    Get : C
-    Put : s -> C
-    Spec : {output : Set} -> (s -> Set) -> (Pair output s -> Set) -> C
+--   data C : Set where
+--     Get : C
+--     Put : s -> C
+--     Spec : {output : Set} -> (s -> Set) -> (Pair output s -> Set) -> C
 
-  R : C -> Set
-  R Get = s
-  R (Put _)  = ⊤
-  R (Spec {b} _ _) = b -- we claim Spec produces a value of type b
+--   R : C -> Set
+--   R Get = s
+--   R (Put _)  = ⊤
+--   R (Spec {b} _ _) = b -- we claim Spec produces a value of type b
 
-  State : Set -> Set
-  State = Free C R
+--   State : Set -> Set
+--   State = Free C R
 
-  get : State s
-  get = Step Get return
-  put : s -> State ⊤
-  put x = Step (Put x) (λ _ → return tt)
-  spec : {a : Set} -> (s -> Set) -> (Pair a s -> Set) -> State a
-  spec pre post = Step (Spec pre post) return
+--   get : State s
+--   get = Step Get return
+--   put : s -> State ⊤
+--   put x = Step (Put x) (λ _ → return tt)
+--   spec : {a : Set} -> (s -> Set) -> (Pair a s -> Set) -> State a
+--   spec pre post = Step (Spec pre post) return
 
-  -- TODO: replace spec with spec' everywhere?
-  spec' : {a : Set} -> {b : Set} -> (Pair a s -> Set) -> (Pair b s -> Set) -> a -> State b
-  spec' pre post x = spec (\t -> pre (x , t)) post
+--   -- TODO: replace spec with spec' everywhere?
+--   spec' : {a : Set} -> {b : Set} -> (Pair a s -> Set) -> (Pair b s -> Set) -> a -> State b
+--   spec' pre post x = spec (\t -> pre (x , t)) post
 
-  isCode : {a : Set} -> State a -> Set
-  isCode (Pure _) = ⊤
-  isCode (Step Get k) = (state : s) -> isCode (k state)
-  isCode (Step (Put _) k) = isCode (k tt)
-  isCode (Step (Spec x₁ x₂) k) = ⊥
+--   isCode : {a : Set} -> State a -> Set
+--   isCode (Pure _) = ⊤
+--   isCode (Step Get k) = (state : s) -> isCode (k state)
+--   isCode (Step (Put _) k) = isCode (k tt)
+--   isCode (Step (Spec x₁ x₂) k) = ⊥
 
-  isCodeBind : {a b : Set} -> (x : State a) -> (f : a -> State b) -> isCode x -> ((t : a) -> isCode (f t)) -> isCode (x >>= f)
-  isCodeBind (Pure x) f xIs fIs = fIs x
-  isCodeBind (Step Get k) f xIs fIs state = isCodeBind (k state) f (xIs state) fIs
-  isCodeBind (Step (Put x) k) f xIs fIs = isCodeBind (k tt) f xIs fIs
-  isCodeBind (Step (Spec pre post) k) f () fIs
+--   isCodeBind : {a b : Set} -> (x : State a) -> (f : a -> State b) -> isCode x -> ((t : a) -> isCode (f t)) -> isCode (x >>= f)
+--   isCodeBind (Pure x) f xIs fIs = fIs x
+--   isCodeBind (Step Get k) f xIs fIs state = isCodeBind (k state) f (xIs state) fIs
+--   isCodeBind (Step (Put x) k) f xIs fIs = isCodeBind (k tt) f xIs fIs
+--   isCodeBind (Step (Spec pre post) k) f () fIs
 
-  -- define a relation on initial states and stateful computations, where the postcondition holds in the final state
-  -- TODO: seems legit but check that it works
-  holds : {b : Set} -> (P : Pair b s -> Set) -> s -> (State b -> Set)
-  holds P init (Pure x) = P (x , init)
-  holds P init (Step Get k) = holds P init (k init)
-  holds P init (Step (Put next) k) = holds P next (k tt)
-  holds {f} P init (Step (Spec {i} pre post) k) = Pair (pre init) -- The specification holds if the initial value satisfies the precondition...
-    ((val : i) -> (x : s) -> -- and for all intermediate values and states...
-      post (val , x) -> -- such that the postcondition holds...
-        holds P x (k val)) -- the continuation makes P hold
+--   -- define a relation on initial states and stateful computations, where the postcondition holds in the final state
+--   -- TODO: seems legit but check that it works
+--   holds : {b : Set} -> (P : Pair b s -> Set) -> s -> (State b -> Set)
+--   holds P init (Pure x) = P (x , init)
+--   holds P init (Step Get k) = holds P init (k init)
+--   holds P init (Step (Put next) k) = holds P next (k tt)
+--   holds {f} P init (Step (Spec {i} pre post) k) = Pair (pre init) -- The specification holds if the initial value satisfies the precondition...
+--     ((val : i) -> (x : s) -> -- and for all intermediate values and states...
+--       post (val , x) -> -- such that the postcondition holds...
+--         holds P x (k val)) -- the continuation makes P hold
 
-  wpState : {a : Set} -> {b : Set} -> (f : a -> State b) -> (P : Pair b s -> Set) -> (Pair a s -> Set)
-  wpState {a} f P (arg , init) = wp f (\_ -> holds P init) arg
+--   wpState : {a : Set} -> {b : Set} -> (f : a -> State b) -> (P : Pair b s -> Set) -> (Pair a s -> Set)
+--   wpState {a} f P (arg , init) = wp f (\_ -> holds P init) arg
 
-  -- give the current value and update it with the function
-  modify : (s -> s) -> State s
-  modify f = get >>= λ x → put (f x) >>= (λ _ → return x)
+--   -- give the current value and update it with the function
+--   modify : (s -> s) -> State s
+--   modify f = get >>= λ x → put (f x) >>= (λ _ → return x)
 
-  -- the interaction of holds with bind
-  holdsBind : {a : Set} -> {b : Set} -> (P : Pair b s -> Set) -> (t : s) -> (x : State a) -> (f : a -> State b) -- given f and x
-    -> holds (wpState f P) t x -- if the wp of f holds after x,
-    -> holds P t (x >>= f) -- then x >>= f satisfies P on input state x
-  holdsBind P t (Pure x) f xHolds = xHolds
-  holdsBind P t (Step Get k) f xHolds = holdsBind P t (k t) f xHolds
-  holdsBind P t (Step (Put t') k) f xHolds = holdsBind P t' (k tt) f xHolds
-  holdsBind P t (Step (Spec pre post) k) f (fst , snd) = fst , (λ x x₁ x₂ → holdsBind P x₁ (k x) f (snd x x₁ x₂))
+--   -- the interaction of holds with bind
+--   holdsBind : {a : Set} -> {b : Set} -> (P : Pair b s -> Set) -> (t : s) -> (x : State a) -> (f : a -> State b) -- given f and x
+--     -> holds (wpState f P) t x -- if the wp of f holds after x,
+--     -> holds P t (x >>= f) -- then x >>= f satisfies P on input state x
+--   holdsBind P t (Pure x) f xHolds = xHolds
+--   holdsBind P t (Step Get k) f xHolds = holdsBind P t (k t) f xHolds
+--   holdsBind P t (Step (Put t') k) f xHolds = holdsBind P t' (k tt) f xHolds
+--   holdsBind P t (Step (Spec pre post) k) f (fst , snd) = fst , (λ x x₁ x₂ → holdsBind P x₁ (k x) f (snd x x₁ x₂))
 
-  -- If we have a Spec, then for any P, its precondition is implied by the wp.
-  holdsSpecPre : {a : Set} -> {b : Set} -> (pre : Pair a s -> Set) -> (post P : Pair b s -> Set)
-    -> wpState (spec' pre post) P ⊆ pre
-  holdsSpecPre _ _ _ _ (preHolds , _) = preHolds
-  -- If we have Spec pre post, then for any postcondition P that is implied by post, the wp is equivalent to pre.
-  holdsSpecPost : {a : Set} -> {b : Set} -> (pre : Pair a s -> Set) -> (post P : Pair b s -> Set)
-    -> post ⊆ P
-    -> pre ⊆ wpState (spec' pre post) P
-  holdsSpecPost pre post P postImplies x preHolds = preHolds , (λ val x₁ → postImplies (val , x₁))
+--   -- If we have a Spec, then for any P, its precondition is implied by the wp.
+--   holdsSpecPre : {a : Set} -> {b : Set} -> (pre : Pair a s -> Set) -> (post P : Pair b s -> Set)
+--     -> wpState (spec' pre post) P ⊆ pre
+--   holdsSpecPre _ _ _ _ (preHolds , _) = preHolds
+--   -- If we have Spec pre post, then for any postcondition P that is implied by post, the wp is equivalent to pre.
+--   holdsSpecPost : {a : Set} -> {b : Set} -> (pre : Pair a s -> Set) -> (post P : Pair b s -> Set)
+--     -> post ⊆ P
+--     -> pre ⊆ wpState (spec' pre post) P
+--   holdsSpecPost pre post P postImplies x preHolds = preHolds , (λ val x₁ → postImplies (val , x₁))
 
-module TreeLabeling where
-  open Free hiding (_⊑_)
-  open State
+-- module TreeLabeling where
+--   open Free hiding (_⊑_)
+--   open State
 
-  -- we have to put this here so we don't have s as an obligatory variable
-  record _⊑_ {s : Set} {a : Set} {b : Set} (f g : a -> State s b) : Set1 where
-    constructor refinement
-    field
-      proof : (∀ P -> wpState s f P ⊆ wpState s g P)
+--   -- we have to put this here so we don't have s as an obligatory variable
+--   record _⊑_ {s : Set} {a : Set} {b : Set} (f g : a -> State s b) : Set1 where
+--     constructor refinement
+--     field
+--       proof : (∀ P -> wpState s f P ⊆ wpState s g P)
 
-  record Preorder {a : Set} (R : a -> a -> Set) : Set where
-    constructor preorder
-    field
-      pre-refl : (∀ {x} -> R x x)
-      pre-trans : (∀ {x y z} -> R x y -> R y z -> R x z)
-  open Preorder
+--   record Preorder {a : Set} (R : a -> a -> Set) : Set where
+--     constructor preorder
+--     field
+--       pre-refl : (∀ {x} -> R x x)
+--       pre-trans : (∀ {x y z} -> R x y -> R y z -> R x z)
+--   open Preorder
 
-  pre-⊑ : ∀ {a b c} -> Preorder (_⊑_ {a} {b} {c})
-  pre-⊑ = preorder
-    (refinement (λ P x₁ z → z))
-    (λ p q → refinement (λ P x₁ z₁ → _⊑_.proof q P x₁ (_⊑_.proof p P x₁ z₁)))
+--   pre-⊑ : ∀ {a b c} -> Preorder (_⊑_ {a} {b} {c})
+--   pre-⊑ = preorder
+--     (refinement (λ P x₁ z → z))
+--     (λ p q → refinement (λ P x₁ z₁ → _⊑_.proof q P x₁ (_⊑_.proof p P x₁ z₁)))
 
-  infixr 2 _⟨_⟩_
-  _⟨_⟩_ : forall {a s : Set} {b : Set}
-    (f : (x : a) -> State s b) -> {g h : (x : a) -> State s b} -> (f ⊑ g) -> (g ⊑ h) -> f ⊑ h
-  _⟨_⟩_ f {g} {h} step1 step2 = (pre-trans pre-⊑) {f} {g} {h} step1 step2
+--   infixr 2 _⟨_⟩_
+--   _⟨_⟩_ : forall {a s : Set} {b : Set}
+--     (f : (x : a) -> State s b) -> {g h : (x : a) -> State s b} -> (f ⊑ g) -> (g ⊑ h) -> f ⊑ h
+--   _⟨_⟩_ f {g} {h} step1 step2 = (pre-trans pre-⊑) {f} {g} {h} step1 step2
 
-  _∎ : forall {a s : Set} {b : Set} (f : (x : a) -> State s b) -> f ⊑ f
-  _∎ f = pre-refl pre-⊑ {f}
+--   _∎ : forall {a s : Set} {b : Set} (f : (x : a) -> State s b) -> f ⊑ f
+--   _∎ f = pre-refl pre-⊑ {f}
 
-  -- For proofs it is more useful to run dependent programs, but for case-analysis we want direct monadic values.
-  run' : {s : Set} -> {b : Set} -> (prog : State s b) -> isCode s prog -> s -> Pair b s
-  run' (Pure x) prf init = x , init
-  run' (Step Get k) prf init = run' (k init) (prf init) init
-  run' (Step (Put next) k) prf init = run' (k tt) prf next
-  run' (Step (Spec pre post) k) () init
+--   -- For proofs it is more useful to run dependent programs, but for case-analysis we want direct monadic values.
+--   run' : {s : Set} -> {b : Set} -> (prog : State s b) -> isCode s prog -> s -> Pair b s
+--   run' (Pure x) prf init = x , init
+--   run' (Step Get k) prf init = run' (k init) (prf init) init
+--   run' (Step (Put next) k) prf init = run' (k tt) prf next
+--   run' (Step (Spec pre post) k) () init
 
-  run : {a s : Set} -> {b : Set} -> (prog : a -> State s b) -> ((t : a) -> isCode s (prog t)) -> Pair a s -> Pair b s
-  run prog prf (x , init) = run' (prog x) (prf x) init
+--   run : {a s : Set} -> {b : Set} -> (prog : a -> State s b) -> ((t : a) -> isCode s (prog t)) -> Pair a s -> Pair b s
+--   run prog prf (x , init) = run' (prog x) (prf x) init
 
-  -- completeness and soundness of wpState for code
-  -- wpState is sound: it gives a precondition
-  soundness : {a s : Set} -> {b : Set} -> (prog : a -> State s b) -> (prf : (x : a) -> isCode s (prog x)) -- if we have code,
-    -> (P : Pair b s -> Set) -- and a postcondition,
-    -> (i : Pair a s) -> wpState s prog P i -> P (run prog prf i) -- then wpState gives a precondition for P
-  soundness {a} {s} {b} prog prf P (x , t) wpHolds = soundness' (prog x) (prf x) P t wpHolds
-    where
-      soundness' : (prog : State s b) -> (prf : isCode s prog) -> (P : Pair b s -> Set) -> (t : s) -> holds s P t prog -> P (run' prog prf t)
-      soundness' (Pure _) _ _ _ hold = hold
-      soundness' (Step Get k) prf P t hold = soundness' (k t) (prf t) P t hold
-      soundness' (Step (Put x) k) prf P t hold = soundness' (k tt) prf P x hold
-      soundness' (Step (Spec _ _) _) () _ _ _
+--   -- completeness and soundness of wpState for code
+--   -- wpState is sound: it gives a precondition
+--   soundness : {a s : Set} -> {b : Set} -> (prog : a -> State s b) -> (prf : (x : a) -> isCode s (prog x)) -- if we have code,
+--     -> (P : Pair b s -> Set) -- and a postcondition,
+--     -> (i : Pair a s) -> wpState s prog P i -> P (run prog prf i) -- then wpState gives a precondition for P
+--   soundness {a} {s} {b} prog prf P (x , t) wpHolds = soundness' (prog x) (prf x) P t wpHolds
+--     where
+--       soundness' : (prog : State s b) -> (prf : isCode s prog) -> (P : Pair b s -> Set) -> (t : s) -> holds s P t prog -> P (run' prog prf t)
+--       soundness' (Pure _) _ _ _ hold = hold
+--       soundness' (Step Get k) prf P t hold = soundness' (k t) (prf t) P t hold
+--       soundness' (Step (Put x) k) prf P t hold = soundness' (k tt) prf P x hold
+--       soundness' (Step (Spec _ _) _) () _ _ _
 
-  -- wpState is complete: it gives a condition that is weaker than all preconditions
-  completeness' : {s : Set} -> {b : Set} -> (prog : State s b) -> (prf : isCode s prog)
-    -> (pre : s -> Set) -> (post : Pair b s -> Set)
-    -> (t : s) -> pre t -> post (run' prog prf t)
-    -> holds s post t prog
-  completeness' (Pure _) _ _ _ _ _ postHold = postHold
-  completeness' (Step Get k) prf pre post t preHold postHold = completeness' (k t) (prf t) (λ _ → post (run' (k t) (prf t) t))
-      post t postHold postHold
-  completeness' (Step (Put x) k) prf pre post t preHold postHold = completeness' (k tt) prf (λ _ → post (run' (k tt) prf x)) post x
-    postHold postHold
-  completeness' (Step (Spec _ _) _) () _ _ _ _ _
+--   -- wpState is complete: it gives a condition that is weaker than all preconditions
+--   completeness' : {s : Set} -> {b : Set} -> (prog : State s b) -> (prf : isCode s prog)
+--     -> (pre : s -> Set) -> (post : Pair b s -> Set)
+--     -> (t : s) -> pre t -> post (run' prog prf t)
+--     -> holds s post t prog
+--   completeness' (Pure _) _ _ _ _ _ postHold = postHold
+--   completeness' (Step Get k) prf pre post t preHold postHold = completeness' (k t) (prf t) (λ _ → post (run' (k t) (prf t) t))
+--       post t postHold postHold
+--   completeness' (Step (Put x) k) prf pre post t preHold postHold = completeness' (k tt) prf (λ _ → post (run' (k tt) prf x)) post x
+--     postHold postHold
+--   completeness' (Step (Spec _ _) _) () _ _ _ _ _
 
-  completeness : {a s : Set} -> {b : Set} -> (prog : a -> State s b) -> (prf : (x : a) -> isCode s (prog x)) -- if we have code,
-    -> (pre : Pair a s -> Set) -> (post : Pair b s -> Set) -- and a specification
-    -> ((i : Pair a s) -> pre i -> post (run prog prf i)) -- and for all preconditioned values, the postcondition holds for running
-    -> pre ⊆ wpState s prog post -- then it is stronger than the weakest precondition
-  completeness {a} {s} {b} prog prf pre post specRun (x , t) preHolds
-    = completeness' (prog x) (prf x) (\t -> pre (x , t)) post t preHolds (specRun (x , t) preHolds)
+--   completeness : {a s : Set} -> {b : Set} -> (prog : a -> State s b) -> (prf : (x : a) -> isCode s (prog x)) -- if we have code,
+--     -> (pre : Pair a s -> Set) -> (post : Pair b s -> Set) -- and a specification
+--     -> ((i : Pair a s) -> pre i -> post (run prog prf i)) -- and for all preconditioned values, the postcondition holds for running
+--     -> pre ⊆ wpState s prog post -- then it is stronger than the weakest precondition
+--   completeness {a} {s} {b} prog prf pre post specRun (x , t) preHolds
+--     = completeness' (prog x) (prf x) (\t -> pre (x , t)) post t preHolds (specRun (x , t) preHolds)
  
-  -- maar met run heb je non-isCode weggelaten, dus hier kunnen we relateren met spec
-  refinePrePost : {a s : Set} -> {b : Set} -> (prog : a -> State s b) -> (prf : (x : a) -> isCode s (prog x)) -- if we have code
-    -> (pre : Pair a s -> Set) -> (post : Pair b s -> Set) -- and a specification
-    -> ((i : Pair a s) -> pre i -> post (run prog prf i)) -- and for all preconditioned values, the postcondition holds
-    -> spec' s pre post ⊑ prog -- then the code refines the specification
-  refinePrePost {a} {s} {b} prog prf pre post postAfterRun = refinement prePost
-    where
-      rPP' : (prog : State s b) -> (prf : isCode s prog) -- if we have code
-        -> (pre : s -> Set) -> (post : Pair b s -> Set) -- and a specification
-        -> ((t : s) -> pre t -> post (run' prog prf t)) -- and for all preconditioned values, the postcondition holds
-        -> (P : Pair b s -> Set) -> (t : s) -> holds s P t (spec s pre post) -> holds s P t prog
-      rPP' prog prf pre post postAfterRun P t (fst , snd)
-        = completeness' prog prf pre P t fst (snd (Pair.fst (run' prog prf t)) (Pair.snd (run' prog prf t)) (postAfterRun t fst))
-      -- rPP' prog prf pre post postAfterRun P t (fst , snd) = {!!}
-      prePost : (P : Pair b s -> Set) -> (x : Pair a s) -> wpState s (spec' s pre post) P x -> wpState s prog P x
-      prePost P (x , t) wpSpec = rPP' (prog x) (prf x) (\t' -> pre (x , t')) post (λ t₁ → {! postAfterRun (x , t₁) !}) P t wpSpec
-      -- prog prf pre post postAfterRun P x hold = completeness prog prf pre P (λ i preH → {!postAfterRun i preH!}) x (holdsSpecPre s pre post P x hold)
+--   -- maar met run heb je non-isCode weggelaten, dus hier kunnen we relateren met spec
+--   refinePrePost : {a s : Set} -> {b : Set} -> (prog : a -> State s b) -> (prf : (x : a) -> isCode s (prog x)) -- if we have code
+--     -> (pre : Pair a s -> Set) -> (post : Pair b s -> Set) -- and a specification
+--     -> ((i : Pair a s) -> pre i -> post (run prog prf i)) -- and for all preconditioned values, the postcondition holds
+--     -> spec' s pre post ⊑ prog -- then the code refines the specification
+--   refinePrePost {a} {s} {b} prog prf pre post postAfterRun = refinement prePost
+--     where
+--       rPP' : (prog : State s b) -> (prf : isCode s prog) -- if we have code
+--         -> (pre : s -> Set) -> (post : Pair b s -> Set) -- and a specification
+--         -> ((t : s) -> pre t -> post (run' prog prf t)) -- and for all preconditioned values, the postcondition holds
+--         -> (P : Pair b s -> Set) -> (t : s) -> holds s P t (spec s pre post) -> holds s P t prog
+--       rPP' prog prf pre post postAfterRun P t (fst , snd)
+--         = completeness' prog prf pre P t fst (snd (Pair.fst (run' prog prf t)) (Pair.snd (run' prog prf t)) (postAfterRun t fst))
+--       -- rPP' prog prf pre post postAfterRun P t (fst , snd) = {!!}
+--       prePost : (P : Pair b s -> Set) -> (x : Pair a s) -> wpState s (spec' s pre post) P x -> wpState s prog P x
+--       prePost P (x , t) wpSpec = rPP' (prog x) (prf x) (\t' -> pre (x , t')) post (λ t₁ → {! postAfterRun (x , t₁) !}) P t wpSpec
+--       -- prog prf pre post postAfterRun P x hold = completeness prog prf pre P (λ i preH → {!postAfterRun i preH!}) x (holdsSpecPre s pre post P x hold)
 
-  data Tree (s : Set) : Set where
-    Leaf : s -> Tree s
-    Branch : Tree s -> Tree s -> Tree s
+--   -- data Tree (s : Set) : Set where
+--   --   Leaf : s -> Tree s
+--   --   Branch : Tree s -> Tree s -> Tree s
 
-  -- the number of leaves in the tree
-  size : {s : Set} -> Tree s -> Nat
-  size (Leaf _) = 1
-  size (Branch l r) = size l + size r
+--   -- -- the number of leaves in the tree
+--   -- size : {s : Set} -> Tree s -> Nat
+--   -- size (Leaf _) = 1
+--   -- size (Branch l r) = size l + size r
 
-  flatten : {s : Set} -> Tree s -> List s
-  flatten (Leaf x) = Cons x Nil
-  flatten (Branch l r) = (flatten l) ++ (flatten r)
+--   -- flatten : {s : Set} -> Tree s -> List s
+--   -- flatten (Leaf x) = Cons x Nil
+--   -- flatten (Branch l r) = (flatten l) ++ (flatten r)
 
-  -- TODO: is this a useful definition?
-  range : Nat -> List Nat
-  range 0 = Nil
-  range (Succ n) = range n ++ (Cons n Nil)
+--   -- -- TODO: is this a useful definition?
+--   -- range : Nat -> List Nat
+--   -- range 0 = Nil
+--   -- range (Succ n) = range n ++ (Cons n Nil)
 
-  --splitRange : (p q : Nat) -> (range p ++ map (_+_ p) (range q)) == range (p + q)
-  --splitRange = {!!}
+--   --splitRange : (p q : Nat) -> (range p ++ map (_+_ p) (range q)) == range (p + q)
+--   --splitRange = {!!}
 
-  -- basic tree labelling function, but we don't prove it works!
-  labelTree : {a : Set} -> Tree a -> State Nat (Tree Nat)
-  labelTree (Leaf x) = (modify Nat Succ) >>= λ n → return (Leaf n)
-  labelTree (Branch l r) = labelTree l >>= \l' -> labelTree r >>= \r' -> return (Branch l' r')
+--   -- basic tree labelling function, but we don't prove it works!
+--   -- labelTree : {a : Set} -> Tree a -> State Nat (Tree Nat)
+--   -- labelTree (Leaf x) = (modify Nat Succ) >>= λ n → return (Leaf n)
+--   -- labelTree (Branch l r) = labelTree l >>= \l' -> labelTree r >>= \r' -> return (Branch l' r')
 
-  labelPre : Nat -> Set
-  labelPre n = n == 0
-  labelPost : Pair (Tree Nat) Nat -> Set
-  labelPost (t , n) = Pair (flatten t == range (size t)) (n == size t)
-  labelSpec : {a : Set} -> Tree a -> State Nat (Tree Nat)
-  labelSpec x = spec Nat labelPre labelPost
+--   -- labelPre : Nat -> Set
+--   -- labelPre n = n == 0
+--   -- labelPost : Pair (Tree Nat) Nat -> Set
+--   -- labelPost (t , n) = Pair (flatten t == range (size t)) (n == size t)
+--   -- labelSpec : {a : Set} -> Tree a -> State Nat (Tree Nat)
+--   -- labelSpec x = spec Nat labelPre labelPost
 
-  -- If we can prove there is a refinement, and the refinement is code, then we have an implementation.
-  implementation : {a s : Set} -> {b : Set} -> ((t : a) -> State s b) -> Set
-  implementation {a} {s} {b} spec = Sigma ((t : a) -> State s b) (\prog -> Pair ((t : a) -> isCode s (prog t)) (spec ⊑ prog))
+--   -- -- If we can prove there is a refinement, and the refinement is code, then we have an implementation.
+--   -- implementation : {a s : Set} -> {b : Set} -> ((t : a) -> State s b) -> Set
+--   -- implementation {a} {s} {b} spec = Sigma ((t : a) -> State s b) (\prog -> Pair ((t : a) -> isCode s (prog t)) (spec ⊑ prog))
 
-  -- We already have the function, so let's prove it works.
-  labelRefinement : {a : Set} -> implementation (labelSpec {a})
-  labelRefinement {a} = labelTree , (itIsCode , refinePrePost labelTree itIsCode (λ x → Pair.snd x == 0) labelPost provePost)
+--   -- -- We already have the function, so let's prove it works.
+--   -- labelRefinement : {a : Set} -> implementation (labelSpec {a})
+--   -- labelRefinement {a} = labelTree , (itIsCode , refinePrePost labelTree itIsCode (λ x → Pair.snd x == 0) labelPost provePost)
 
-    where
-      itIsCode : {a : Set} -> (t : Tree a) -> isCode Nat (labelTree t)
-      itIsCode (Leaf x) = λ state → tt
-      -- TODO: can we make this better?
-      -- Maybe a combinator that gives Either (isCode prog) (continueHere continuation),
-      -- such that isCode p implies isCode (continuation p)
-      itIsCode (Branch l r) = isCodeBind Nat (labelTree l) (\l' -> labelTree r >>= \r' -> return (Branch l' r')) (itIsCode l)
-        λ t → isCodeBind Nat (labelTree r) (λ z → Pure (Branch t z)) (itIsCode r) (λ t₁ → tt)
+--   --   where
+--   --     itIsCode : {a : Set} -> (t : Tree a) -> isCode Nat (labelTree t)
+--   --     itIsCode (Leaf x) = λ state → tt
+--   --     -- TODO: can we make this better?
+--   --     -- Maybe a combinator that gives Either (isCode prog) (continueHere continuation),
+--   --     -- such that isCode p implies isCode (continuation p)
+--   --     itIsCode (Branch l r) = isCodeBind Nat (labelTree l) (\l' -> labelTree r >>= \r' -> return (Branch l' r')) (itIsCode l)
+--   --       λ t → isCodeBind Nat (labelTree r) (λ z → Pure (Branch t z)) (itIsCode r) (λ t₁ → tt)
 
-      inBranches : (l r : Tree a) -> (n : Nat) -> Branch (Pair.fst (run labelTree itIsCode (l , n))) (Pair.fst (run labelTree itIsCode (r , (n + size l)))) == Pair.fst (run labelTree itIsCode (Branch l r , n))
-      inBranches l r n = {!!}
+--   --     inBranches : (l r : Tree a) -> (n : Nat) -> Branch (Pair.fst (run labelTree itIsCode (l , n))) (Pair.fst (run labelTree itIsCode (r , (n + size l)))) == Pair.fst (run labelTree itIsCode (Branch l r , n))
+--   --     inBranches l r n = {!!}
 
-      preserveSize : (i : Pair (Tree a) Nat) -> size (Pair.fst i) == size (Pair.fst (run labelTree itIsCode i))
-      preserveSize (Leaf x , _) = Refl
-      preserveSize (Branch l r , _) = {!!}
+--   --     preserveSize : (i : Pair (Tree a) Nat) -> size (Pair.fst i) == size (Pair.fst (run labelTree itIsCode i))
+--   --     preserveSize (Leaf x , _) = Refl
+--   --     preserveSize (Branch l r , _) = {!!}
 
-      provePost : (i : Pair (Tree a) Nat) -> Pair.snd i == 0 -> labelPost (run labelTree itIsCode i)
-      provePost (Leaf x , .0) Refl = Refl , Refl
-      provePost (Branch l r , .0) Refl =
-        {!!} ,
-        (run labelTree itIsCode (Branch l r , 0) .Pair.snd =⟨ {!!} ⟩= size (run labelTree itIsCode (Branch l r , 0) .Pair.fst) =∎)
-        --trans (trans (sym (cong flatten (inBranches l r 0))) {!!})
-        --(trans (splitRange (size l) (size r)) (cong range (preserveSize (Branch l r , 0)))) , {!!}
+--   --     provePost : (i : Pair (Tree a) Nat) -> Pair.snd i == 0 -> labelPost (run labelTree itIsCode i)
+--   --     provePost (Leaf x , .0) Refl = Refl , Refl
+--   --     provePost (Branch l r , .0) Refl =
+--   --       {!!} ,
+--   --       (run labelTree itIsCode (Branch l r , 0) .Pair.snd =⟨ {!!} ⟩= size (run labelTree itIsCode (Branch l r , 0) .Pair.fst) =∎)
+--   --       --trans (trans (sym (cong flatten (inBranches l r 0))) {!!})
+--   --       --(trans (splitRange (size l) (size r)) (cong range (preserveSize (Branch l r , 0)))) , {!!}
 
-      -- We try to prove inductively that the refinement holds.
-      -- This doesn't work because the termination checker doesn't believe us...
-      {-
-      itRefines : (x : Pair (Tree a) Nat) -> (P : Pair (Tree Nat) Nat → Set) → wpState Nat labelSpec P x -> wpState Nat labelTree P x
-      itRefines (t@(Leaf _) , .0) P (Refl , post)
-        = let (labelled , label) = run labelTree itIsCode (t , 0)
-          in post labelled label (Refl , Refl)
-      itRefines (t@(Branch l r) , .0) P (Refl , post)
-        = let iRr n l' = itRefines (r , n) {!wpState Nat ? ?!} {!!}
-          in holdsBind Nat P 0 (labelTree l) (\l' -> labelTree r >>= \r' -> return (Branch l' r'))
-            (itRefines (l , 0) (wpState Nat (λ l' → labelTree r >>= (λ r' → return (Branch l' r'))) P)
-              (Refl , \l' n x → holdsBind Nat P n (labelTree r) (λ r' → return (Branch l' r')) (iRr n l')))
-       -}
+--   --     -- We try to prove inductively that the refinement holds.
+--   --     -- This doesn't work because the termination checker doesn't believe us...
+--   --     {-
+--   --     itRefines : (x : Pair (Tree a) Nat) -> (P : Pair (Tree Nat) Nat → Set) → wpState Nat labelSpec P x -> wpState Nat labelTree P x
+--   --     itRefines (t@(Leaf _) , .0) P (Refl , post)
+--   --       = let (labelled , label) = run labelTree itIsCode (t , 0)
+--   --         in post labelled label (Refl , Refl)
+--   --     itRefines (t@(Branch l r) , .0) P (Refl , post)
+--   --       = let iRr n l' = itRefines (r , n) {!wpState Nat ? ?!} {!!}
+--   --         in holdsBind Nat P 0 (labelTree l) (\l' -> labelTree r >>= \r' -> return (Branch l' r'))
+--   --           (itRefines (l , 0) (wpState Nat (λ l' → labelTree r >>= (λ r' → return (Branch l' r'))) P)
+--   --             (Refl , \l' n x → holdsBind Nat P n (labelTree r) (λ r' → return (Branch l' r')) (iRr n l')))
+--   --      -}
 
 

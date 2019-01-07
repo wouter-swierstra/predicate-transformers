@@ -14,6 +14,8 @@
 %format wpEval = wp "_{" eval "}"
 %format ^^ = "\;"
 %format Set1 = Set
+%format forall = "\forall"
+%format _>>=_ = "\_\!\bind\!\_"
 %else
 %format (Forall (a)) = "forall { " a " } -> "
 %format (implicit(a)) = "{" a "} ->"
