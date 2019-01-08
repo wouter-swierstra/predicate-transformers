@@ -417,39 +417,78 @@ the following lemma.
   the refinement relation |f ⊑ g| holds if and only if for all |x :
   a|, |f x == g x| or |f x == Abort|.
 \end{lemma*}  
-Why care about this refinement relation? Although we can use it to
-compare Kleisli morphisms, it can be extended slightly to relate a
-program to a specification, given by a pre- and postcondition.
+Why care about this refinement relation? Not only can we use it to
+relate Kleisli morphisms, but it can be extended slightly to relate a
+program to a specification given by a pre- and postcondition. We will
+illustrate this further with a brief example.
 
-
-\subsection*{\textsc{Add}}
+\subsection*{Example: \textsc{Add}}
 
 Suppose we are writing an interpreter for a simple stack machine. To
 interpret the |ADD| instruction, we replace the top two elements of
 the stack with their sum. Of course, this may fail if the stack has
-too few elements. This section shows how to derive the obvious
-definition step by step from a specification.
+too few elements. This section shows how to prove that the obvious
+definition meets its specification.
 
-We begin by defining the specification of our addition function as a
-relation between input and output:
+We begin by defining the specification. This specification consists of
+two parts: the pre- and postcondition.
+
+\begin{code}
+  record Spec (a : Set) (b : a -> Set) : Set where
+    constructor spec
+    field
+      pre : a -> Set
+      post : (x : a) -> pre x -> b x -> Set
+\end{code}
+
+The specification of our intended addition function is
 \begin{code}
   data AddSpec : Stack Nat -> Stack Nat -> Set where
     AddStep : (implicit(x1 x2 : Nat)) (implicit(xs : Stack Nat)) AddSpec (x1 :: x2 :: xs) ((x1 + x2) :: xs)
-\end{code}
-Once again, note that we |AddSpec xs ys| is uninhabited when the
-`input' stack |xs| less than two elements.
 
-One way to define
+  addSpec : Spec (Stack Nat) (K (Stack Nat))
+  addSpec = spec (\xs -> length xs > 1) (\xs _ ys -> AddStack xs ys)
+\end{code}
+That is, provided we are given a list with at least two elements, we
+should replace the top two elements with their sum.
+
+Can we give predicate transformer semantics to our specifications? If
+so, we can then try to prove that an implementation refines its
+specification.
+
 \begin{code}
-  pop : ∀ {a} -> Stack a -> Partial (Pair a (Stack a))
+  wpSpec : (Forall(a)) (implicit(b : a -> Set)) Spec a b -> (P : (x : a) -> b x -> Set) -> a -> Set
+  wpSpec (spec pre post) P = \ x -> Sigma (pre x) (\prex -> post x prex ⊆ P x)
+\end{code}
+
+Using this definition we can formulate the verification challenge:
+finding a program |add| satisfying the following statement:
+\begin{spec}
+    addCorrect : ∀ P -> wpSpec addSpec P ⊆ wpPartial add P
+\end{spec}
+Defining such a program and verifying its correctness is entirely
+straightforward:
+\begin{code}
+  pop : (Forall (a)) Stack a -> Partial (Pair a (Stack a))
   pop Nil = abort
   pop (Cons x xs) = return (x , xs)
+
+  add : Stack Nat -> Partial (Stack Nat)
+  add xs =
+    pop xs >>= \{ (x1 , xs) -> 
+    pop xs >>= \{ (x2 , xs) ->
+    return ((x1 + x2) :: xs)}}
+
+  addCorrect : ∀ P -> pt addSpec P ⊆ wpPartial add P
 \end{code}
-It is straightforward to define an |add| function that uses |pop| and
-satisfies the specification given by |AddSpec|. Rather than doing so
-directly, however, we will use this example to illustrate how to
-\emph{derive} the function's implementation step by step from the
-specification we have given above.
+We include this example here to illustrate how to use the refinement
+relation to relate a \emph{specification}, given in terms of a pre-
+and postcondition, to its implementation. When compared to the
+refinement calculus, however, we have not yet described how to mix
+code and specifications---\todo{a point we will return to
+  later}. Before doing so, however, we will explore several other
+effects, their semantics in terms of predicate transformers, and the
+refinement relation that arises from these semantics.
 
 % \subsection*{Example: fast multiplication}
 
@@ -531,62 +570,6 @@ specification we have given above.
 % and only uses the short-circuiting behaviour of |Partial| for
 % efficiency. Let us now consider another example, where we truly want
 % to reason about partial functions.
-
-
-% \subsection*{Refinement}
-% \label{sec:refinement-maybe}
-
-% We now consider how we can relate functions, specifications (given by
-% a relation between input and output), and predicate transformers. We
-% begin by defining the following notion of refinement (|_⊑_|):
-
-% \begin{code}
-%   _⊆_ : (a -> Set) -> (a -> Set) -> a -> Set
-%   P ⊆ Q = \ x -> P x -> Q x
-  
-%   _⊑_ : (PT1 PT2 : (b -> Set) -> (a -> Set)) -> Set
-%   PT1 ⊑ PT2 = (P : b -> Set) -> PT1 P ⊆ PT2 P
-% \end{code}
-% This is straight from the literature on refinement calculus.
-
-% Using our |wp| function, we can now use this to compare two partial
-% functions:
-% \begin{code}
-%   refineFun : (f g : a -> Partial b) -> Set
-%   refineFun = wp f ⊑ wp g
-% \end{code}
-% We can furthermore show that this notion of refinement on functions is
-% familiar: |f ⊑ g| holds if and only if |f x == g x| for all points |x
-% elem dom(f)|. 
-
-% We can also use these weakest precondition semantics to assign meaning
-% to \emph{specifications}, given by a relation |R : a -> b -> Set|:
-% \begin{code}
-%   wpR : (R : a -> b -> Set) -> (b -> Set) -> (a -> Set)
-%   wpR R P x = R x ⊆ P 
-% \end{code}
-
-% We can now succinctly formulate the desired soundness property:
-% \begin{code}
-%   soundness : wp ⟦_⟧ ⊑  wpR (_⇓_)
-% \end{code}
-% In other words, the function |⟦_⟧ : Expr -> Partial Val| is a sound
-% implementation of the semantics given by the relation |_⇓_ : Expr ->
-% Val -> Set|. We can do so \emph{without} explicitly introducing any
-% further constraints on the expressions -- such as the |SafeDiv|
-% predicate we saw previously.
-
-% These definitions let us prove useful properties, such as:
-
-% \begin{code}
-%   ruleOfConsequence : (c : Partial a) (f : a -> Partial b) ->
-%     (P : b -> Set) -> mustPT (wp f P) c -> mustPT P (c >>= f)
-% \end{code}
-
-% All in all, this shows how we can relate predicate transformers (|(b
-% -> Set) -> (a -> Set)|), specifications (|a -> b -> Set|),
-% implementations (|a -> b|) -- in a single framework.
-
 
 
 % % \paragraph{Soundness}
