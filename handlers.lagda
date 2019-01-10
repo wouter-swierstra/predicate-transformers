@@ -93,7 +93,10 @@ with numerous examples:
 These principles are applicable to a range of different effects,
 including exceptions (Section~\ref{sec:maybe}), non-determinism
 (Section~\ref{sec:non-det}), state (Section~\ref{sec:state}), and
-general recursion (Section~\ref{sec:recursion}).
+general recursion (Section~\ref{sec:recursion}). Each section is
+illustrated with numerous examples, selected for their portrayal proof
+principles rather than feats of formalization.
+
 
 The examples, theorems and proofs have all been formally verified in
 the dependently typed programming language Agda~\cite{agda}, but they
@@ -200,8 +203,8 @@ sometimes use the following shorthand notation:
 One reason to use weakest precondition semantics is that they give
 rise to a notion of \emph{refinement}:
 \begin{code}
-  _⊑_ : (f g : (x : a) -> b x) -> Set
-  f ⊑ g = forall P -> wp f P ⊆ wp g P
+  _⊑_ : ((x : a) -> b x -> Set) -> (a -> Set) -> Set
+  pt1 ⊑ pt2 = forall P -> pt1 P ⊆ pt2 P
 \end{code}
 In a pure setting, this refinement relation is not particularly
 interesting: the refinement relation corresponds to extensional
@@ -209,8 +212,8 @@ equality between functions. The following lemma follows from the
 `Leibniz rule' for equality in intensional type theory:
 
 \begin{lemma*}
-  For all functions, |f : a -> b| and |g : a -> b|, the refinement
-  |f ^^ ⊑ ^^ g| holds if and only if |f x == g x| for all |x : a|.
+  For all functions, \emph{|f : a -> b|} and \emph{|g : a -> b|}, the refinement
+  \emph{|wp f ^^ ⊑ ^^ wp g|} holds if and only if \emph{|f x == g x|} for all \emph{|x : a|}.
 \end{lemma*}
 
 Although these definitions work for arbitrary functions, we have not
@@ -303,7 +306,7 @@ to computations of type |Partial b|:
   wpPartial f P = wp f (mustPT P)
     where
     mustPT : (Forall(a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> Partial (b x) -> Set
-    mustPT P _ (Pure x)          = P _ x
+    mustPT P _ (Pure y)          = P _ y
     mustPT P _ (Step Abort _)    = ⊥
 \end{code}
 To call the |wp| function we defined previously, we need to show how
@@ -413,14 +416,14 @@ above gives rise to a refinement relation on Kleisli arrows of the
 form |a -> Partial b|. We can characterize this relation by proving
 the following lemma.
 \begin{lemma*}
-  For all functions, |f : a -> Partial b| and |g : a -> Partial b|,
-  the refinement relation |f ⊑ g| holds if and only if for all |x :
-  a|, |f x == g x| or |f x == Abort|.
+  For all functions, \emph{|f : a -> Partial b|} and \emph{|g : a -> Partial b|},
+  the refinement relation \emph{|wpPartial f ⊑ wpPartial g|} holds if and only if for all \emph{|x :
+  a|}, \emph{|f x == g x|} or \emph{|f x == Abort|}.
 \end{lemma*}  
 Why care about this refinement relation? Not only can we use it to
-relate Kleisli morphisms, but it can be extended slightly to relate a
-program to a specification given by a pre- and postcondition. We will
-illustrate this further with a brief example.
+relate Kleisli morphisms, but it can also relate a program to a
+specification given by a pre- and postcondition, as we shall see
+shortly.
 
 \subsection*{Example: \textsc{Add}}
 
@@ -430,8 +433,10 @@ the stack with their sum. Of course, this may fail if the stack has
 too few elements. This section shows how to prove that the obvious
 definition meets its specification.
 
-We begin by defining the specification. This specification consists of
-two parts: the pre- and postcondition.
+We begin by defining a notion of specification in terms of a pre- and
+postcondition. In general, the specification of a function of type |(x
+: a) -> b x| consists of a precondition on |a| and a postcondition
+relating inputs that satisfy this precondition and the corresponding outputs:
 
 \begin{code}
   record Spec (a : Set) (b : a -> Set) : Set where
@@ -440,36 +445,45 @@ two parts: the pre- and postcondition.
       pre : a -> Set
       post : (x : a) -> pre x -> b x -> Set
 \end{code}
-
-The specification of our intended addition function is
+Using this definition, we can define the following specification for
+our addition function:
 \begin{code}
-  data AddSpec : Stack Nat -> Stack Nat -> Set where
+  data Add : Stack Nat -> Stack Nat -> Set where
     AddStep : (implicit(x1 x2 : Nat)) (implicit(xs : Stack Nat)) AddSpec (x1 :: x2 :: xs) ((x1 + x2) :: xs)
 
   addSpec : Spec (Stack Nat) (K (Stack Nat))
-  addSpec = spec (\xs -> length xs > 1) (\xs _ ys -> AddStack xs ys)
+  addSpec = spec (\xs -> length xs > 1) (\xs _ ys -> Add xs ys)
 \end{code}
 That is, provided we are given a list with at least two elements, we
-should replace the top two elements with their sum.
+should replace the top two elements with their sum. Here we describe
+the desired postcondition by introducing a new datatype, |Add|,
+relating the input and output stacks, but there are many equivalent
+ways to formulate the desired property.
 
-Can we give predicate transformer semantics to our specifications? If
-so, we can then try to prove that an implementation refines its
-specification.
-
+How can we relate this specification to an implementation? We have
+seen how the |wpPartial| function assigns predicate transformer
+semantics to functions---but we do not yet have a corresponding
+predicate transform \emph{semantics} for our specifications. The
+|wpSpec| function does precisely this:
 \begin{code}
-  wpSpec : (Forall(a)) (implicit(b : a -> Set)) Spec a b -> (P : (x : a) -> b x -> Set) -> a -> Set
+  wpSpec : (Forall(a)) (implicit(b : a -> Set)) Spec a b -> (P : (x : a) -> b x -> Set) -> (a -> Set)
   wpSpec (spec pre post) P = \ x -> Sigma (pre x) (\prex -> post x prex ⊆ P x)
 \end{code}
+Given a specification, |Spec a b|, the |wpSpec| function computes the
+weakest precondition necessary to satisfy an arbitrary postcondition
+|P|: namely, the specification's precondition should hold and its
+postcondition must imply |P|.
 
-Using this definition we can formulate the verification challenge:
-finding a program |add| satisfying the following statement:
+Using this definition we can precisely formulate our the problem at
+hand: can we find a program |add : Stack a -> Partial (a × Stack
+a)| that refines the specification given by |addSpec|:
 \begin{spec}
-    addCorrect : ∀ P -> wpSpec addSpec P ⊆ wpPartial add P
+  correctness : wpSpec addSpec ⊑ wpPartial add
 \end{spec}
 Defining such a program and verifying its correctness is entirely
 straightforward:
 \begin{code}
-  pop : (Forall (a)) Stack a -> Partial (Pair a (Stack a))
+  pop : (Forall (a)) Stack a -> Partial (a × Stack a)
   pop Nil = abort
   pop (Cons x xs) = return (x , xs)
 
@@ -478,8 +492,6 @@ straightforward:
     pop xs >>= \{ (x1 , xs) -> 
     pop xs >>= \{ (x2 , xs) ->
     return ((x1 + x2) :: xs)}}
-
-  addCorrect : ∀ P -> pt addSpec P ⊆ wpPartial add P
 \end{code}
 We include this example here to illustrate how to use the refinement
 relation to relate a \emph{specification}, given in terms of a pre-
@@ -490,157 +502,79 @@ code and specifications---\todo{a point we will return to
 effects, their semantics in terms of predicate transformers, and the
 refinement relation that arises from these semantics.
 
-% \subsection*{Example: fast multiplication}
+\subsection*{Alternatives}
+\label{alternative-abort}
 
-% Suppose have a function that computes the product of the numbers
-% stored in a list:
+The predicate transformers arising from the |wpPartial| function are
+not the only possible choice of semantics. In particular, sometimes we
+may use the |Abort| command to `short-circuit' a computation and
+handle the corresponding exception. This section explores how to adapt
+our definitions accordingly.
 
-% \begin{code}
-%   product : List Nat -> Nat
-%   product = foldr 1 _*_
-% \end{code}
+Suppose have a function that computes the product of the numbers
+stored in a list:
+\begin{code}
+  product : List Nat -> Nat
+  product = foldr 1 _*_
+\end{code}
+If this list contains a zero, we can short circuit the computation and
+return zero immediately. To do so, we define the following
+computation:
+\begin{code}
+  fastProduct : List Nat -> Partial Nat
+  fastProduct Nil                   = return 1
+  fastProduct (Cons Zero xs)        = abort
+  fastProduct (Cons k@(Succ _) xs)  = fmap (_*_ k) (fastProduct xs)
+\end{code}
+To run this computation, we provide a handler that maps |abort| to
+the a default value:
+\begin{code}
+  defaultHandler : (implicit(a)) a -> Partial a -> a
+  defaultHandler _ (Pure x)          = x
+  defaultHandler d (Step Abort _)    = d
+\end{code}
+We can adapt our |wpPartial| to enforce that the desired postcondition
+|P| holds, even if the computation aborts:
+\begin{code}
+  wpDefault : (d : a) -> (P : (x : a) -> b x -> Set) -> (x : a) -> Partial (b x) -> Set
+  wpDefault d x (Pure x)        = P x
+  wpDefault d x (Step Abort _)  = P d
+\end{code}
+A simple soundness result guarantees that the computed precondition suffices:
+\begin{code}
+  soundness : (P : (x : a) -> b x -> Set) -> (d : a) -> ((x : a) -> Partial (b x)) ->
+    wpDefault P d x c -> P (defaultHandler d (c x))
+\end{code}
+Using our refinement relation, we verify that the |fastproduct|
+function behaves in accordance with the original |product| function:
+\begin{code}
+  correctness : wp product ⊑ wpDefault 0 fastProduct
+\end{code}
+This example shows how to prove soundness of our predicate transformer
+semantics with respect to a given handler. Semantics, such as
+|wpDefault| and |wpPartial|, compute \emph{some} predicate; it is only
+by proving such soundness results that we can ensure that this
+predicate is meaningful in some way. Furthermore, this example shows
+how different handlers may exist for different effects---a point we
+shall return to when discussing non-determinism
+(Section~\ref{sec:non-det}).
 
-% If this list contains a zero, however, we can short circuit the
-% computation and return zero immediately. To do so, we define the
-% following computation:
-
-% \begin{code}
-%   fastProduct : List Nat -> Partial Nat
-%   fastProduct Nil                 = return 1
-%   fastProduct (Cons Zero xs)      = abort
-%   fastProduct (Cons (Succ k) xs)  = fmap (\ n -> Succ k * n) (fastProduct xs)
-% \end{code}
-% To run this computation, we provide a handler that maps |abort| to
-% the default value |0|:
-% \begin{code}
-%   zeroHandler : Partial Nat -> Nat
-%   zeroHandler (Pure x)          = x
-%   zeroHandler (Step Abort _)    = 0
-% \end{code}
-
-% We would like to validate that the |product| and composition of
-% |zeroHandler| |fastproduct| always compute the same result. We can
-% do so directly by proving the following statement:
-
-% \begin{spec}
-%   correctness : ∀ xs -> handle Zero (fastProduct xs) == product xs
-% \end{spec}
-% To illustrate the approach we will take in this paper, however, we
-% will explore a slightly more roundabout route. To begin, we can define
-% the following predicate transformer, that, given a predicate |P : Nat ->
-% Set|, maps this to a predicate on |Partial Nat|:
-% \begin{code}
-%   zeroPT : (P : Nat -> Set) -> Partial Nat -> Set
-%   zeroPT d P (Pure x)          = P x
-%   zeroPT d P (Step Abort _)    = P 0
-% \end{code}
-% This handler is slightly different from typical handlers that aim to
-% run a computation written using algebraic effects, as it
-% returns returns a \emph{proposition} rather than a \emph{value}. We can now
-% reformulate our correctness property in terms of this handler as follows:
-% \begin{code}
-%   spec : List Nat -> Nat -> Set
-%   spec xs n = product xs == n
-
-%   correctness : ∀ xs -> zeroPT (spec xs) (fastProduct xs)
-% \end{code}
-% Given the specification of our computation, expressed as a relation
-% between inputs and outputs, proving this correctness statement shows
-% |fastProduct| satisfies its specification.
-
-% At this point, however, there is no guarantee that the
-% \emph{proposition} computed by the propositional handler
-% |zeroPT| is related in any way to the result returned by our
-% |zeroHandler| function. To ensure that |zeroHandler . fastproduct| does indeed
-% behave as we expect, we should additionally prove that our
-% propositional handler is sound with respect to the |zeroHandler|:
-
-% \begin{spec}
-%   soundness : (c : Partial Nat) (P : Nat -> Set) -> zeroPT P c -> P (zeroHandler c) 
-% \end{spec}
-
-% This example illustrates some of the key techniques used throughout
-% this paper: the |zeroHandler| handles effectful computations; the
-% |zeroPT| handler assigns meaning to these computations without
-% executing them; the a |soundness| guarantees that it suffices to work
-% with the propositions computed by the |zeroPT| handler, rather than
-% reason about |zeroHandler| directly.
-
-% Unlike many effectful programs, however, this example is \emph{total}
-% and only uses the short-circuiting behaviour of |Partial| for
-% efficiency. Let us now consider another example, where we truly want
-% to reason about partial functions.
-
-
-% % \paragraph{Soundness}
-
-% % The |lift| function computes a predicate on computations of type
-% % |Partial a|. Yet how can we know that this predicate is meaningful in
-% % any way? The type of the |lift| function alone does not guarantee
-% % anything about its behaviour. To relate the predicate being computed,
-% % we therefore need to show that the our propositional handler is
-% % \emph{sound}. 
-
-% % Consider the usual `handler' for |Partial| that returns a default
-% % value when encountering a failure:
-
-% % \begin{code}
-% %   run : (Forall (a)) a -> Partial a -> a
-% %   run d (Pure x)          = x
-% %   run d (Step Abort _)  = d
-% % \end{code}
-% % To prove the soundness of our |lift| function with respect to this
-% % handler amounts to proving:
-% % \begin{spec}
-% %   soundness : (Forall(a)) (d : a) (P : a -> Set) (m : Partial a) -> lift P m -> P (run d m)
-% % \end{spec}
-% % The proof of this result follows trivially after pattern matching on
-% % the monadic computation |m|. Of course, there may be alternative
-% % definitions of |lift| that are sound with respect to some other
-% % handler---but this depends on the intended semantics of the algebraic
-% % effects involved. The crucial observation, however, is that soundness
-% % of propositional handlers are always relative to another semantics.
-
-
-% % \subsection*{Intermezzo: types and predicate transformers}
-
-% % Before studying other effects, it is worth making the construction of
-% % specifications more explicit.
-% % \begin{itemize}
-% % \item A specification on a value of type |A| is a predicate |A ->
-% %   Set|;
-% % \item A specification of a function of type |A -> B| is a
-% %   \emph{predicate transformer} of type |(B -> Set) -> (A -> Set)|.
-% % \end{itemize}
-% % You may recognise this construction as the contravariant Hom functor
-% % on |Set|, i.e., |Hom(_,Set)|. In our example evaluator, we wanted to
-% % specify the behaviour of a function of type |Expr -> Partial Nat|. By
-% % using the |lift| function, this amounts to a predicate transformer of
-% % the form |(Nat -> Set) -> (Expr -> Set)|.
-
-% % This pattern can be extended to many other effects, as we shall
-% % explore now.
 
 \section{Mutable state}
 \label{sec:state}
 
-We can do something similar for mutable state. We will define a module
-parametrized by a type |s|, representing the type of our mutable
-state:
-
-\begin{code}
-module State (s : Set) where
-\end{code}
-
 %if style == newcode
 \begin{code}
+module State (s : Set) where
   open Free  
 \end{code}
 %endif
 
-As before, we assemble our free monad from the commands |C| and
-responses |R|:
-
+In this section, we will explore how to develop similar predicate
+transformer semantics for mutable state, giving rise to a familiar
+Hoare logic. In what follows, we will assume a fixed type |s : Set|,
+representing the type of the state. As before, we can define the
+desired free monad in terms of commands |C| and responses |R|:
 \begin{code}
   data C : Set where
     Get : C
@@ -653,9 +587,8 @@ responses |R|:
   State : Set -> Set
   State = Free C R
 \end{code}
-
-Once again, we can define a pair of smart constructors to make it
-easier to write stateful computations:
+To facilitate writing stateful computations, we can define a pair of
+smart constructors:
 \begin{code}
   get : State s
   get = Step Get return
@@ -663,22 +596,21 @@ easier to write stateful computations:
   put : s -> State ⊤
   put s = Step (Put s) (\_ -> return tt)
 \end{code}
-
 The usual handler for stateful computations maps our free monad,
 |State s|, to the state monad:
 \begin{code}
-  run : (Forall(a)) State a -> s -> Pair a s
+  run : (Forall(a)) State a -> s -> a × s
   run (Pure x) s          = (x , s)
   run (Step Get k) s      = run (k s) s
   run (Step (Put x) k) s  = run (k tt) x 
 \end{code}
-Inspired by the previous sections, we can define the following
+Inspired by the previous section, we can define the following
 predicate transformer semantics:
 \begin{code}
-  lift : (Forall(a)) (P : Pair a s -> Set) -> State a -> (s -> Set)
-  lift P (Pure x) s           = P (x , s)
-  lift P (Step Get k) s       = lift P (k s) s
-  lift P (Step (Put s') k) s  = lift P (k tt) s'
+  wpState : (Forall(a)) (P : a × s -> Set) -> State a -> (s -> Set)
+  wpState P (Pure x) s           = P (x , s)
+  wpState P (Step Get k) s       = wpState P (k s) s
+  wpState P (Step (Put s) k) _   = wpState P (k tt) s
 \end{code}
 Given any predicate |P| on the final state and result, it
 computes the weakest precondition required of the initial state to
@@ -688,25 +620,25 @@ Once again, we can prove soundness of this predicate transformer with
 respect to the |run| above:
 
 \begin{code}
-  soundness : (Forall(a)) (P : Pair a s -> Set) -> (c : State a) -> (i : s) -> lift P c i -> P (run c i)
+  soundness : (Forall(a)) (P : a × s -> Set) -> (c : State a) -> (i : s) -> wpState P c i -> P (run c i)
 \end{code}
 %if style == newcode           
 \begin{code}           
   soundness P (Pure x) i p = p
-  soundness P (Step Get x) i lift = soundness P (x i) i lift
-  soundness P (Step (Put x) k) i lift with soundness P (k tt)
-  ... | ih = ih x lift             
+  soundness P (Step Get x) i wpState = soundness P (x i) i wpState
+  soundness P (Step (Put x) k) i wpState with soundness P (k tt)
+  ... | ih = ih x wpState             
 \end{code}
 %endif
 
 We oftentimes want to write a specification as a \emph{relation}
 between input and output states. To do so, we can partially apply the
-predicate |P| before calling |lift|:
+predicate |P| before calling |wpState|:
 \begin{code}
-  liftR : {a : Set} -> (P : s -> a -> s -> Set) -> State a -> (s -> Set)
-  liftR P c s = lift (uncurry (P s)) c s
+  wpStateR : {a : Set} -> (P : s -> a -> s -> Set) -> State a -> (s -> Set)
+  wpStateR P c s = wpState (uncurry (P s)) c s
 \end{code}
-Reusing our previous soundness result, we can show that the |liftR|
+Reusing our previous soundness result, we can show that the |wpStateR|
 is sound with respect to the |run| semantics defined above.
 
 \subsection*{Example: tree labelling}
@@ -775,7 +707,7 @@ do so:
 > All : (Forall(a)) (P : a -> Set) -> ND a -> Set
 > All P (Pure x) = P x
 > All P (Step Fail _) = ⊤
-> All P (Step Choice c) = Pair (All P (c True)) (All P (c False)) 
+> All P (Step Choice c) = All P (c True) × All P (c False)
 > 
 > Any : (Forall(a)) (P : a -> Set) -> ND a -> Set
 > Any P (Pure x) = P x
@@ -790,7 +722,7 @@ functions could also be defined using |fold|, for instance:
 
 \begin{spec}
 All' :  (Forall(a)) (P : a -> Set) -> ND a -> Set
-All' = fold (\ { Fail _ → ⊤ ; Choice k → Pair (k True) (k False) })
+All' = fold (\ { Fail _ → ⊤ ; Choice k → (k True) × (k False) })
 \end{spec}
 
 We can relate both these predicates to the usual `list handler' for

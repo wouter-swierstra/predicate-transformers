@@ -213,6 +213,7 @@ module NaturalLemmas where
   +-inj-right Zero b c refl = refl
   +-inj-right (Succ a) b c pf = +-inj-right a b c (succ-inj (a + b) (a + c) pf)
 
+
 module NumberTheory where
   even : Nat → Bool
   even 0 = True
@@ -236,6 +237,7 @@ module NumberTheory where
   Succ a eq Zero = False
   Succ a eq Succ b = a eq b
 
+
 open import Data.Integer public
   using
     (
@@ -254,6 +256,7 @@ Cons = _::_
 
 -- [_] : ∀ {a} -> a -> List a
 -- [ x ] = Cons x Nil
+
 
 foldr : {a b : Set} -> (a -> b -> b) -> b -> List a -> b
 foldr f e Nil = e

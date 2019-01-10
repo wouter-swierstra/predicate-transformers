@@ -5,7 +5,7 @@ open import Prelude
 open import Combined hiding (_++_)
 open import Maybe
 
-open import Data.Char hiding (_==_)
+open import Data.Char -- hiding (_==_)
 --open import Data.String
 String = List Char
 

@@ -16,6 +16,7 @@
 %format Set1 = Set
 %format forall = "\forall"
 %format _>>=_ = "\_\!\bind\!\_"
+%format constructor = "\Keyword{constructor}"
 %else
 %format (Forall (a)) = "forall { " a " } -> "
 %format (implicit(a)) = "{" a "} ->"
