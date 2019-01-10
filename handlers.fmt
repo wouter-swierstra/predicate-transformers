@@ -2,6 +2,7 @@
 %if style == poly
 %format (Forall (a)) = "\!"
 %format (implicit(a)) = "\!"
+%format (hidden(a)) = "\!"
 %format N = "\mathbb{N}"
 %format e1 = e "_1"
 %format e2 = e "_2"
@@ -20,6 +21,7 @@
 %else
 %format (Forall (a)) = "forall { " a " } -> "
 %format (implicit(a)) = "{" a "} ->"
+%format (hidden(a)) = "{" a "}"
 %format N = "Nat"
 %format top = "⊤"
 %format ^^ = " "

@@ -24,10 +24,6 @@ open import Relation.Binary.PropositionalEquality public
 infix 1 _==_
 _==_ = _≡_
 
-postulate
-  extensionality : {a : Set} {b : a → Set} {f g : (x : a) → b x} →
-    ((x : a) → f x == g x) → f == g
-
 cong2 : {a b c : Set} {x y : a} {z w : b} (f : a -> b -> c) -> x == y -> z == w -> f x z == f y w
 cong2 f refl refl = refl
 
@@ -257,7 +253,6 @@ Cons = _::_
 -- [_] : ∀ {a} -> a -> List a
 -- [ x ] = Cons x Nil
 
-
 foldr : {a b : Set} -> (a -> b -> b) -> b -> List a -> b
 foldr f e Nil = e
 foldr f e (x :: xs) = f x (foldr f e xs)
@@ -349,93 +344,10 @@ filter-shortens p (x :: xs) | no x₁ = NaturalLemmas.≤-succ (filter-shortens 
 K : {a : Set} -> Set -> (a -> Set)
 K b = \_ -> b
 
-_⊆_ : {a : Set} -> (p q : a -> Set) -> Set
-_⊆_ {a} p q = (x : a) -> p x -> q x
-
-
-record _⇔_ {l l' : Level} (P : Set l) (Q : Set l') : Set (l ⊔ l') where
-  constructor iff
-  field
-    if : Q -> P
-    onlyIf : P -> Q
-
-⇔-refl : {P : Set} → P ⇔ P
-⇔-refl = iff id id
-⇔-trans : {P Q R : Set} → P ⇔ Q → Q ⇔ R → P ⇔ R
-⇔-trans (iff qp pq) (iff rq qr) = iff (qp ∘ rq) (qr ∘ pq)
-
-⇔-pair : {P P' Q Q' : Set} → P ⇔ P' → Q ⇔ Q' → Pair P Q ⇔ Pair P' Q'
-⇔-pair (iff p'p pp') (iff q'q qq') = iff (λ z → p'p (Pair.fst z) , q'q (Pair.snd z)) (λ z → pp' (Pair.fst z) , qq' (Pair.snd z))
-
-independent : {a : Set} ->
-  (P : (x : a) -> Set) ->
-  Set
-independent {a} P = (x : a) -> (x' : a) -> P x -> P x'
-
-rebase : {a : Set} ->
-  (P : a -> Set) -> independent P ->
-  Sigma a P -> (x : a) -> P x
-rebase P iP (fst , snd) x = iP fst x snd
-
-all' : {l : Level} {a : Set l} → (a → Set) → List a → Set
-all' P Nil = ⊤
-all' P (x :: xs) = Pair (P x) (all' P xs)
-
-⇔-= : {l : Level} {P : Set l} {Q : P → Set} → {p p' : P} → p == p' → Q p ⇔ Q p'
-⇔-= refl = ⇔-refl
-
-⇔-pair-⊤ : {P Q : Set} → P ⇔ Q → (Pair ⊤ P) ⇔ Q
-⇔-pair-⊤ (iff if onlyIf) = iff (λ z → tt , if z) (λ z → onlyIf (Pair.snd z))
-
-⇔-pair-assoc : {P Q R : Set} → Pair (Pair P Q) R ⇔ Pair P (Pair Q R)
-⇔-pair-assoc = iff (λ z → (Pair.fst z , Pair.fst (Pair.snd z)) , Pair.snd (Pair.snd z)) (λ z → Pair.fst (Pair.fst z) , (Pair.snd (Pair.fst z) , Pair.snd z))
-
-all'-pair : {l : Level} {a : Set l} (P : a → Set) → (xs ys : List a) → Pair (all' P xs) (all' P ys) ⇔ all' P (xs ++ ys)
-all'-pair P Nil ys = iff (_,_ tt) Pair.snd
-all'-pair P (x :: xs) ys = ⇔-trans ⇔-pair-assoc (⇔-pair ⇔-refl (all'-pair P xs ys))
-
-record IsMonad (m : Set -> Set) : Set₁ where
-  constructor isMonad
-  field
-    bind : {a b : Set} -> m a -> (a -> m b) -> m b
-    pure : {a : Set} -> a -> m a
-    left-identity : ∀ {a b} {x : a} {f : a → m b} → bind (pure x) f == f x
-    right-identity : ∀ {a} {mx : m a} → bind mx pure == mx
-open IsMonad {{...}} public
-
-infixr 20 _>>_ _>>=_
-_>>=_ = bind
-_>>_ : {m : Set → Set} {{M : IsMonad m}} {a b : Set} → m a → m b → m b
-mx >> my = bind mx (const my)
-
 data Id (a : Set) : Set where
   In : a -> Id a
 out : {a : Set} -> Id a -> a
 out (In x) = x
-
-fmap : {m : Set -> Set} → {{M : IsMonad m}} -> {a b : Set} -> (a -> b) -> m a -> m b
-fmap {{isMonad bind pure _ _}} f mx = bind mx (\x -> pure (f x))
-
-instance
-  IsMonad-Id : IsMonad Id
-  IsMonad.bind IsMonad-Id (In x) f = f x
-  IsMonad.pure IsMonad-Id x = In x
-  IsMonad.left-identity IsMonad-Id = refl
-  IsMonad.right-identity IsMonad-Id {mx = In x} = refl
-
-  IsMonad-List : IsMonad List
-  IsMonad-List = isMonad bind' (λ x → Cons x Nil) (sym (++-nil _)) r-id
-    where
-    bind' : {a b : Set} → List a → (a → List b) → List b
-    bind' Nil f = Nil
-    bind' (x :: xs) f = f x ++ bind' xs f
-    r-id : ∀ {a} {mx : List a} → bind' mx (λ x → x :: Nil) ≡ mx
-    r-id {mx = Nil} = refl
-    r-id {mx = x :: mx} = cong (x ::_) r-id
-
-fmap-preserves-length : ∀ {a b} (f : a → b) (xs : List a) → length xs == length (fmap f xs)
-fmap-preserves-length f Nil = refl
-fmap-preserves-length f (x :: xs) = cong Succ (fmap-preserves-length f xs)
 
 sum : ∀ {l} {a : Set l} (f : a → Nat) (xs : List a) → Nat
 sum f Nil = 0

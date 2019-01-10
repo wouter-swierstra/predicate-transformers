@@ -203,7 +203,7 @@ sometimes use the following shorthand notation:
 One reason to use weakest precondition semantics is that they give
 rise to a notion of \emph{refinement}:
 \begin{code}
-  _⊑_ : ((x : a) -> b x -> Set) -> (a -> Set) -> Set
+  _⊑_ : (implicit(a : Set)) (implicit (b : a -> Set)) (pt1 pt2 : ((x : a) -> b x -> Set) -> (a -> Set)) -> Set
   pt1 ⊑ pt2 = forall P -> pt1 P ⊆ pt2 P
 \end{code}
 In a pure setting, this refinement relation is not particularly
@@ -225,10 +225,18 @@ these definitions to specify, verify, and calculate effectful programs.
 %if style == newcode
 \begin{code}
 module Maybe where
-
-  open Free hiding (_⊑_)
-  postulate
-    _div_ : Nat -> Nat -> Nat
+  open import Data.Nat public
+    using
+      (_+_; _>_; _*_
+      )
+    renaming
+      ( ℕ to Nat
+      ; zero to Zero
+      ; suc to Succ
+      )
+  open import Data.Nat.DivMod using (_div_)
+  open import Data.Nat.Properties using (*-zeroʳ)        
+  open Free      
 \end{code}
 %endif
 
@@ -357,8 +365,8 @@ characterizing the \emph{domain} of a partial function:
 Indeed, we use this notion of domain to show that the two semantics
 agree precisely:
 \begin{code}
-  complete  : wpPartial ⟦_⟧ _⇓_  ^^ ⊆ ^^ dom ⟦_⟧
   sound     : dom ⟦_⟧            ^^ ⊆ ^^ wpPartial ⟦_⟧ _⇓_
+  complete  : wpPartial ⟦_⟧ _⇓_  ^^ ⊆ ^^ dom ⟦_⟧
 \end{code}
 %if style == newcode
 \begin{code}
@@ -377,32 +385,33 @@ agree precisely:
   inDom (Div e1 e2) () | Pure _ | Step Abort _
   inDom (Div e1 e2) () | Step Abort _ | _
 
+  aux : (e : Expr) (v : Nat) -> ⟦ e ⟧ ≡ Pure v -> e ⇓ v
+  aux e v eq with sound e (inDom e eq) 
+  ... | H rewrite eq = H
+
   wpPartial1 : {e1 e2 : Expr} -> wpPartial ⟦_⟧ _⇓_ (Div e1 e2) -> wpPartial ⟦_⟧ _⇓_ e1
-  wpPartial1 {e1} {e2} h with inspect ⟦ e1 ⟧
-  wpPartial1 {e1} {e2} h | Pure x with-≡ eq = sound e1 (inDom e1 eq)
-  wpPartial1 {e1} {e2} h | Step Abort x with-≡ eq rewrite eq = magic h
+  wpPartial1 {e1} {e2} h with ⟦ e1 ⟧ | inspect ⟦_⟧ e1 | ⟦ e2 ⟧
+  wpPartial1 {e1} {e2} () | Pure x | eq | Pure Zero
+  wpPartial1 {e1} {e2} h | Pure x | [ eq ] | Pure (Succ y) = aux e1 x eq
+  wpPartial1 {e1} {e2} () | Pure x | eq | Step Abort x₁
+  wpPartial1 {e1} {e2} () | Step Abort x | eq | ve2
 
   wpPartial2 : {e1 e2 : Expr} -> wpPartial ⟦_⟧ _⇓_ (Div e1 e2) -> wpPartial ⟦_⟧ _⇓_ e2
-  wpPartial2 {e1} {e2} h with inspect ⟦ e1 ⟧ | inspect ⟦ e2 ⟧
-  wpPartial2 {e1} {e2} h | Pure v1 with-≡ eq1 | Pure v2 with-≡ eq2
-    = sound e2 (inDom e2 eq2)
-  wpPartial2 {e1} {e2} h | Pure _ with-≡ eq1 | Step Abort _ with-≡ eq2
-    rewrite eq1 | eq2 = magic h
-  wpPartial2 {e1} {e2} h | Step Abort x with-≡ eq | _ rewrite eq = magic h
+  wpPartial2 {e1} {e2} h with ⟦ e1 ⟧ | inspect ⟦_⟧ e1 | ⟦ e2 ⟧ | inspect ⟦_⟧ e2
+  wpPartial2 {e1} {e2} h | Pure x | [ eqx ] | Pure y | [ eqy ] = aux e2 y eqy
+  wpPartial2 {e1} {e2} () | Pure x | [ eq ] | Step Abort x₁ | eq2
+  wpPartial2 {_} {_} () | Step Abort x | eq1 | se2 | eq2
 
   complete (Val x) h = tt
   complete (Div e1 e2) h
-    with inspect ⟦ e1 ⟧ | inspect ⟦ e2 ⟧
+    with ⟦ e1 ⟧ | inspect ⟦_⟧ e1 | ⟦ e2 ⟧ | inspect ⟦_⟧ e2
       | complete e1 (wpPartial1 {e1} {e2} h)
       | complete e2 (wpPartial2 {e1} {e2} h)
-  complete (Div e1 e2) h | Pure v1 with-≡ eq1 | Pure Zero with-≡ eq2 | ih1 | ih2
-    rewrite eq1 | eq2 = magic h
-  complete (Div e1 e2) h | Pure v1 with-≡ eq1 | Pure (Succ v2) with-≡ eq2 | ih1 | ih2
-    rewrite eq1 | eq2 = tt 
-  complete (Div e1 e2) h | Pure _ with-≡ _ | Step Abort _ with-≡ eq | _ | ih2
-    rewrite eq = magic ih2
-  complete (Div e1 e2) h | Step Abort _ with-≡ eq | _ | ih1 | _
-    rewrite eq = magic ih1
+  complete (Div e1 e2) h | Pure x | [ eqx ] | Pure Zero | [ eqy ] | p1 | p2
+    rewrite eqx | eqy = magic h
+  complete (Div e1 e2) h | Pure x | [ eqx ] | Pure (Succ y) | [ eqy ] | p1 | p2 = tt
+  complete (Div e1 e2) h | Pure x | eq1 | Step Abort x₁ | eq2 | p1 | ()
+  complete (Div e1 e2) h | Step Abort x | eq1 | se2 | eq2 | () | p2
 \end{code}
 %endif
 Both proofs proceed by induction on the argument expression; despite
@@ -448,10 +457,10 @@ relating inputs that satisfy this precondition and the corresponding outputs:
 Using this definition, we can define the following specification for
 our addition function:
 \begin{code}
-  data Add : Stack Nat -> Stack Nat -> Set where
-    AddStep : (implicit(x1 x2 : Nat)) (implicit(xs : Stack Nat)) AddSpec (x1 :: x2 :: xs) ((x1 + x2) :: xs)
+  data Add : List Nat -> List Nat -> Set where
+    AddStep : (implicit(x1 x2 : Nat)) (implicit(xs : List Nat)) Add (x1 :: x2 :: xs) ((x1 + x2) :: xs)
 
-  addSpec : Spec (Stack Nat) (K (Stack Nat))
+  addSpec : Spec (List Nat) (K (List Nat))
   addSpec = spec (\xs -> length xs > 1) (\xs _ ys -> Add xs ys)
 \end{code}
 That is, provided we are given a list with at least two elements, we
@@ -475,7 +484,7 @@ weakest precondition necessary to satisfy an arbitrary postcondition
 postcondition must imply |P|.
 
 Using this definition we can precisely formulate our the problem at
-hand: can we find a program |add : Stack a -> Partial (a × Stack
+hand: can we find a program |add : List a -> Partial (a × List
 a)| that refines the specification given by |addSpec|:
 \begin{spec}
   correctness : wpSpec addSpec ⊑ wpPartial add
@@ -483,11 +492,11 @@ a)| that refines the specification given by |addSpec|:
 Defining such a program and verifying its correctness is entirely
 straightforward:
 \begin{code}
-  pop : (Forall (a)) Stack a -> Partial (a × Stack a)
+  pop : (Forall (a)) List a -> Partial (a × List a)
   pop Nil = abort
-  pop (Cons x xs) = return (x , xs)
+  pop (x :: xs) = return (x , xs)
 
-  add : Stack Nat -> Partial (Stack Nat)
+  add : List Nat -> Partial (List Nat)
   add xs =
     pop xs >>= \{ (x1 , xs) -> 
     pop xs >>= \{ (x2 , xs) ->
@@ -515,41 +524,69 @@ Suppose have a function that computes the product of the numbers
 stored in a list:
 \begin{code}
   product : List Nat -> Nat
-  product = foldr 1 _*_
+  product = foldr _*_ 1
 \end{code}
 If this list contains a zero, we can short circuit the computation and
 return zero immediately. To do so, we define the following
 computation:
 \begin{code}
   fastProduct : List Nat -> Partial Nat
-  fastProduct Nil                   = return 1
-  fastProduct (Cons Zero xs)        = abort
-  fastProduct (Cons k@(Succ _) xs)  = fmap (_*_ k) (fastProduct xs)
+  fastProduct Nil                 = return 1
+  fastProduct (Zero :: xs)        = abort
+  fastProduct (k :: xs)           = fmap (_*_ k) (fastProduct xs)
 \end{code}
 To run this computation, we provide a handler that maps |abort| to
 the a default value:
 \begin{code}
-  defaultHandler : (implicit(a)) a -> Partial a -> a
+  defaultHandler : (Forall(a)) a -> Partial a -> a
   defaultHandler _ (Pure x)          = x
   defaultHandler d (Step Abort _)    = d
 \end{code}
 We can adapt our |wpPartial| to enforce that the desired postcondition
 |P| holds, even if the computation aborts:
 \begin{code}
-  wpDefault : (d : a) -> (P : (x : a) -> b x -> Set) -> (x : a) -> Partial (b x) -> Set
-  wpDefault d x (Pure x)        = P x
-  wpDefault d x (Step Abort _)  = P d
+  wpDefault : (Forall (a b : Set)) (d : b) -> (a -> Partial b) -> (P : a -> b -> Set) -> (a -> Set)
+  wpDefault (hidden(a)) (hidden(b)) d f P = wp f defaultPT
+    where
+    defaultPT : (x : a) -> Partial b -> Set
+    defaultPT x (Pure y)        = P x y 
+    defaultPT x (Step Abort _)  = P x d
 \end{code}
+This handler is defined in the style of |wpPartial|. Note that we can
+generalize this further, allowing for |b| to depend on |a|---as we do
+not need this in this example, we will refrain from doing so.
+  
 A simple soundness result guarantees that the computed precondition suffices:
 \begin{code}
-  soundness : (P : (x : a) -> b x -> Set) -> (d : a) -> ((x : a) -> Partial (b x)) ->
-    wpDefault P d x c -> P (defaultHandler d (c x))
+  soundness : {a : Set} {b : Set} -> (P : a -> b -> Set) ->
+    (d : b) -> (c : a -> Partial b) -> (x : a) ->
+    wpDefault d c P x -> P x (defaultHandler d (c x))
 \end{code}
+%if style == newcode
+\begin{code}
+  soundness P d c x H with c x
+  soundness P d c x H | Pure y = H
+  soundness P d c x H | Step Abort _ = H
+\end{code}
+%endif
 Using our refinement relation, we verify that the |fastproduct|
 function behaves in accordance with the original |product| function:
 \begin{code}
   correctness : wp product ⊑ wpDefault 0 fastProduct
 \end{code}
+%if style == newcode
+\begin{code}
+  correctness P Nil H = H
+  correctness P (Zero :: xs) H = H
+  correctness P (Succ x :: xs) H
+    with fastProduct xs | correctness (\xs v -> P (Succ x :: xs) _) xs H
+  correctness P (Succ x :: xs) H | Pure v | IH  = IH
+  correctness P (Succ x :: xs) H | Step Abort _ | IH rewrite *-zeroʳ x = IH
+\end{code}
+%endif
+
+\todo{Edit text in previous paragraphs}
+
 This example shows how to prove soundness of our predicate transformer
 semantics with respect to a given handler. Semantics, such as
 |wpDefault| and |wpPartial|, compute \emph{some} predicate; it is only
@@ -859,25 +896,25 @@ leaving no room to describe unfinished parts of the program that we
 wish to calculate. To achieve this however, we can define the
 following two types:
 
-\begin{code}
+\begin{spec}
   data I (a : Set) : Set1 where
     Done : a -> I a
     Spec : (a -> Set) -> I a
 
   M : Set -> Set1
   M a = Partial (I a)
-\end{code}
+\end{spec}
 A value of type |I a| is either a result of type |a| or a
 specification of type |a -> Set|, corresponding to an unfinished part
 of our program calculation. The type |M a| then corresponds to
 computations that \emph{mix} code and specifications.  We can easily
 extend our notion of refinement to work over such a mix of code and
 specification:
-\begin{code}
+\begin{spec}
   wpI : (implicit(a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> I (b x) -> Set
   wpI P _ (Done y)  = P _ y
   wpI P x (Spec Q)  = Q ⊆ P x
-\end{code}
+\end{spec}
 \todo{This is not quite right... Need that there is some
   implementation of Q}
 
@@ -886,17 +923,17 @@ specification:
 We can use this notion of weakest precondition on |I| to define a
 notion of weakest precondition for the computations in |M|, that mix
 specifications and code:
-\begin{code}
+\begin{spec}
   wpM : {a : Set} -> {b : a -> Set} ->
     (f : (x : a) -> M (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
   wpM f = wp f · mustPT · wpI
-\end{code}
+\end{spec}
 Finally, we can revisit our notion of refinement to use these weakest
 precondition semantics:
-\begin{code}  
+\begin{spec}  
   _⊑_ : {a : Set} {b : a -> Set} (f g : (x : a) -> M (b x)) -> Set1
   f ⊑ g = ∀ P -> wpM f P ⊆ wpM g P
-\end{code}
+\end{spec}
 This refinement relation lets us compare two (possibly unfinished)
 derivation fragments, consisting of a mix of code and specification.
 
