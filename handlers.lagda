@@ -392,14 +392,14 @@ agree precisely:
   wpPartial1 : {e1 e2 : Expr} -> wpPartial ⟦_⟧ _⇓_ (Div e1 e2) -> wpPartial ⟦_⟧ _⇓_ e1
   wpPartial1 {e1} {e2} h with ⟦ e1 ⟧ | inspect ⟦_⟧ e1 | ⟦ e2 ⟧
   wpPartial1 {e1} {e2} () | Pure x | eq | Pure Zero
-  wpPartial1 {e1} {e2} h | Pure x | [ eq ] | Pure (Succ y) = aux e1 x eq
+  wpPartial1 {e1} {e2} h | Pure x | [[[ eq ]]] | Pure (Succ y) = aux e1 x eq
   wpPartial1 {e1} {e2} () | Pure x | eq | Step Abort x₁
   wpPartial1 {e1} {e2} () | Step Abort x | eq | ve2
 
   wpPartial2 : {e1 e2 : Expr} -> wpPartial ⟦_⟧ _⇓_ (Div e1 e2) -> wpPartial ⟦_⟧ _⇓_ e2
   wpPartial2 {e1} {e2} h with ⟦ e1 ⟧ | inspect ⟦_⟧ e1 | ⟦ e2 ⟧ | inspect ⟦_⟧ e2
-  wpPartial2 {e1} {e2} h | Pure x | [ eqx ] | Pure y | [ eqy ] = aux e2 y eqy
-  wpPartial2 {e1} {e2} () | Pure x | [ eq ] | Step Abort x₁ | eq2
+  wpPartial2 {e1} {e2} h | Pure x | [[[ eqx ]]] | Pure y | [[[ eqy ]]] = aux e2 y eqy
+  wpPartial2 {e1} {e2} () | Pure x | [[[ eq ]]] | Step Abort x₁ | eq2
   wpPartial2 {_} {_} () | Step Abort x | eq1 | se2 | eq2
 
   complete (Val x) h = tt
@@ -407,9 +407,9 @@ agree precisely:
     with ⟦ e1 ⟧ | inspect ⟦_⟧ e1 | ⟦ e2 ⟧ | inspect ⟦_⟧ e2
       | complete e1 (wpPartial1 {e1} {e2} h)
       | complete e2 (wpPartial2 {e1} {e2} h)
-  complete (Div e1 e2) h | Pure x | [ eqx ] | Pure Zero | [ eqy ] | p1 | p2
+  complete (Div e1 e2) h | Pure x | [[[ eqx ]]] | Pure Zero | [[[ eqy ]]] | p1 | p2
     rewrite eqx | eqy = magic h
-  complete (Div e1 e2) h | Pure x | [ eqx ] | Pure (Succ y) | [ eqy ] | p1 | p2 = tt
+  complete (Div e1 e2) h | Pure x | [[[ eqx ]]] | Pure (Succ y) | [[[ eqy ]]] | p1 | p2 = tt
   complete (Div e1 e2) h | Pure x | eq1 | Step Abort x₁ | eq2 | p1 | ()
   complete (Div e1 e2) h | Step Abort x | eq1 | se2 | eq2 | () | p2
 \end{code}
@@ -449,19 +449,21 @@ relating inputs that satisfy this precondition and the corresponding outputs:
 
 \begin{code}
   record Spec (a : Set) (b : a -> Set) : Set where
-    constructor spec
+    constructor [[_,_]]
     field
       pre : a -> Set
-      post : (x : a) -> pre x -> b x -> Set
+      post : (x : a) -> b x -> Set
 \end{code}
-Using this definition, we can define the following specification for
-our addition function:
+As is common in the refinement calculus literature, we will write |[[
+P , Q ]]| for the specification consisting of the precondition |P| and
+postcondition |Q|. Using this definition, we can define the following
+specification for our addition function:
 \begin{code}
   data Add : List Nat -> List Nat -> Set where
     AddStep : (implicit(x1 x2 : Nat)) (implicit(xs : List Nat)) Add (x1 :: x2 :: xs) ((x1 + x2) :: xs)
 
   addSpec : Spec (List Nat) (K (List Nat))
-  addSpec = spec (\xs -> length xs > 1) (\xs _ ys -> Add xs ys)
+  addSpec = [[ (\ xs -> length xs > 1) , Add ]]
 \end{code}
 That is, provided we are given a list with at least two elements, we
 should replace the top two elements with their sum. Here we describe
@@ -476,7 +478,7 @@ predicate transform \emph{semantics} for our specifications. The
 |wpSpec| function does precisely this:
 \begin{code}
   wpSpec : (Forall(a)) (implicit(b : a -> Set)) Spec a b -> (P : (x : a) -> b x -> Set) -> (a -> Set)
-  wpSpec (spec pre post) P = \ x -> Sigma (pre x) (\prex -> post x prex ⊆ P x)
+  wpSpec [[ pre , post ]] P = \ x -> (pre x) × (post x ⊆ P x)
 \end{code}
 Given a specification, |Spec a b|, the |wpSpec| function computes the
 weakest precondition necessary to satisfy an arbitrary postcondition
@@ -536,14 +538,21 @@ computation:
   fastProduct (k :: xs)           = fmap (_*_ k) (fastProduct xs)
 \end{code}
 To run this computation, we provide a handler that maps |abort| to
-the a default value:
+some default value:
 \begin{code}
   defaultHandler : (Forall(a)) a -> Partial a -> a
   defaultHandler _ (Pure x)          = x
   defaultHandler d (Step Abort _)    = d
 \end{code}
-We can adapt our |wpPartial| to enforce that the desired postcondition
-|P| holds, even if the computation aborts:
+
+Now the question arises how to assign a suitable predicate transformer
+semantics to the |fastProduct| function. We could choose to use the
+|wpPartial| function we defined previously; doing so, however, would
+require the input list to not contain any zeros. It is clear that we
+want to assign a different semantics to our aborting computations. To
+do so, we provide the following |wpDefault| function that requires the
+desired postcondition |P| holds of the default value when the
+computation aborts:
 \begin{code}
   wpDefault : (Forall (a b : Set)) (d : b) -> (a -> Partial b) -> (P : a -> b -> Set) -> (a -> Set)
   wpDefault (hidden(a)) (hidden(b)) d f P = wp f defaultPT
@@ -552,14 +561,17 @@ We can adapt our |wpPartial| to enforce that the desired postcondition
     defaultPT x (Pure y)        = P x y 
     defaultPT x (Step Abort _)  = P x d
 \end{code}
-This handler is defined in the style of |wpPartial|. Note that we can
-generalize this further, allowing for |b| to depend on |a|---as we do
-not need this in this example, we will refrain from doing so.
-  
-A simple soundness result guarantees that the computed precondition suffices:
+Note that we could generalize this further, allowing for |b| to depend
+on |a|---as we do not need this in this example, we will refrain from
+doing so.
+
+The |wpDefault| function computes \emph{some} predicate on the
+function's input. But how do we know that this predicate is meaningful
+in any way? We could compute simply return a trivial predicate that is
+always holds. To relate the predicate transformer semantics to the
+|defaultHandler| we need to prove a simple soundness result:
 \begin{code}
-  soundness : {a : Set} {b : Set} -> (P : a -> b -> Set) ->
-    (d : b) -> (c : a -> Partial b) -> (x : a) ->
+  soundness : (Forall (a b)) (P : a -> b -> Set) -> (d : b) -> (c : a -> Partial b) -> (x : a) ->
     wpDefault d c P x -> P x (defaultHandler d (c x))
 \end{code}
 %if style == newcode
@@ -569,8 +581,12 @@ A simple soundness result guarantees that the computed precondition suffices:
   soundness P d c x H | Step Abort _ = H
 \end{code}
 %endif
-Using our refinement relation, we verify that the |fastproduct|
-function behaves in accordance with the original |product| function:
+Put simply, this soundness result ensures that whenever the
+precondition computed by |wpDefault| holds, the output returned by
+running the |defaultHandler| satisfies the desired postcondition.
+
+Now we can finally use our refinement relation to relate the
+|fastproduct| function to the original |product| function:
 \begin{code}
   correctness : wp product ⊑ wpDefault 0 fastProduct
 \end{code}
@@ -585,16 +601,13 @@ function behaves in accordance with the original |product| function:
 \end{code}
 %endif
 
-\todo{Edit text in previous paragraphs}
-
 This example shows how to prove soundness of our predicate transformer
 semantics with respect to a given handler. Semantics, such as
 |wpDefault| and |wpPartial|, compute \emph{some} predicate; it is only
 by proving such soundness results that we can ensure that this
-predicate is meaningful in some way. Furthermore, this example shows
-how different handlers may exist for different effects---a point we
-shall return to when discussing non-determinism
-(Section~\ref{sec:non-det}).
+predicate is meaningful. Furthermore, this example shows how different
+choices of handler may exist for different effects---a point we shall
+return to when discussing non-determinism (Section~\ref{sec:non-det}).
 
 
 \section{Mutable state}
@@ -603,7 +616,17 @@ shall return to when discussing non-determinism
 %if style == newcode
 \begin{code}
 module State (s : Set) where
-  open Free  
+  open Free
+
+  open import Data.Nat public
+    using
+      (_+_; _>_; _*_
+      )
+    renaming
+      ( ℕ to Nat
+      ; zero to Zero
+      ; suc to Succ
+      )
 \end{code}
 %endif
 
@@ -644,23 +667,21 @@ The usual handler for stateful computations maps our free monad,
 Inspired by the previous section, we can define the following
 predicate transformer semantics:
 \begin{code}
-  wpState : (Forall(a)) (P : a × s -> Set) -> State a -> (s -> Set)
-  wpState P (Pure x) s           = P (x , s)
-  wpState P (Step Get k) s       = wpState P (k s) s
-  wpState P (Step (Put s) k) _   = wpState P (k tt) s
+  wpState : (Forall(a)) State a -> (P : a × s -> Set) -> (s -> Set)
+  wpState (Pure x) P s           = P (x , s)
+  wpState (Step Get k) P s       = wpState (k s) P s
+  wpState (Step (Put s) k) P _   = wpState (k tt) P s
 \end{code}
-Given any predicate |P| on the final state and result, it
-computes the weakest precondition required of the initial state to
-ensure |P| holds upon completing the computation.
-
-Once again, we can prove soundness of this predicate transformer with
-respect to the |run| above:
-
+Given any predicate |P| on the final state and result, it computes the
+weakest precondition required of the initial state to ensure |P| holds
+upon completing the computation. As we did in the previous section for
+|wpDefault|, we can prove soundness of this semantics with
+respect to the |run| function:
 \begin{code}
-  soundness : (Forall(a)) (P : a × s -> Set) -> (c : State a) -> (i : s) -> wpState P c i -> P (run c i)
+  soundness : (Forall(a)) (P : a × s -> Set) -> (c : State a) -> (i : s) -> wpState c P i -> P (run c i)
 \end{code}
 %if style == newcode           
-\begin{code}           
+\begin{code}
   soundness P (Pure x) i p = p
   soundness P (Step Get x) i wpState = soundness P (x i) i wpState
   soundness P (Step (Put x) k) i wpState with soundness P (k tt)
@@ -668,23 +689,71 @@ respect to the |run| above:
 \end{code}
 %endif
 
-We oftentimes want to write a specification as a \emph{relation}
+We oftentimes write specifications as a \emph{relation}
 between input and output states. To do so, we can partially apply the
 predicate |P| before calling |wpState|:
 \begin{code}
-  wpStateR : {a : Set} -> (P : s -> a -> s -> Set) -> State a -> (s -> Set)
-  wpStateR P c s = wpState (uncurry (P s)) c s
+  wpStateR : (Forall(a)) State a -> (P : s -> a -> s -> Set) -> (s -> Set)
+  wpStateR c P s = wpState c (uncurry (P s)) s 
 \end{code}
-Reusing our previous soundness result, we can show that the |wpStateR|
-is sound with respect to the |run| semantics defined above.
+%if style == newcode           
+\begin{code}
+  wpStateRR : (Forall(a)) State a -> (P : s -> a -> s -> Set) -> (s -> Set)
+  wpStateRR = wpStateR
+\end{code}
+%endif
+\todo{When it is clear from the context, we will write |wpState| rather than
+|wpStateR|.}
 
 \subsection*{Example: tree labelling}
 \label{sec:trees}
 
 \todo{Do example}
+\begin{code}
+  data Tree (a : Set) : Set where
+    Leaf : a -> Tree a
+    Node : Tree a -> Tree a -> Tree a
+
+  flatten : ∀ {a} -> Tree a -> List a
+  flatten (Leaf x)    = [ x ]
+  flatten (Node l r)  = flatten l ++ flatten r
+
+  size : ∀ {a} -> Tree a -> Nat
+  size (Leaf x)    = 1
+  size (Node l r)  = size l + size r
+
+  seq : Nat -> Nat -> List Nat
+  seq i Zero = Nil
+  seq i (Succ n) = Cons i (seq (Succ i) n)
+\end{code}
+
+
+\begin{spec}
+  relabelSpec : ∀ {a} -> (t : Tree a) -> PT (Tree Nat)
+  relabelSpec t = [ (K ⊤) ,
+    (\ { (i , _) (t' , f) -> (f == (i + size t)) × (seq i (size t) == flatten t')}) ]
+\end{spec}
+
+
+\begin{spec}
+  consequence1 : {a b : Set} (mx my : State a) (f : a -> State b)->
+    wpStateR mx ⊑ wpStateR my ->
+    wpStateR (mx >>= f) ⊑ wpStateR (my >>= f)
+  consequence1 mx my f H P s H1  = let ih = H {!\i o -> !} s {!!} in {!!}
+
+  consequence2 : {a b : Set} (mx : State a) (f g : a -> State b)->
+    ((x : a) -> wpStateR (f x) ⊑ wpStateR (g x)) ->
+    wpStateR (mx >>= f) ⊑ wpStateR (mx >>= g)
+  consequence2 mx f g H P s H1 = {!!}
+\end{spec}
+Reusing our previous soundness result, we can show that the |wpStateR|
+is sound with respect to the |run| semantics defined above.
+
 
 \subsection*{Rule of consequence}
 \label{sec:consequence}
+
+\subsection*{Equations}
 
 
 
@@ -795,7 +864,7 @@ non-determinism and prove appropriate soundness results.
 
 % \todo{Bigger example? n-queens?}
 
-\section{General recursion, totally free}
+\section{General recursion}
 \label{sec:recursion}
 
 % Besides these well-known effects, we can handle \emph{general
@@ -970,6 +1039,15 @@ How can we use this? Let's see another example.
 \item Relation with Dijkstra monad?
   
 \end{itemize}
+
+Can generalize |Spec| further:
+
+\begin{spec}
+  record Spec (a : Set) (b : a -> Set) : Set where
+    field
+      pre : a -> Set
+      post : (x : a) -> pre x -> b x -> Set
+\end{spec}
 
 \section{Discussion}
 \label{sec:discussion}
