@@ -21,6 +21,7 @@ f ∘ g = λ x → f (g x)
 
 open import Relation.Binary.PropositionalEquality public
   hiding (preorder)
+  renaming ([_] to [[[_]]])
 infix 1 _==_
 _==_ = _≡_
 
@@ -250,8 +251,8 @@ data List {l : Level} (a : Set l) : Set l where
 Cons : {l : Level} {a : Set l} → a → List a → List a
 Cons = _::_
 
--- [_] : ∀ {a} -> a -> List a
--- [ x ] = Cons x Nil
+[_] : ∀ {a : Set} -> a -> List a
+[ x ] = Cons x Nil
 
 foldr : {a b : Set} -> (a -> b -> b) -> b -> List a -> b
 foldr f e Nil = e
