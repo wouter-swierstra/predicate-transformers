@@ -856,6 +856,11 @@ function satisfies its specification.
 \end{code}
 %endif
 
+\todo{Tim: kan jij het bewijs in de sourcode hierboven afmaken?
+  Gebruiken we hier de rules of consequence hieronder? En gelden die
+  niet voor alle effecten (mits de bijbehorende predicate transformers
+  monotoon zijn?)}
+
 \subsection*{Rule of consequence}
 \label{sec:consequence}
 
@@ -984,6 +989,7 @@ satisfying |P|:
 \end{code}
 %endif
 
+
 \todo{These predicate transformers give rise to the following refinement relation}
 
 \begin{code}
@@ -991,7 +997,10 @@ satisfying |P|:
   subset2 :   (f g : a -> ND b) -> ((x : a) -> Subset (g x) (f x)) <-> g ⊑ f
 \end{code}
 
-\todo{Example?}
+\todo{These predicate transformers are sound wrt the usual list handler as follows...}
+
+\todo{Tim: heb jij hier nog een goed voorbeeld van? En wat kunnen we
+  nog meer zeggen hierover?}
 
 \section{General recursion}
 \label{sec:recursion}
@@ -1052,6 +1061,10 @@ f91-spec i o | no _ = o == 91
 f91-proof : (n : Nat) → partial-correctness (pt f91-spec) f91 n
 \end{code}
 
+\todo{Soundness? Total vs partial correctness? Termination?}
+
+\todo{What is the refinement relation? Is there one?}
+
 % There are many different handlers that we can use: generating a
 % coinductive trace, unfolding a fixed number of calls, calculating
 % Bove-Capretta predicates, or providing a proof of
@@ -1104,20 +1117,21 @@ f91-proof : (n : Nat) → partial-correctness (pt f91-spec) f91 n
   
 % \end{code}
 
-\section{Incremental refinement}
+\section{Stepwise refinement}
 
-The problem is that a value of type |Free C R a| is a \emph{complete}
-syntax tree, which returns a value or issues the next command --
-leaving no room to describe unfinished parts of the program that we
-wish to calculate. To achieve this however, we can define the
-following two types:
+In the examples we have seen so far, we have typically related a
+\emph{complete} program to its specification. Most work on the
+refinement calculus, however, allows programs and specifications to
+mix freely. Can we achieve something similar in this setting?
+
+
 
 \begin{spec}
   data I (a : Set) : Set1 where
     Done : a -> I a
-    Spec : (a -> Set) -> I a
+    Spec : Spec T a -> I a
 
-  M : Set -> Set1
+  M : Set -> Set
   M a = Partial (I a)
 \end{spec}
 A value of type |I a| is either a result of type |a| or a
@@ -1129,11 +1143,8 @@ specification:
 \begin{spec}
   wpI : (implicit(a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> I (b x) -> Set
   wpI P _ (Done y)  = P _ y
-  wpI P x (Spec Q)  = Q ⊆ P x
+  wpI P x [[ pre , post ]]  = pre /\ Q ⊆ P x
 \end{spec}
-\todo{This is not quite right... Need that there is some
-  implementation of Q}
-
 
 
 We can use this notion of weakest precondition on |I| to define a
