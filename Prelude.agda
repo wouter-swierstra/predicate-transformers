@@ -80,6 +80,11 @@ _×_ A B  = Pair A B
 
 infixr 20 _×_
 
+_∧_ : ∀ {l l'} -> Set l -> Set l' -> Set (l ⊔ l')
+_∧_ A B  = Pair A B
+
+infixr 1 _∧_
+
 record Triple {l l' l''} (a : Set l) (b : Set l') (c : Set l'') : Set (l ⊔ l' ⊔ l'') where
   constructor _,_,_
   field

@@ -10,11 +10,13 @@
 \title{Algebraic effects: specification and refinement}
 
 \author{Wouter Swierstra}
-
+\email{w.s.swierstra@@uu.nl}
+\author{Tim Baanen}
+\email{t.baanen@@uu.nl}
 \affiliation{
 \institution{Universiteit Utrecht}
 }
-\email{w.s.swierstra@@uu.nl}
+
 
 \begin{abstract}
   Pure functions are relatively easy to verify, yet it is much harder
@@ -48,18 +50,17 @@ subexpressions regardless of their context.
 
 In recent years, \emph{algebraic effects} have emerged as a technique
 to incorporate effectful operations in a purely functional
-language~\cite{plotkin2002notions,pretnar2010logic}.
-Algebraic effects clearly separate the
-syntax of effectful operations and their semantics, described by
-\emph{effect handlers}. In contrast to existing approaches such as
-monad transformers, different effects may be processed in any given
-order using a series of handlers.
+language~\cite{plotkin2002notions,pretnar2010logic}.  Algebraic
+effects clearly separate the syntax of effectful operations and their
+semantics, described by \emph{effect handlers}. In contrast to monad
+transformers, different effects may be processed in any given order
+using a series of handlers.
 
 This paper explores how to define a predicate transformer semantics
 for effectful programs. It presents a general framework for deriving
 verified effectful programs their specifications, inspired by existing
 work on the refinement
-calculus\cite{back2012refinement,morgan1994programming}. We will
+calculus~\cite{back2012refinement,morgan1994programming}. We will
 sketch the key techniques developed herein, before illustrating them
 with numerous examples:
 
@@ -73,13 +74,6 @@ with numerous examples:
   in type theory. The semantics of these effects are given by a
   \emph{handler}, that assigns meaning to the syntactic operations
   provided by the free monad. 
-  % We show how we can
-  % also describe the behaviour of a program more abstractly by writing
-  % handlers that compute a \emph{proposition}, capturing the expected
-  % behaviour without having to execute the corresponding effects. These
-  % handlers may then be used to transform predicates on the result
-  % values of an effectful computation to a predicate on the entire
-  % computation.
 \item Next we show how to assign \emph{predicate transformer
     semantics} to computations arising from Kleisli arrows on such
   free monads. This enables us to specify the desired outcome of an
@@ -88,19 +82,21 @@ with numerous examples:
 \item Using these weakest precondition semantics, we can define a
   notion of \emph{refinement} on computations using algebraic
   effects. Finally, we show how to use this refinement relation to
-  calculate a program from its specification.
+  show a program satisfies its specification, or indeed,
+  \emph{calculate} a program from its specification.
 \end{itemize}
 These principles are applicable to a range of different effects,
-including exceptions (Section~\ref{sec:maybe}), non-determinism
-(Section~\ref{sec:non-det}), state (Section~\ref{sec:state}), and
-general recursion (Section~\ref{sec:recursion}). Each section is
-illustrated with numerous examples, selected for their portrayal proof
-principles rather than feats of formalization.
+including exceptions (Section~\ref{sec:maybe}), state
+(Section~\ref{sec:state}), non-determinism
+(Section~\ref{sec:non-det}), and general recursion
+(Section~\ref{sec:recursion}). Each section is illustrated with
+numerous examples, each selected for their portrayal of proof principles
+rather than being formidable feats of formalization.
 
 
 The examples, theorems and proofs have all been formally verified in
 the dependently typed programming language Agda~\cite{agda}, but they
-techniques translate readily to other proof assistants based no
+techniques translate readily to other proof assistants based on
 dependent types such as Idris~\cite{brady} or Coq~\cite{coq}. The sources
 associated with our our development are available
 online.\footnote{\todo{url}}
@@ -113,7 +109,7 @@ online.\footnote{\todo{url}}
 
 module Check where
 
-open import Prelude
+open import Prelude hiding (map)
 open import Level hiding (lift)
 
 module Free where
@@ -138,9 +134,9 @@ constructor corresponds to the continuation, describing how to proceed
 after receiving a response of type |R c|. It is straightforward to
 show that the |Free| datatype is indeed a monad:
 \begin{code}
-  fmap : (Forall (C R a b)) (a -> b) -> Free C R a -> Free C R b
-  fmap f (Pure x)    = Pure (f x)
-  fmap f (Step c k)  = Step c (\ r -> fmap f (k r)) 
+  map : (Forall (C R a b)) (a -> b) -> Free C R a -> Free C R b
+  map f (Pure x)    = Pure (f x)
+  map f (Step c k)  = Step c (\ r -> map f (k r)) 
 
   return : (Forall (C R a)) a -> Free C R a
   return = Pure
@@ -149,13 +145,12 @@ show that the |Free| datatype is indeed a monad:
   Pure x    >>= f  = f x
   Step c x  >>= f  = Step c (\ r -> x r >>= f)
 \end{code}
-% Finally, we will sometimes \emph{fold} over elements of |Free C R a|
-% using the following recursion principle:
-% \begin{code}
-%   fold : (Forall(C R a l)) (implicit(b : Set l)) ((c : C) -> (R c -> b) -> b) -> (a -> b) -> Free C R a -> b
-%   fold alg pure (Pure x)    = pure x
-%   fold alg pure (Step c k)  = alg c (fold alg pure . k)
-% \end{code}
+%if style == newcode
+\begin{code}
+  _>>_ : forall {a b C R} -> Free C R a -> Free C R b -> Free C R b
+  c1 >> c2 = c1 >>= \_ -> c2
+\end{code}
+%endif
 The examples of effects studied in this paper will be phrased in terms
 of such free monads.
 
@@ -456,13 +451,22 @@ relating inputs that satisfy this precondition and the corresponding outputs:
 \end{code}
 As is common in the refinement calculus literature, we will write |[[
 P , Q ]]| for the specification consisting of the precondition |P| and
-postcondition |Q|. Using this definition, we can define the following
-specification for our addition function:
+postcondition |Q|. In many of our examples, the type |b| does not
+depend on |x : a|, motivating the following type synonym:
+\begin{code}
+  SpecK : Set -> Set -> Set
+  SpecK a b = Spec a (K b)
+\end{code}
+This definition uses the combinator K to discard the unused argument
+of type |a|.
+
+Using this definition, we can define the following specification for
+our addition function:
 \begin{code}
   data Add : List Nat -> List Nat -> Set where
     AddStep : (implicit(x1 x2 : Nat)) (implicit(xs : List Nat)) Add (x1 :: x2 :: xs) ((x1 + x2) :: xs)
 
-  addSpec : Spec (List Nat) (K (List Nat))
+  addSpec : SpecK (List Nat) (List Nat)
   addSpec = [[ (\ xs -> length xs > 1) , Add ]]
 \end{code}
 That is, provided we are given a list with at least two elements, we
@@ -489,7 +493,7 @@ Using this definition we can precisely formulate our the problem at
 hand: can we find a program |add : List a -> Partial (a × List
 a)| that refines the specification given by |addSpec|:
 \begin{spec}
-  correctness : wpSpec addSpec ⊑ wpPartial add
+  correctnessAdd : wpSpec addSpec ⊑ wpPartial add
 \end{spec}
 Defining such a program and verifying its correctness is entirely
 straightforward:
@@ -504,6 +508,14 @@ straightforward:
     pop xs >>= \{ (x2 , xs) ->
     return ((x1 + x2) :: xs)}}
 \end{code}
+%if style == newcode
+\begin{code}
+  correctnessAdd : wpSpec addSpec ⊑ wpPartial add  
+  correctnessAdd P Nil (() , _)
+  correctnessAdd P (x :: Nil) (Data.Nat.s≤s () , _)
+  correctnessAdd P (x :: y :: xs) (_ , H) = H (x + y :: xs) AddStep
+\end{code}
+%endif
 We include this example here to illustrate how to use the refinement
 relation to relate a \emph{specification}, given in terms of a pre-
 and postcondition, to its implementation. When compared to the
@@ -535,7 +547,7 @@ computation:
   fastProduct : List Nat -> Partial Nat
   fastProduct Nil                 = return 1
   fastProduct (Zero :: xs)        = abort
-  fastProduct (k :: xs)           = fmap (_*_ k) (fastProduct xs)
+  fastProduct (k :: xs)           = map (_*_ k) (fastProduct xs)
 \end{code}
 To run this computation, we provide a handler that maps |abort| to
 some default value:
@@ -571,8 +583,8 @@ in any way? We could compute simply return a trivial predicate that is
 always holds. To relate the predicate transformer semantics to the
 |defaultHandler| we need to prove a simple soundness result:
 \begin{code}
-  soundness : (Forall (a b)) (P : a -> b -> Set) -> (d : b) -> (c : a -> Partial b) -> (x : a) ->
-    wpDefault d c P x -> P x (defaultHandler d (c x))
+  soundness : (Forall (a b)) (P : a -> b -> Set) -> (d : b) -> (c : a -> Partial b) ->
+    forall x -> wpDefault d c P x -> P x (defaultHandler d (c x))
 \end{code}
 %if style == newcode
 \begin{code}
@@ -588,16 +600,16 @@ running the |defaultHandler| satisfies the desired postcondition.
 Now we can finally use our refinement relation to relate the
 |fastproduct| function to the original |product| function:
 \begin{code}
-  correctness : wp product ⊑ wpDefault 0 fastProduct
+  correctnessProduct : wp product ⊑ wpDefault 0 fastProduct
 \end{code}
 %if style == newcode
 \begin{code}
-  correctness P Nil H = H
-  correctness P (Zero :: xs) H = H
-  correctness P (Succ x :: xs) H
-    with fastProduct xs | correctness (\xs v -> P (Succ x :: xs) _) xs H
-  correctness P (Succ x :: xs) H | Pure v | IH  = IH
-  correctness P (Succ x :: xs) H | Step Abort _ | IH rewrite *-zeroʳ x = IH
+  correctnessProduct   P Nil H = H
+  correctnessProduct   P (Zero :: xs) H = H
+  correctnessProduct   P (Succ x :: xs) H
+    with fastProduct xs | correctnessProduct (\xs v -> P (Succ x :: xs) _) xs H
+  correctnessProduct   P (Succ x :: xs) H | Pure v | IH  = IH
+  correctnessProduct   P (Succ x :: xs) H | Step Abort _ | IH rewrite *-zeroʳ x = IH
 \end{code}
 %endif
 
@@ -617,16 +629,7 @@ return to when discussing non-determinism (Section~\ref{sec:non-det}).
 \begin{code}
 module State (s : Set) where
   open Free
-
-  open import Data.Nat public
-    using
-      (_+_; _>_; _*_
-      )
-    renaming
-      ( ℕ to Nat
-      ; zero to Zero
-      ; suc to Succ
-      )
+  open Maybe using (SpecK; Spec; [[_,_]]; wpSpec)
 \end{code}
 %endif
 
@@ -690,30 +693,57 @@ respect to the |run| function:
 %endif
 
 We oftentimes write specifications as a \emph{relation}
-between input and output states. To do so, we can partially apply the
+between input and output states. To do so, we partially apply the
 predicate |P| before calling |wpState|:
 \begin{code}
   wpStateR : (Forall(a)) State a -> (P : s -> a -> s -> Set) -> (s -> Set)
   wpStateR c P s = wpState c (uncurry (P s)) s 
 \end{code}
-%if style == newcode           
-\begin{code}
-  wpStateRR : (Forall(a)) State a -> (P : s -> a -> s -> Set) -> (s -> Set)
-  wpStateRR = wpStateR
-\end{code}
-%endif
-\todo{When it is clear from the context, we will write |wpState| rather than
-|wpStateR|.}
+Reusing our previous soundness result, we can show that the |wpStateR|
+is sound with respect to the |run| semantics defined above.
 
 \subsection*{Example: tree labelling}
 \label{sec:trees}
+%if style == newcode
+\begin{code}
+module Relabel where
+  open Free
+  open Maybe using (Spec; SpecK; [[_,_]]; wpSpec)
+  open import Data.Nat public
+    using
+      (_+_; _>_; _*_
+      )
+    renaming
+      ( ℕ to Nat
+      ; zero to Zero
+      ; suc to Succ
+      )
+  module StateNat = State Nat
+  open StateNat
+\end{code}
+%endif
 
-\todo{Do example}
+To show how to reason about stateful programs using our weakest
+precondition semantics, we revisit a classic verification problem
+proposed by \citet{hutton2008reasoning}: given a binary tree as input,
+relabel this tree so that each leaf has a unique number associated
+with it. A typical solution uses the state monad to keep track of the
+next unused label. The challenge that \citeauthor{hutton2008reasoning}
+pose is to reason about the program, without expanding the definition
+of the monadic operations. As we do so, we will show how several
+familiar properties of the refinement relation that can be used to
+reason about \emph{arbitrary} effects.
+
+
+
+We begin by defining the type of binary trees:
 \begin{code}
   data Tree (a : Set) : Set where
-    Leaf : a -> Tree a
-    Node : Tree a -> Tree a -> Tree a
-
+    Leaf  : a -> Tree a
+    Node  : Tree a -> Tree a -> Tree a
+\end{code}
+%if style == newcode
+\begin{code}  
   flatten : ∀ {a} -> Tree a -> List a
   flatten (Leaf x)    = [ x ]
   flatten (Node l r)  = flatten l ++ flatten r
@@ -726,14 +756,113 @@ predicate |P| before calling |wpState|:
   seq i Zero = Nil
   seq i (Succ n) = Cons i (seq (Succ i) n)
 \end{code}
+%endif
+One obvious choice of specification might be the following:
+\begin{code}
+  relabelSpec1 : (Forall(a)) SpecK (Tree a × Nat) (Tree Nat × Nat)
+  relabelSpec1 = [[ K ⊤ , (\ { (t , s) (t' , s') → flatten t' == (seq (s) (size t))}) ]]
+\end{code}
+The precondition of this specification is trivially true regardless of
+the input tree and initial state; the postcondition states that
+flattening the resulting tree |t'| produces the sequence of numbers
+from |s| to |s + size t|, where |t| is the initial input tree.
 
+We can now define the obvious relabelling function as follows:
+%if style == newcode
+\begin{code}
+  fresh : State Nat
+  fresh =  get >>= \ n ->
+           put (Succ n) >>
+           return n
+\end{code}
+%endif
+\begin{code}         
+  relabel : (Forall(a)) Tree a -> State (Tree Nat)
+  relabel (Leaf x)    = map Leaf fresh
+  relabel (Node l r)  =
+    relabel l >>= \ l' ->
+    relabel r >>= \ r' ->
+    return (Node l' r') 
+\end{code}
+Here the auxiliary function |fresh| increments the current state and
+returns its value.
 
-\begin{spec}
-  relabelSpec : ∀ {a} -> (t : Tree a) -> PT (Tree Nat)
-  relabelSpec t = [ (K ⊤) ,
-    (\ { (i , _) (t' , f) -> (f == (i + size t)) × (seq i (size t) == flatten t')}) ]
-\end{spec}
+Next, we would like to show that this definition satisfies the
+intended specification. To do so, we can use our |wpState| function to
+compute the weakest precondition semantics of the relabelling
+function and formulate the desired correctness property:
 
+\begin{code}
+  ⟦relabel⟧ : (Forall(a)) (Tree a × Nat -> Tree Nat × Nat -> Set) -> (Tree a × Nat -> Set)
+  ⟦relabel⟧ P (t , s) = wpState (relabel t) (P (t , s)) s
+
+  correctnessRelabel : (Forall(a : Set)) wpSpec relabelSpec1 ⊑ ⟦relabel⟧
+\end{code}
+Unfortunately, the direct proof of this statement fails. The induction
+hypothesis in the case for the |Node| constructor is too weak. In
+particular, it does provide any useful information about the
+intermediate state resulting from the traversal of the left subtree.
+
+Fortunately, however, we can define several auxiliary lemmas to find a
+suitable proof. Firstly, the refinement relation is both reflexive and
+transitive:
+\begin{code}
+  ⊑-trans  : (implicit (a : Set)) (implicit (b : a -> Set)) (implicit (P Q R : ((x : a) -> b x -> Set) -> (a -> Set))) P ⊑ Q -> Q ⊑ R -> P ⊑ R
+
+  ⊑-refl   : (implicit (a : Set)) (implicit (b : a -> Set)) (implicit (P : ((x : a) -> b x -> Set) -> (a -> Set))) P ⊑ P  
+\end{code}
+%if style == newcode
+\begin{code}
+  ⊑-trans {a} {b} {P} {Q} {R} r1 r2 p x y = r2 p x (r1 p x y)
+  ⊑-refl {a} {b} {P} p x H = H  
+\end{code}
+%endif
+Furthermore, we can formulate and prove the usual laws for
+weakening of preconditions and strengthening of postconditions:
+\begin{code} 
+  weakenPre  : (implicit(a : Set)) (implicit(b : a -> Set)) (implicit(P P' : a -> Set)) (implicit(Q : (x : a) -> b x -> Set)) P ⊆ P' -> wpSpec [[ P , Q ]] ⊑ wpSpec [[ P' , Q ]]
+
+  strengthenPost     : (implicit(a : Set)) (implicit(b : a -> Set)) (implicit(P : a -> Set)) (implicit(Q Q' : (x : a) -> b x -> Set)) (forall (x : a) -> Q' x ⊆ Q x) -> wpSpec [[ P , Q ]] ⊑ wpSpec [[ P , Q' ]]
+\end{code}
+%if style == newcode
+\begin{code}
+  weakenPre H1 p H2 (pre , post) = (H1 H2 pre , post)  
+  strengthenPost H1 p H2 (pre , post) = (pre , \ x y → post x (H1 _ x y))  
+\end{code}
+%endif
+While easy to prove, these results are indispensible: they allow
+complex refinement proofs to be split into smaller pieces. In our
+example, we can strengthen our postcondition as follows:
+
+\begin{code}
+  relabelSpec2 : (Forall(a)) SpecK (Tree a × Nat) (Tree Nat × Nat)
+  relabelSpec2 = [[ K ⊤ , post ]]
+    where
+    post : (Forall(a)) Tree a × Nat -> Tree Nat × Nat -> Set
+    post (t , s) (t' , s') = (flatten t' == (seq (s) (size t))) ∧ (s + size t == s')
+\end{code}
+Using the transitivity of the refinement relation and strengthening of
+postcondition lemmas, we can now complete the proof that the |relabel|
+function satisfies its specification.
+%if style == newcode
+\begin{code}
+  correctness = ⊑-trans {Q = wpSpec relabelSpec2} (strengthenPost step1) step2
+    where
+      step1 : ∀ {a} -> (x : Tree a × Nat) -> (Spec.post relabelSpec2 x) ⊆ (Spec.post relabelSpec1 x)
+      step1 x y (fst , snd) = fst
+      step2 : wpSpec relabelSpec2 ⊑ ⟦relabel⟧
+      step2 P (Leaf x , s) (fst , snd) = snd (Leaf s , _) (refl , refl)
+      step2 P (Node l r , s) y = {!!}
+\end{code}
+%endif
+
+\subsection*{Rule of consequence}
+\label{sec:consequence}
+
+Unsurprisingly, reasoning about programs written using the state monad
+give rise to the typical pre- and postcondition reasoning found in the
+verification of imperative programs. It is worth considering some more
+general results that we can show about our programs:
 
 \begin{spec}
   consequence1 : {a b : Set} (mx my : State a) (f : a -> State b)->
@@ -746,25 +875,29 @@ predicate |P| before calling |wpState|:
     wpStateR (mx >>= f) ⊑ wpStateR (mx >>= g)
   consequence2 mx f g H P s H1 = {!!}
 \end{spec}
-Reusing our previous soundness result, we can show that the |wpStateR|
-is sound with respect to the |run| semantics defined above.
 
-
-\subsection*{Rule of consequence}
-\label{sec:consequence}
 
 \subsection*{Equations}
 
+Typically the intended semantics of algebraic effects is given by
+means of \emph{equations}, identifying syntactically different
+terms. Indeed, the genisis of much work on algebraic effects was the
+work by Power and Plotkin, that identified a handful of equations on
+terms written using the |get| and |put| operations that completely
+determined the state monad. How do these equations relate to the
+weakest precondition semantics presented here?
 
+
+\todo{What is the refinement relation arising from wpState?}
 
 \section{Nondeterminism}
 \label{sec:non-det}
 
 Can we repeat this construction of predicate transformer semantics for
-other effects? In this section, we will show how we can lift a
-predicate |a -> Set| over non-deterministic computations returning
-values of type |a|. Once again, we begin by defining a free monad
-describing the effects that can be used to describe non-deterministic
+other effects? In this section, we will show how we can define a
+weakest precondition semantics for non-deterministic
+computations. Once again, we begin by defining a free monad describing
+the effects that can be used to describe such
 computations:
 
 %if style == newcode
@@ -785,7 +918,6 @@ module Nondeterminism where
   R Fail = ⊥
   R Choice = Bool
 \end{code}
-
 Here we have chosen to define two possible commands: |Fail| and
 |Choice|. The |Fail| constructor corresponds to a non-deterministic
 computation that will not return any results; conceptually, the
@@ -805,105 +937,120 @@ its constructors:
   choice : (Forall(a)) ND a -> ND a -> ND a
   choice c1 c2 = Step Choice (\ b -> if b then c1 else c2)
 \end{code}
-
 Next, we turn our attention to lifting a predicate of type |a -> Set|
 to computations of type |ND a -> Set|. There are two canonical ways to
 do so:
 
-> All : (Forall(a)) (P : a -> Set) -> ND a -> Set
-> All P (Pure x) = P x
-> All P (Step Fail _) = ⊤
-> All P (Step Choice c) = All P (c True) × All P (c False)
+> wpAll : (Forall(b)) (P : b -> Set) -> ND b -> Set
+> wpAll P (Pure x) = P x
+> wpAll P (Step Fail _) = ⊤
+> wpAll P (Step Choice c) = wpAll P (c True) × wpAll P (c False)
 > 
-> Any : (Forall(a)) (P : a -> Set) -> ND a -> Set
-> Any P (Pure x) = P x
-> Any P (Step Fail _) = ⊥
-> Any P (Step Choice c) = Either (Any P (c True)) (Any P (c False))
+> wpAny : (Forall(b)) (P : b -> Set) -> ND b -> Set
+> wpAny P (Pure x) = P x
+> wpAny P (Step Fail _) = ⊥
+> wpAny P (Step Choice c) = Either (wpAny P (c True)) (wpAny P (c False))
 
-The statement |All P nd| holds when |P| holds for \emph{all} possible
+The statement |wpAll P nd| holds when |P| holds for \emph{all} possible
 values returned by the non-deterministic computation |nd|; the
-statement |Any P nd| holds when |P| holds for \emph{any} possible
-value returned by the non-deterministic computation |nd|. Both these
-functions could also be defined using |fold|, for instance:
-
-\begin{spec}
-All' :  (Forall(a)) (P : a -> Set) -> ND a -> Set
-All' = fold (\ { Fail _ → ⊤ ; Choice k → (k True) × (k False) })
-\end{spec}
+statement |wpAny P nd| holds when |P| holds for \emph{any} possible
+value returned by the non-deterministic computation |nd|.
 
 We can relate both these predicates to the usual `list handler' for
 non-determinism and prove appropriate soundness results.
 
-% \subsection*{Example}
-% \label{example-non-det}
+Using these handlers, we can reason about non-deterministic
+computations. The |guard| function, for example, can be used to prune
+computations to satisfy a given predicate:
 
-% Using these handlers, we can reason about non-deterministic
-% computations. The |guard| function, for example, can be used to prune
-% computations to satisfy a given predicate:
+\begin{code}
+  guard : (Forall(a))  (p : a -> Bool) -> a -> ND a
+  guard p x = if p x then return x else fail
+\end{code}
+Subsequently, we can prove that guard will always return results
+satisfying |P|:
+\begin{code}
+  guardCorrect : (Forall(a)) (p : a -> Bool) -> (x : a) -> wpAll (\ x -> So (p x)) (guard p x)
+\end{code}
+%if style == newcode
+\begin{code}
+  guardCorrect p x with inspect (p x)
+  guardCorrect p x | True with-≡ eq rewrite eq = lemma (p x) eq
+    where
+      lemma : (b : Bool) -> b == True -> So b
+      lemma True p = tt
+      lemma False ()
+  guardCorrect p x | False with-≡ eq rewrite eq = tt
+\end{code}
+%endif
 
-% \begin{code}
-%   guard : (Forall(a))  (p : a -> Bool) -> a -> ND a
-%   guard p x = if p x then return x else fail
-% \end{code}
-% Subsequently, we can prove that guard will always return results
-% satisfying |P|:
-% \begin{code}
-%   guardCorrect : (Forall(a)) (p : a -> Bool) -> (x : a) -> All (\ x -> So (p x)) (guard p x)
-% \end{code}
-% %if style == newcode
-% \begin{code}
-%   guardCorrect p x with inspect (p x)
-%   guardCorrect p x | True with-≡ eq rewrite eq = lemma (p x) eq
-%     where
-%       lemma : (b : Bool) -> b == True -> So b
-%       lemma True p = tt
-%       lemma False ()
-%   guardCorrect p x | False with-≡ eq rewrite eq = tt
-% \end{code}
-% %endif
+\todo{These predicate transformers give rise to the following refinement relation}
 
-% \todo{Bigger example? n-queens?}
+\begin{code}
+  subset1 :   (f g : a -> ND b) -> ((x : a) -> Subset (g x) (f x)) <-> f ⊑ g
+  subset2 :   (f g : a -> ND b) -> ((x : a) -> Subset (g x) (f x)) <-> g ⊑ f
+\end{code}
+
+\todo{Example?}
 
 \section{General recursion}
 \label{sec:recursion}
 
-% Besides these well-known effects, we can handle \emph{general
-%   recursion} in a similar fashion. To do so, we introduce a module
-% |General|. The module is parametrized by parametrized by two types |I|
-% and |O| and will be used to capture recursive calls to a function of
-% type | I -> O|:\footnote{This can be readily generalized to
-%   \emph{dependent functions} of type |(i : I) -> O i|, but we will not
-%     need this in the examples covered here.}
+The description the effects covered so far should be familiar. Giving
+a constructive semantics for \emph{general recursion}, however, may
+seem quite difficult at first glance. There are a variety of
+techniques that account for general recursion in type
+theory~\cite{bove_krauss_sozeau_2016}. Inspired
+by~\citet{mcbride2015turing}, however, we show how the call graph of a
+recursive functions can be described as a free monad, to which we can
+in turn, assign predicate transformer semantics.
 
-% \begin{code}
-% module General (I : Set) (O : Set) where  
-% \end{code}
+Suppose we wish to define a recursive function of type |(i : I) -> O
+i|, for some input type |I : Set| and output type |O : I -> Set|. If
+the recursion is structural, we typically do so by induction on
+|I|. If it is not, we may still want to describe the intended function
+and its behaviour---deferring any proof of termination for the
+moment. We can describe such functions as follows:
+\begin{code}
+_~~>_ : (I : Set) (O : I → Set) → Set
+I ~~> O = (i : I) → Free I O (O i)
+\end{code}
+Once again, we have a Kleisli arrow on the |Free| monad. The choice of
+`commands' and `responses', however, are somewhat puzzling at
+first. The intuition is that the `effect' we allowed to use amounts to
+consulting an oracle, that given an input |i : I| returns the
+corresponding output in |O i|.
 
+As before, we define a smart constructor to make such calls:
+\begin{code}
+call : (Forall (I O)) (i : I) → Free I O (O i)
+call x = Step x Pure
+\end{code}
+Note that we do \emph{not} define recursive functions---but
+rather defines an explicit representation of the call graph of the
+function we wish to define.
 
-% %if style == newcode
-% \begin{code}
-%   open Free  
-% \end{code}
-% %endif
+To illustrate this point, we can define McCarthy's 91-function as follows:
+\begin{code}
+f91 : Nat ~~> K Nat
+f91 i with 100 lt i
+f91 i | yes  _  = return (i - 10)
+f91 i | no   _  = call (i + 11) >>= call
+\end{code}
+This definition is not recursive, but merely makes the recursive
+structure of the function body, |f91 (f91 (i+11))|, explicit. How can
+we reason about such functions? As is typical in the literature on
+predicate transformer semantics, we can distinguish \emph{total
+  correctness} and \emph{partial correctness}.
 
-% To represent such calls, we define a single command, corresponding to
-% making a recursive call on an argument |i : I| and receiving a
-% response of type |O i|:
+\begin{code}
+f91-spec : Nat → Nat → Set
+f91-spec i o with 100 lt i
+f91-spec i o | yes _ = o == i - 10
+f91-spec i o | no _ = o == 91
 
-% > data C : Set where
-% >   Call : I -> C
-% >
-% > R : C -> Set
-% > R (Call x) = O
-% >
-% > Rec : Set -> Set
-% > Rec = Free C R
-
-% Once again, we can define a smart constructor to make it a bit easier
-% to define recursive functions.
-
-% > call : I -> Rec O
-% > call i = Step (Call i) Pure
+f91-proof : (n : Nat) → partial-correctness (pt f91-spec) f91 n
+\end{code}
 
 % There are many different handlers that we can use: generating a
 % coinductive trace, unfolding a fixed number of calls, calculating
@@ -1016,7 +1163,7 @@ How can we use this? Let's see another example.
 
 \begin{itemize}
 \item How can we use this technology to reason about combinations of
-  effects? Eg mixing state and exceptions.
+  effects? Eg mixing state and exceptions -- tim's forthcoming paper
 
   
 \item How can we reason about compound computations built with |>>=|
@@ -1024,18 +1171,10 @@ How can we use this? Let's see another example.
   derive for specific handlers/effects -- is there a more general
   form? What about loops/if?
 
-\item  What is a specification of a program with effects? Can we define
-  generalized refinement rules?
-
-\item Relation with equations/equational part of algebraic effects?
-
-\item Connection with relational specifications
-
 \item wp (s,q) or wp (s,p) implies wp(s,q or p) -- but not the other
   way around. The implication in the other direction only holds when
   the program is deterministic.
 
-  
 \item Relation with Dijkstra monad?
   
 \end{itemize}
