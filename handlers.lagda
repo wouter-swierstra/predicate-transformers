@@ -673,13 +673,13 @@ The usual handler for stateful computations maps our free monad,
 Inspired by the previous section, we can define the following
 predicate transformer semantics:
 \begin{code}
+  statePT : {b : Set} -> s -> (b × s -> Set) -> State b -> Set
+  statePT s P (Pure x) = P (x , s)
+  statePT s P (Step Get k) = statePT s P (k s)
+  statePT _ P (Step (Put s) k) = statePT s P (k tt)
+  
   wpState : forall { a b} -> (a -> State b) -> (P : a × s -> b × s -> Set) -> (a × s -> Set)
   wpState f P (x , i) = wp f (\_ -> statePT i (P (x , i))) x
-    where
-    statePT : {b : Set} -> s -> (b × s -> Set) -> State b -> Set
-    statePT s P (Pure x) = P (x , s)
-    statePT s P (Step Get k) = statePT s P (k s)
-    statePT _ P (Step (Put s) k) = statePT s P (k tt)
 \end{code}
 Given any predicate |P| relating the input, initial state, final state
 and result, it computes the weakest precondition required of the input
@@ -687,15 +687,20 @@ and initial state to ensure |P| holds upon completing the
 computation. As we did in the previous section for |wpDefault|, we can
 prove soundness of this semantics with respect to the |run| function:
 \todo{fix soundness}
-\begin{spec}
-  soundness : (Forall(a)) (P : a × s -> Set) -> (c : State a) -> (i : s) -> wpState c P i -> P (run c i)
-  soundness P (Pure x) i p = p
-  soundness P (Step Get x) i wpState = soundness P (x i) i wpState
-  soundness P (Step (Put x) k) i wpState with soundness P (k tt)
-  ... | ih = ih x wpState             
-\end{spec}
+\begin{code}
+  soundness : {a b : Set} -> (P : a × s -> b × s -> Set) -> (c : a -> State b) ->
+    (i : s) -> (x : a) ->
+    wpState c P (x , i) -> P (x , i) (run (c x) i)
+\end{code}
 %if style == newcode           
 \begin{code}
+  soundness {a} {b} P c i x H = lemma i (c x) H
+    where
+    lemma : (st : s) -> (statec : State b) -> (statePT st (P (x , i)) statec) -> P (x , i) (run statec st)
+    lemma i (Pure y) H = H
+    lemma i (Step Get k) H = lemma i (k i) H
+    lemma i (Step (Put s) k) H = lemma s (k tt) H
+  
 \end{code}
 %endif
 
