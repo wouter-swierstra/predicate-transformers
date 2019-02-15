@@ -147,6 +147,7 @@ show that the |Free| datatype is indeed a monad:
 \end{code}
 %if style == newcode
 \begin{code}
+  infixr 20 _>>=_
   _>>_ : forall {a b C R} -> Free C R a -> Free C R b -> Free C R b
   c1 >> c2 = c1 >>= \_ -> c2
 \end{code}
@@ -696,8 +697,8 @@ We oftentimes write specifications as a \emph{relation}
 between input and output states. To do so, we partially apply the
 predicate |P| before calling |wpState|:
 \begin{code}
-  wpStateR : (Forall(a)) State a -> (P : s -> a -> s -> Set) -> (s -> Set)
-  wpStateR c P s = wpState c (uncurry (P s)) s 
+  wpStateR : (Forall(a)) State a -> (P : s -> a × s -> Set) -> (s -> Set)
+  wpStateR c P s = wpState c (P s) s 
 \end{code}
 Reusing our previous soundness result, we can show that the |wpStateR|
 is sound with respect to the |run| semantics defined above.
@@ -796,7 +797,7 @@ function and formulate the desired correctness property:
   ⟦relabel⟧ : (Forall(a)) (Tree a × Nat -> Tree Nat × Nat -> Set) -> (Tree a × Nat -> Set)
   ⟦relabel⟧ P (t , s) = wpState (relabel t) (P (t , s)) s
 
-  correctnessRelabel : (Forall(a : Set)) wpSpec relabelSpec1 ⊑ ⟦relabel⟧
+  correctnessRelabel : (Forall(a : Set)) wpSpec (instantiate (relabelSpec1)) ⊑ ⟦relabel⟧
 \end{code}
 Unfortunately, the direct proof of this statement fails. The induction
 hypothesis in the case for the |Node| constructor is too weak. In
@@ -846,12 +847,12 @@ postcondition lemmas, we can now complete the proof that the |relabel|
 function satisfies its specification.
 %if style == newcode
 \begin{code}
-  correctness = ⊑-trans {Q = wpSpec relabelSpec2} (strengthenPost step1) step2
+  correctnessRelabel = ⊑-trans {Q = wpSpec relabelSpec2} (strengthenPost step1) step2
     where
       step1 : ∀ {a} -> (x : Tree a × Nat) -> (Spec.post relabelSpec2 x) ⊆ (Spec.post relabelSpec1 x)
       step1 x y (fst , snd) = fst
       step2 : wpSpec relabelSpec2 ⊑ ⟦relabel⟧
-      step2 P (Leaf x , s) (fst , snd) = snd (Leaf s , _) (refl , refl)
+      step2 P (Leaf x , s) (fst , snd) = ?
       step2 P (Node l r , s) y = {!!}
 \end{code}
 %endif
@@ -881,19 +882,71 @@ general results that we can show about our programs:
   consequence2 mx f g H P s H1 = {!!}
 \end{spec}
 
+\todo{What is the refinement relation arising from wpState?}
 
 \subsection*{Equations}
 
+%if style == newcode
+\begin{code}
+module Laws (s : Set) where
+  open Free
+  open Maybe using (SpecK; Spec; [[_,_]]; wpSpec)
+  module StateS = State s
+  open StateS
+  postulate
+    a : Set
+    k0 : State a
+    k1 : s -> State a
+    k2 : s -> s -> State a    
+    x y : s
+\end{code}
+%endif
+
+
 Typically the intended semantics of algebraic effects is given by
 means of \emph{equations}, identifying syntactically different
-terms. Indeed, the genisis of much work on algebraic effects was the
-work by Power and Plotkin, that identified a handful of equations on
-terms written using the |get| and |put| operations that completely
+terms. Indeed, the genesis of algebraic effects can be found in the
+work by \citet{plotkin2002notions}, that identified a handful of
+equations on relating |get| and |put| operations that completely
 determined the state monad. How do these equations relate to the
-weakest precondition semantics presented here?
+weakest precondition semantics presented here? In this section, we
+will show how to formulate and prove that such equations hold with
+respect to a given predicate transformer semantics.
 
-
-\todo{What is the refinement relation arising from wpState?}
+Firstly, we can define the following equivalence relation between
+stateful computations:
+\begin{code}
+  _≃_ : (Forall(a)) State a  -> State a -> Set
+  t1 ≃ t2 = (wpStateR t1 ⊑ wpStateR t2) ∧ (wpStateR t2 ⊑ wpStateR t1)
+\end{code}  
+To establish that an equation between two terms |t1| and |t2| holds
+with respect to the |wpStateR| semantics, amounts to proving that |t1
+≃ t2|. For example, the proofs of the following four laws follow
+immediately for all |k|, |x|, and |y|:
+%{
+%if style == poly
+%format k0 = k
+%format k1 = k
+%format k2 = k
+%endif
+\begin{code}
+  law1 : k0 ≃ (get >>= \ s -> put s >> k0)
+  law2 : (get >>= \ s1 -> get >>= \ s2 -> k2 s1 s2) ≃ (get >>= \ s -> k2 s s)
+  law3 : (put y >> (put x >> k0)) ≃ (put x >> k0)
+  law4 : (put x >> (get >>= k1)) ≃ (put x >> k1 x)
+\end{code}
+%}
+%if style == newcode
+\begin{code}
+  law1 = (λ P x z → z) , (λ P x z → z)
+  law2 = (λ P x z → z) , (λ P x z → z)
+  law3 = (λ P x z → z) , (λ P x z → z)
+  law4 = (λ P x z → z) , (λ P x z → z)
+\end{code}
+%endif
+More generally, we can use such an equivalence relation to verify that
+the predicate transformer semantics defined respect a set of equations
+that are expected to hold for a given algebraic effect.
 
 \section{Nondeterminism}
 \label{sec:non-det}
@@ -974,11 +1027,11 @@ computations to satisfy a given predicate:
 \end{code}
 Subsequently, we can prove that guard will always return results
 satisfying |P|:
-\begin{code}
+\begin{spec}
   guardCorrect : (Forall(a)) (p : a -> Bool) -> (x : a) -> wpAll (\ x -> So (p x)) (guard p x)
-\end{code}
+\end{spec}
 %if style == newcode
-\begin{code}
+\begin{spec}
   guardCorrect p x with inspect (p x)
   guardCorrect p x | True with-≡ eq rewrite eq = lemma (p x) eq
     where
@@ -986,16 +1039,16 @@ satisfying |P|:
       lemma True p = tt
       lemma False ()
   guardCorrect p x | False with-≡ eq rewrite eq = tt
-\end{code}
+\end{spec}
 %endif
 
 
 \todo{These predicate transformers give rise to the following refinement relation}
 
-\begin{code}
+\begin{spec}
   subset1 :   (f g : a -> ND b) -> ((x : a) -> Subset (g x) (f x)) <-> f ⊑ g
   subset2 :   (f g : a -> ND b) -> ((x : a) -> Subset (g x) (f x)) <-> g ⊑ f
-\end{code}
+\end{spec}
 
 \todo{These predicate transformers are sound wrt the usual list handler as follows...}
 
@@ -1004,6 +1057,25 @@ satisfying |P|:
 
 \section{General recursion}
 \label{sec:recursion}
+
+%if style == newcode
+\begin{code}
+module Recursion where
+
+  open Free
+  open import Data.Nat public
+    using
+      (_+_; _>_; _*_
+      )
+    renaming
+      ( ℕ to Nat
+      ; zero to Zero
+      ; suc to Succ
+      )
+
+\end{code}
+%endif
+
 
 The description the effects covered so far should be familiar. Giving
 a constructive semantics for \emph{general recursion}, however, may
@@ -1021,8 +1093,8 @@ the recursion is structural, we typically do so by induction on
 and its behaviour---deferring any proof of termination for the
 moment. We can describe such functions as follows:
 \begin{code}
-_~~>_ : (I : Set) (O : I → Set) → Set
-I ~~> O = (i : I) → Free I O (O i)
+  _~~>_ : (I : Set) (O : I → Set) → Set
+  I ~~> O = (i : I) → Free I O (O i)
 \end{code}
 Once again, we have a Kleisli arrow on the |Free| monad. The choice of
 `commands' and `responses', however, are somewhat puzzling at
@@ -1031,35 +1103,36 @@ consulting an oracle, that given an input |i : I| returns the
 corresponding output in |O i|.
 
 As before, we define a smart constructor to make such calls:
-\begin{code}
-call : (Forall (I O)) (i : I) → Free I O (O i)
-call x = Step x Pure
-\end{code}
+\begin{spec}
+  call : (Forall (I O)) (i : I) → Free I O (O i)
+  call x = Step x Pure
+\end{spec}
 Note that we do \emph{not} define recursive functions---but
 rather defines an explicit representation of the call graph of the
 function we wish to define.
 
 To illustrate this point, we can define McCarthy's 91-function as follows:
-\begin{code}
-f91 : Nat ~~> K Nat
-f91 i with 100 lt i
-f91 i | yes  _  = return (i - 10)
-f91 i | no   _  = call (i + 11) >>= call
-\end{code}
+\begin{spec}
+  f91 : Nat ~~> K Nat
+  f91 i with 100 lt i
+  f91 i | yes  _  = return (i - 10)
+  f91 i | no   _  = call (i + 11) >>= call
+\end{spec}
 This definition is not recursive, but merely makes the recursive
 structure of the function body, |f91 (f91 (i+11))|, explicit. How can
 we reason about such functions? As is typical in the literature on
 predicate transformer semantics, we can distinguish \emph{total
   correctness} and \emph{partial correctness}.
 
-\begin{code}
+\begin{spec}
 f91-spec : Nat → Nat → Set
 f91-spec i o with 100 lt i
 f91-spec i o | yes _ = o == i - 10
 f91-spec i o | no _ = o == 91
 
-f91-proof : (n : Nat) → partial-correctness (pt f91-spec) f91 n
-\end{code}
+-- f91-proof : (n : Nat) → partial-correctness (pt f91-spec) f91 n
+-- f91-proof = ?
+\end{spec}
 
 \todo{Soundness? Total vs partial correctness? Termination?}
 
