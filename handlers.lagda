@@ -112,6 +112,9 @@ module Check where
 open import Prelude hiding (map)
 open import Level hiding (lift)
 
+postulate
+  undefinedTim : {a : Set} -> a
+
 module Free where
 \end{code}
 %endif
@@ -852,8 +855,8 @@ function satisfies its specification.
       step1 : ∀ {a} -> (x : Tree a × Nat) -> (Spec.post relabelSpec2 x) ⊆ (Spec.post relabelSpec1 x)
       step1 x y (fst , snd) = fst
       step2 : wpSpec relabelSpec2 ⊑ ⟦relabel⟧
-      step2 P (Leaf x , s) (fst , snd) = ?
-      step2 P (Node l r , s) y = {!!}
+      step2 P (Leaf x , s) (fst , snd) = undefinedTim
+      step2 P (Node l r , s) y = undefinedTim
 \end{code}
 %endif
 
