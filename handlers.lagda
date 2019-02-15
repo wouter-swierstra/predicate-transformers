@@ -1,5 +1,5 @@
-\documentclass[acmsmall, nonacm]{acmart}
-\settopmatter{printfolios=false,printccs=false,printacmref=false}
+\documentclass[acmsmall, anonymous, review=false]{acmart}
+\settopmatter{printfolios=true,printccs=false,printacmref=false}
 
 %include agda.fmt
 %include handlers.fmt
@@ -17,13 +17,12 @@
 \institution{Universiteit Utrecht}
 }
 
-
 \begin{abstract}
   Pure functions are relatively easy to verify, yet it is much harder
   to reason about programs using effects. In this paper, we present a
   general framework, based on predicate transformer semantics, for
   specifying and calculating effectful programs from their
-  specification.
+  specification. \todo{Finalize abstract and title}
 \end{abstract}
 
 %include ccs.tex
@@ -57,7 +56,7 @@ transformers, different effects may be processed in any given order
 using a series of handlers.
 
 This paper explores how to define a predicate transformer semantics
-for effectful programs. It presents a general framework for deriving
+for effectful programs. It presents a constructive framework for deriving
 verified effectful programs their specifications, inspired by existing
 work on the refinement
 calculus~\cite{back2012refinement,morgan1994programming}. We will
@@ -73,7 +72,7 @@ with numerous examples:
 \item We show how the syntax of effects may be given by a free monad
   in type theory. The semantics of these effects are given by a
   \emph{handler}, that assigns meaning to the syntactic operations
-  provided by the free monad. 
+  provided by the free monad. \todo{Avoid handlers here}
 \item Next we show how to assign \emph{predicate transformer
     semantics} to computations arising from Kleisli arrows on such
   free monads. This enables us to specify the desired outcome of an
@@ -674,37 +673,31 @@ The usual handler for stateful computations maps our free monad,
 Inspired by the previous section, we can define the following
 predicate transformer semantics:
 \begin{code}
-  wpState : (Forall(a)) State a -> (P : a × s -> Set) -> (s -> Set)
-  wpState (Pure x) P s           = P (x , s)
-  wpState (Step Get k) P s       = wpState (k s) P s
-  wpState (Step (Put s) k) P _   = wpState (k tt) P s
+  wpState : forall { a b} -> (a -> State b) -> (P : a × s -> b × s -> Set) -> (a × s -> Set)
+  wpState f P (x , i) = wp f (\_ -> statePT i (P (x , i))) x
+    where
+    statePT : {b : Set} -> s -> (b × s -> Set) -> State b -> Set
+    statePT s P (Pure x) = P (x , s)
+    statePT s P (Step Get k) = statePT s P (k s)
+    statePT _ P (Step (Put s) k) = statePT s P (k tt)
 \end{code}
-Given any predicate |P| on the final state and result, it computes the
-weakest precondition required of the initial state to ensure |P| holds
-upon completing the computation. As we did in the previous section for
-|wpDefault|, we can prove soundness of this semantics with
-respect to the |run| function:
-\begin{code}
+Given any predicate |P| relating the input, initial state, final state
+and result, it computes the weakest precondition required of the input
+and initial state to ensure |P| holds upon completing the
+computation. As we did in the previous section for |wpDefault|, we can
+prove soundness of this semantics with respect to the |run| function:
+\todo{fix soundness}
+\begin{spec}
   soundness : (Forall(a)) (P : a × s -> Set) -> (c : State a) -> (i : s) -> wpState c P i -> P (run c i)
-\end{code}
-%if style == newcode           
-\begin{code}
   soundness P (Pure x) i p = p
   soundness P (Step Get x) i wpState = soundness P (x i) i wpState
   soundness P (Step (Put x) k) i wpState with soundness P (k tt)
   ... | ih = ih x wpState             
+\end{spec}
+%if style == newcode           
+\begin{code}
 \end{code}
 %endif
-
-We oftentimes write specifications as a \emph{relation}
-between input and output states. To do so, we partially apply the
-predicate |P| before calling |wpState|:
-\begin{code}
-  wpStateR : (Forall(a)) State a -> (P : s -> a × s -> Set) -> (s -> Set)
-  wpStateR c P s = wpState c (P s) s 
-\end{code}
-Reusing our previous soundness result, we can show that the |wpStateR|
-is sound with respect to the |run| semantics defined above.
 
 \subsection*{Example: tree labelling}
 \label{sec:trees}
@@ -798,7 +791,7 @@ function and formulate the desired correctness property:
 
 \begin{code}
   ⟦relabel⟧ : (Forall(a)) (Tree a × Nat -> Tree Nat × Nat -> Set) -> (Tree a × Nat -> Set)
-  ⟦relabel⟧ P (t , s) = wpState (relabel t) (P (t , s)) s
+  ⟦relabel⟧ P = wpState (relabel) P
 
   correctnessRelabel : (Forall(a : Set)) wpSpec (instantiate (relabelSpec1)) ⊑ ⟦relabel⟧
 \end{code}
@@ -912,40 +905,39 @@ terms. Indeed, the genesis of algebraic effects can be found in the
 work by \citet{plotkin2002notions}, that identified a handful of
 equations on relating |get| and |put| operations that completely
 determined the state monad. How do these equations relate to the
-weakest precondition semantics presented here? In this section, we
-will show how to formulate and prove that such equations hold with
-respect to a given predicate transformer semantics.
+weakest precondition semantics presented here? 
 
 Firstly, we can define the following equivalence relation between
 stateful computations:
-\begin{code}
+\todo{fixme}
+\begin{spec}
   _≃_ : (Forall(a)) State a  -> State a -> Set
   t1 ≃ t2 = (wpStateR t1 ⊑ wpStateR t2) ∧ (wpStateR t2 ⊑ wpStateR t1)
-\end{code}  
+\end{spec}  
 To establish that an equation between two terms |t1| and |t2| holds
 with respect to the |wpStateR| semantics, amounts to proving that |t1
-≃ t2|. For example, the proofs of the following four laws follow
-immediately for all |k|, |x|, and |y|:
+≃ t2|. For example, the following four laws follow immediately from
+our definitions for all |k|, |x|, and |y|:
 %{
 %if style == poly
 %format k0 = k
 %format k1 = k
 %format k2 = k
 %endif
-\begin{code}
+\begin{spec}
   law1 : k0 ≃ (get >>= \ s -> put s >> k0)
   law2 : (get >>= \ s1 -> get >>= \ s2 -> k2 s1 s2) ≃ (get >>= \ s -> k2 s s)
   law3 : (put y >> (put x >> k0)) ≃ (put x >> k0)
   law4 : (put x >> (get >>= k1)) ≃ (put x >> k1 x)
-\end{code}
+\end{spec}
 %}
 %if style == newcode
-\begin{code}
+\begin{spec}
   law1 = (λ P x z → z) , (λ P x z → z)
   law2 = (λ P x z → z) , (λ P x z → z)
   law3 = (λ P x z → z) , (λ P x z → z)
   law4 = (λ P x z → z) , (λ P x z → z)
-\end{code}
+\end{spec}
 %endif
 More generally, we can use such an equivalence relation to verify that
 the predicate transformer semantics defined respect a set of equations
@@ -965,7 +957,6 @@ computations:
 \begin{code}
 module Nondeterminism where
 
-  -- Define a free monad
   open Free
 \end{code}
 %endif
@@ -976,8 +967,8 @@ module Nondeterminism where
     Choice : C
 
   R : C -> Set
-  R Fail = ⊥
-  R Choice = Bool
+  R Fail    = ⊥
+  R Choice  = Bool
 \end{code}
 Here we have chosen to define two possible commands: |Fail| and
 |Choice|. The |Fail| constructor corresponds to a non-deterministic
@@ -998,52 +989,35 @@ its constructors:
   choice : (Forall(a)) ND a -> ND a -> ND a
   choice c1 c2 = Step Choice (\ b -> if b then c1 else c2)
 \end{code}
-Next, we turn our attention to lifting a predicate of type |a -> Set|
-to computations of type |ND a -> Set|. There are two canonical ways to
-do so:
+Next, we turn our attention to defining a suitable predicate
+transformer semantics on Kleisli arrows of the form |(x : a) -> ND (b
+x)|. There are two canonical ways to do so:
 
-> wpAll : (Forall(b)) (P : b -> Set) -> ND b -> Set
-> wpAll P (Pure x) = P x
-> wpAll P (Step Fail _) = ⊤
-> wpAll P (Step Choice c) = wpAll P (c True) × wpAll P (c False)
-> 
-> wpAny : (Forall(b)) (P : b -> Set) -> ND b -> Set
-> wpAny P (Pure x) = P x
-> wpAny P (Step Fail _) = ⊥
-> wpAny P (Step Choice c) = Either (wpAny P (c True)) (wpAny P (c False))
+\begin{code}
+  wpAll : (Forall (a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> ((x : a) -> ND (b x)) -> (a -> Set)
+  wpAll P f = wp f (allPT P)
+    where
+    allPT : (Forall (a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> ND (b x) -> Set
+    allPT P _ (Pure x)         = P _ x
+    allPT P _ (Step Fail k)    = ⊥
+    allPT P _ (Step Choice k)  = allPT P _ (k True) ∧ allPT P _ (k False)
 
-The statement |wpAll P nd| holds when |P| holds for \emph{all} possible
-values returned by the non-deterministic computation |nd|; the
-statement |wpAny P nd| holds when |P| holds for \emph{any} possible
-value returned by the non-deterministic computation |nd|.
-
+  wpAny : (Forall (a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> ((x : a) -> ND (b x)) -> (a -> Set)
+  wpAny P f = wp f (anyPT P)
+    where
+    anyPT : (Forall (a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> ND (b x) -> Set
+    anyPT P _ (Pure x)         = P _ x
+    anyPT P _ (Step Fail k)    = ⊤
+    anyPT P _ (Step Choice k)  = anyPT P _ (k True) ∨ anyPT P _ (k False)
+\end{code}
+These two predicate transformers are dual: |allPT P| holds of a
+non-deterministic computation precisely when \emph{all} possible
+results satisfy |P|; |anyPt P| holds of a non-deterministic
+computation precisely when \emph{some} possible result satisfies |P|.
 We can relate both these predicates to the usual `list handler' for
 non-determinism and prove appropriate soundness results.
 
-Using these handlers, we can reason about non-deterministic
-computations. The |guard| function, for example, can be used to prune
-computations to satisfy a given predicate:
-
-\begin{code}
-  guard : (Forall(a))  (p : a -> Bool) -> a -> ND a
-  guard p x = if p x then return x else fail
-\end{code}
-Subsequently, we can prove that guard will always return results
-satisfying |P|:
-\begin{spec}
-  guardCorrect : (Forall(a)) (p : a -> Bool) -> (x : a) -> wpAll (\ x -> So (p x)) (guard p x)
-\end{spec}
-%if style == newcode
-\begin{spec}
-  guardCorrect p x with inspect (p x)
-  guardCorrect p x | True with-≡ eq rewrite eq = lemma (p x) eq
-    where
-      lemma : (b : Bool) -> b == True -> So b
-      lemma True p = tt
-      lemma False ()
-  guardCorrect p x | False with-≡ eq rewrite eq = tt
-\end{spec}
-%endif
+\todo{soundness}
 
 
 \todo{These predicate transformers give rise to the following refinement relation}
@@ -1053,10 +1027,7 @@ satisfying |P|:
   subset2 :   (f g : a -> ND b) -> ((x : a) -> Subset (g x) (f x)) <-> g ⊑ f
 \end{spec}
 
-\todo{These predicate transformers are sound wrt the usual list handler as follows...}
-
-\todo{Tim: heb jij hier nog een goed voorbeeld van? En wat kunnen we
-  nog meer zeggen hierover?}
+\subsection*{Example: permutations}
 
 \section{General recursion}
 \label{sec:recursion}
@@ -1219,7 +1190,7 @@ specification:
 \begin{spec}
   wpI : (implicit(a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> I (b x) -> Set
   wpI P _ (Done y)  = P _ y
-  wpI P x [[ pre , post ]]  = pre /\ Q ⊆ P x
+  wpI P x [[ pre , post ]]  = pre ∧ Q ⊆ P x
 \end{spec}
 
 

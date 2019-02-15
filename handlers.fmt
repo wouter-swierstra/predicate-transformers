@@ -14,6 +14,8 @@
 %format t2 = t "_2"
 %format s1 = s "_1"
 %format s2 = s "_2"
+%format c1 = c "_1"
+%format c2 = c "_2"
 %format law1 = law "_1"
 %format law2 = law "_2"
 %format law3 = law "_3"

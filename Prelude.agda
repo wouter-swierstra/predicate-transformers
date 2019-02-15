@@ -103,6 +103,9 @@ data Either {l : Level} (a b : Set l) : Set l where
   Inl : a -> Either a b
   Inr : b -> Either a b
 
+_∨_ : {l : Level} -> Set l -> Set l -> Set l
+p ∨ q = Either p q
+
 record ⊤ : Set where
   constructor tt
 
