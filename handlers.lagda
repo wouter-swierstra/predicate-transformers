@@ -681,6 +681,13 @@ predicate transformer semantics:
   wpState : forall { a b} -> (a -> State b) -> (P : a × s -> b × s -> Set) -> (a × s -> Set)
   wpState f P (x , i) = wp f (\_ -> statePT i (P (x , i))) x
 \end{code}
+\todo{It might be nicer to change the argument format to |statePT|, giving |statePT'|, so we can use it in the refinement relation.}
+%if style == newcode
+\begin{code}
+  statePT' : {b : Set} -> State b -> (s -> b × s -> Set) -> s -> Set
+  statePT' S P i = statePT i (P i) S
+\end{code}
+%endif
 Given any predicate |P| relating the input, initial state, final state
 and result, it computes the weakest precondition required of the input
 and initial state to ensure |P| holds upon completing the
@@ -872,17 +879,37 @@ give rise to the typical pre- and postcondition reasoning found in the
 verification of imperative programs. It is worth considering some more
 general results that we can show about our programs:
 
-\begin{spec}
+%if style == newcode
+\begin{code}
+  distributePT : {a b : Set} (mx : State a) (f : a -> State b)->
+    ∀ i P → statePT i P (mx >>= f) ≡ statePT i (wpState f λ _ → P) mx
+  distributePT (Pure x) f i P = refl
+  distributePT (Step Get k) f i P = distributePT (k i) f i P
+  distributePT (Step (Put x) k) f i P = distributePT (k tt) f x P
+\end{code}
+%endif
+\begin{code}
+  monotone : {a : Set} (mx : State a) ->
+    (Forall (P Q)) P ⊆ Q -> ∀ i -> statePT i P mx -> statePT i Q mx
+  monotone (Pure x) H i H1 = H (x , i) H1
+  monotone (Step Get k) H i H1 = monotone (k i) H i H1
+  monotone (Step (Put x) k) H i H1 = monotone (k tt) H x H1
+\end{code}
+\begin{code}
   consequence1 : {a b : Set} (mx my : State a) (f : a -> State b)->
-    wpStateR mx ⊑ wpStateR my ->
-    wpStateR (mx >>= f) ⊑ wpStateR (my >>= f)
-  consequence1 mx my f H P s H1  = let ih = H {!\i o -> !} s {!!} in {!!}
+    statePT' mx ⊑ statePT' my ->
+    statePT' (mx >>= f) ⊑ statePT' (my >>= f)
+  consequence1 mx my f H P i H1 =
+    let H1' = coerce (distributePT mx f i (P i)) H1
+    in coerce (sym (distributePT my f i (P i))) (H (λ x → wpState f (λ _ → P i)) i H1')
 
   consequence2 : {a b : Set} (mx : State a) (f g : a -> State b)->
-    ((x : a) -> wpStateR (f x) ⊑ wpStateR (g x)) ->
-    wpStateR (mx >>= f) ⊑ wpStateR (mx >>= g)
-  consequence2 mx f g H P s H1 = {!!}
-\end{spec}
+    ((x : a) -> statePT' (f x) ⊑ statePT' (g x)) ->
+    statePT' (mx >>= f) ⊑ statePT' (mx >>= g)
+  consequence2 (Pure x) f g H P i H1 = H x (λ _ → P i) i H1
+  consequence2 (Step Get k) f g H P i H1 = consequence2 (k i) f g (λ x P' i' → H x (λ _ → P' i') i') (λ _ → P i) i H1
+  consequence2 (Step (Put x) k) f g H P i H1 = consequence2 (k tt) f g (λ x' P' i' → H x' (λ _ → P' i') i') (λ _ → P i) x H1
+\end{code}
 
 \todo{What is the refinement relation arising from wpState?}
 
