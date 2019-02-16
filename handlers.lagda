@@ -891,25 +891,42 @@ general results that we can show about our programs:
 \begin{code}
   monotone : {a : Set} (mx : State a) ->
     (Forall (P Q)) P ⊆ Q -> ∀ i -> statePT i P mx -> statePT i Q mx
+\end{code}
+%if style == newcode
+\begin{code}
   monotone (Pure x) H i H1 = H (x , i) H1
   monotone (Step Get k) H i H1 = monotone (k i) H i H1
   monotone (Step (Put x) k) H i H1 = monotone (k tt) H x H1
 \end{code}
+%endif
 \begin{code}
   consequence1 : {a b : Set} (mx my : State a) (f : a -> State b)->
     statePT' mx ⊑ statePT' my ->
     statePT' (mx >>= f) ⊑ statePT' (my >>= f)
+\end{code}
+%if style == newcode
+\begin{code}
   consequence1 mx my f H P i H1 =
     let H1' = coerce (distributePT mx f i (P i)) H1
     in coerce (sym (distributePT my f i (P i))) (H (λ x → wpState f (λ _ → P i)) i H1')
-
+\end{code}
+%endif
+\begin{code}
   consequence2 : {a b : Set} (mx : State a) (f g : a -> State b)->
     ((x : a) -> statePT' (f x) ⊑ statePT' (g x)) ->
     statePT' (mx >>= f) ⊑ statePT' (mx >>= g)
+\end{code}
+%if style == newcode
+\begin{code}
   consequence2 (Pure x) f g H P i H1 = H x (λ _ → P i) i H1
   consequence2 (Step Get k) f g H P i H1 = consequence2 (k i) f g (λ x P' i' → H x (λ _ → P' i') i') (λ _ → P i) i H1
   consequence2 (Step (Put x) k) f g H P i H1 = consequence2 (k tt) f g (λ x' P' i' → H x' (λ _ → P' i') i') (λ _ → P i) x H1
 \end{code}
+%endif
+
+The proof of the first rule of consequence uses the fact that we can distribute the predicate transformer over a bind: for all |mx| and |f|, the weakest precondition of |mx >>= f| for a postcondition |P| consists of the weakest precondition such that running |mx| satisfies the weakest precondition of |f| for |P|. The same property holds for every predicate transformer defined as a fold over the program, so we can prove the first rule of consequence for all such semantics.
+
+Apart from distributing the predicate transformer, the second rule of consequence makes essential use of the monotonicity of the predicate transformer. In fact, if the effects are expressive enough, monotonicity and the second rule of consequence are equivalent. Suppose we have two predicates |P| and |Q| such that |P ⊆ Q|, and we want to prove for all |mx| that |wp mx P ⊆ wp mx Q|. If we can find |P'|, |f| and |g| (for instance, by using the |I| data type of Section \ref{sec:stepwise-refinement}) such that |P| is equivalent to |wp f P'| and |Q| is equivalent to |wp g P'|, then apply the second rule of consequence, we get exactly |wp mx P ⊆ wp mx Q|.
 
 \todo{What is the refinement relation arising from wpState?}
 
@@ -1198,6 +1215,7 @@ f91-spec i o | no _ = o == 91
 % \end{code}
 
 \section{Stepwise refinement}
+\label{sec:stepwise-refinement}
 
 In the examples we have seen so far, we have typically related a
 \emph{complete} program to its specification. Most work on the
