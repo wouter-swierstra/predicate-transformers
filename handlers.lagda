@@ -850,11 +850,12 @@ function satisfies its specification.
 \begin{code}
   correctnessRelabel = ⊑-trans {Q = wpSpec relabelSpec2} (strengthenPost step1) step2
     where
+      open NaturalLemmas
       step1 : ∀ {a} -> (x : Tree a × Nat) -> (Spec.post relabelSpec2 x) ⊆ (Spec.post relabelSpec1 x)
       step1 x y (fst , snd) = fst
       step2 : wpSpec relabelSpec2 ⊑ ⟦relabel⟧
-      step2 P (Leaf x , s) (fst , snd) = undefinedTim
-      step2 P (Node l r , s) y = undefinedTim
+      step2 P (Leaf x , s) (fst , snd) = snd (Leaf s , Succ s) (refl , plus-one s)
+      step2 P (Node l r , s) (fst , snd) = undefinedTim
 \end{code}
 %endif
 

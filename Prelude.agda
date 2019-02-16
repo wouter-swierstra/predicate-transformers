@@ -167,6 +167,10 @@ module NaturalLemmas where
   plus-zero Zero = refl
   plus-zero (Succ n) = cong Succ (plus-zero n)
 
+  plus-one : (n : Nat) -> n + 1 == Succ n
+  plus-one Zero = refl
+  plus-one (Succ n) = cong Succ (plus-one n)
+
   plus-succ : (x y : Nat) -> Succ (x + y) == (x + Succ y)
   plus-succ Zero y = refl
   plus-succ (Succ x) y = cong Succ (plus-succ x y)
