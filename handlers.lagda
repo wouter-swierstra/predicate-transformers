@@ -111,9 +111,6 @@ module Check where
 open import Prelude hiding (map)
 open import Level hiding (lift)
 
-postulate
-  undefinedTim : {a : Set} -> a
-
 module Free where
 \end{code}
 %endif
@@ -829,7 +826,28 @@ transitive:
   ⊑-refl {a} {b} {P} p x H = H  
 \end{code}
 %endif
-Furthermore, we can formulate and prove the usual laws for
+Furthermore, we can distribute the predicate transformer over a bind: for all
+|mx| and |f|, the weakest precondition of |mx >>= f| for a postcondition |P|
+consists of the weakest precondition such that running |mx| satisfies the
+weakest precondition of |f| for |P|. Since this is exactly the predicate
+transformer semantics of sequencing~\cite{back2012refinement}, disributivity
+expresses in a formal sense the slogan that the bind operator is a
+``programmable semicolon''~\cite{osullivan2008real}.
+More practically, since the definition of |relabel (Node l r)| contains
+recursive calls to |relabel| sequenced using the |_>>=_| operator,
+distributivity is what we need to do structural induction on the tree.
+\begin{code}
+  distributePT : {a b : Set} (mx : State a) (f : a -> State b)->
+    ∀ i P → statePT i P (mx >>= f) == statePT i (wpState f λ _ → P) mx
+\end{code}
+%if style == newcode
+\begin{code}
+  distributePT (Pure x) f i P = refl
+  distributePT (Step Get k) f i P = distributePT (k i) f i P
+  distributePT (Step (Put x) k) f i P = distributePT (k tt) f x P
+\end{code}
+%endif
+Finally, we can formulate and prove the usual laws for
 weakening of preconditions and strengthening of postconditions:
 \begin{code} 
   weakenPre  : (implicit(a : Set)) (implicit(b : a -> Set)) (implicit(P P' : a -> Set)) (implicit(Q : (x : a) -> b x -> Set)) P ⊆ P' -> wpSpec [[ P , Q ]] ⊑ wpSpec [[ P' , Q ]]
@@ -856,14 +874,9 @@ example, we can strengthen our postcondition as follows:
 Using the transitivity of the refinement relation and strengthening of
 postcondition lemmas, we can now complete the proof that the |relabel|
 function satisfies its specification.
+
 %if style == newcode
 \begin{code}
-  distributePT : {a b : Set} (mx : State a) (f : a -> State b)->
-    ∀ i P → statePT i P (mx >>= f) == statePT i (wpState f λ _ → P) mx
-  distributePT (Pure x) f i P = refl
-  distributePT (Step Get k) f i P = distributePT (k i) f i P
-  distributePT (Step (Put x) k) f i P = distributePT (k tt) f x P
-
   correctnessRelabel = ⊑-trans {Q = wpSpec relabelSpec2} (strengthenPost step1) step2
     where
     step1 : ∀ {a} -> (x : Tree a × Nat) -> (Spec.post relabelSpec2 x) ⊆ (Spec.post relabelSpec1 x)
@@ -916,11 +929,6 @@ function satisfies its specification.
 \end{code}
 %endif
 
-\todo{Tim: kan jij het bewijs in de sourcode hierboven afmaken?
-  Gebruiken we hier de rules of consequence hieronder? En gelden die
-  niet voor alle effecten (mits de bijbehorende predicate transformers
-  monotoon zijn?)}
-
 \subsection*{Rule of consequence}
 \label{sec:consequence}
 
@@ -965,7 +973,7 @@ general results that we can show about our programs:
 \end{code}
 %endif
 
-The proof of the first rule of consequence uses the fact that we can distribute the predicate transformer over a bind: for all |mx| and |f|, the weakest precondition of |mx >>= f| for a postcondition |P| consists of the weakest precondition such that running |mx| satisfies the weakest precondition of |f| for |P|. The same property holds for every predicate transformer defined as a fold over the program, so we can prove the first rule of consequence for all such semantics.
+The proof of the first rule of consequence uses the distributivity of the predicate transformer over a bind.  The same property holds for every predicate transformer defined as a fold over the program, so we can prove the first rule of consequence for all such semantics.
 
 Apart from distributing the predicate transformer, the second rule of consequence makes essential use of the monotonicity of the predicate transformer. In fact, if the effects are expressive enough, monotonicity and the second rule of consequence are equivalent. Suppose we have two predicates |P| and |Q| such that |P ⊆ Q|, and we want to prove for all |mx| that |wp mx P ⊆ wp mx Q|. If we can find |P'|, |f| and |g| (for instance, by using the |I| data type of Section \ref{sec:stepwise-refinement}) such that |P| is equivalent to |wp f P'| and |Q| is equivalent to |wp g P'|, then apply the second rule of consequence, we get exactly |wp mx P ⊆ wp mx Q|.
 
