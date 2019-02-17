@@ -152,6 +152,9 @@ show that the |Free| datatype is indeed a monad:
   infixr 20 _>>=_
   _>>_ : forall {a b C R} -> Free C R a -> Free C R b -> Free C R b
   c1 >> c2 = c1 >>= \_ -> c2
+
+  _>=>_ : forall {a b c C R} -> (a → Free C R b) -> (b → Free C R c) -> a → Free C R c
+  f >=> g = λ x → f x >>= g
 \end{code}
 %endif
 The examples of effects studied in this paper will be phrased in terms
@@ -855,14 +858,61 @@ postcondition lemmas, we can now complete the proof that the |relabel|
 function satisfies its specification.
 %if style == newcode
 \begin{code}
+  distributePT : {a b : Set} (mx : State a) (f : a -> State b)->
+    ∀ i P → statePT i P (mx >>= f) == statePT i (wpState f λ _ → P) mx
+  distributePT (Pure x) f i P = refl
+  distributePT (Step Get k) f i P = distributePT (k i) f i P
+  distributePT (Step (Put x) k) f i P = distributePT (k tt) f x P
+
   correctnessRelabel = ⊑-trans {Q = wpSpec relabelSpec2} (strengthenPost step1) step2
     where
-      open NaturalLemmas
-      step1 : ∀ {a} -> (x : Tree a × Nat) -> (Spec.post relabelSpec2 x) ⊆ (Spec.post relabelSpec1 x)
-      step1 x y (fst , snd) = fst
-      step2 : wpSpec relabelSpec2 ⊑ ⟦relabel⟧
-      step2 P (Leaf x , s) (fst , snd) = snd (Leaf s , Succ s) (refl , plus-one s)
-      step2 P (Node l r , s) (fst , snd) = undefinedTim
+    step1 : ∀ {a} -> (x : Tree a × Nat) -> (Spec.post relabelSpec2 x) ⊆ (Spec.post relabelSpec1 x)
+    step1 x y (fst , snd) = fst
+    open NaturalLemmas
+    -- Simplify proofs of refining a specification,
+    -- by first proving one side of the bind, then the second.
+    -- This is essentially the first law of consequence,
+    -- specialized to the effects of State and Spec.
+    prove-bind : ∀ {a b} (mx : State a) (f : a → State b) P i →
+      statePT i (wpState f λ _ → P) mx → statePT i P (mx >>= f)
+    prove-bind mx f P i x = coerce (sym (distributePT mx f i P)) x
+    prove-bind-spec : ∀ {a b} (mx : State a) (f : a → State b) spec →
+      ∀ P i → (∀ Q → Spec.pre spec i × (Spec.post spec i ⊆ Q) → statePT i Q mx) →
+      Spec.pre spec i × (Spec.post spec i ⊆ wpState f (λ _ → P)) →
+      statePT i P (mx >>= f)
+    prove-bind-spec mx f spec P i Hmx Hf = prove-bind mx f P i (Hmx (wpState f (λ _ → P)) Hf)
+
+    -- Partially apply a specification.
+    partialSpec : ∀ {a b s} → SpecK (a × s) (b × s) → a → SpecK s (b × s)
+    partialSpec [[ pre , post ]] x = [[ (λ s → pre (x , s)) , (λ s → post (x , s)) ]]
+
+    -- Ingredients for proving the postcondition holds.
+    -- By abstracting over the origin of the numbers,
+    -- we can do induction on them nicely.
+    append-seq : ∀ a b c → seq a b ++ seq (a + b) c ≡ seq a (b + c)
+    append-seq a Zero c = cong (λ a' → seq a' c) (sym (plus-zero a))
+    append-seq a (Succ b) c = cong (Cons a) (trans
+      (cong (λ a+b → seq (Succ a) b ++ seq a+b c) (+-succ a b))
+      (append-seq (Succ a) b c))
+    postcondition : ∀ s s' s'' sl fl sr fr →
+      Pair (fl ≡ seq s sl) (s + sl ≡ s') →
+      Pair (fr ≡ seq s' sr) (s' + sr ≡ s'') →
+      Pair (fl ++ fr ≡ seq s (sl + sr)) (s + (sl + sr) ≡ s'')
+    postcondition s .(s + sl) .(s + sl + sr) sl .(seq s sl) sr .(seq (s + sl) sr)
+      (refl , refl) (refl , refl) = append-seq s sl sr , +-assoc s sl sr
+
+    -- We have to rewrite the formulation of step2 slightly to make it acceptable for the termination checker.
+    step2' : ∀ {a} P (t : Tree a) s → wpSpec relabelSpec2 P (t , s) → statePT s (P (t , s)) (relabel t)
+    step2' P (Leaf x) s (fst , snd) = snd (Leaf s , Succ s) (refl , plus-one s)
+    step2' P (Node l r) s (fst , snd) = prove-bind-spec (relabel l) _ (partialSpec relabelSpec2 l) _ _
+      (λ Q → step2' (λ _ → Q) l s)
+      (tt , λ l',s' postL → let l' = Pair.fst l',s' ; s' = Pair.snd l',s'
+        in prove-bind-spec (relabel r) _ (partialSpec relabelSpec2 r) _ _
+          (λ Q → step2' (λ _ → Q) r s')
+          (tt , λ r',s'' postR → let r' = Pair.fst r',s'' ; s'' = Pair.snd r',s''
+            in snd (Node l' r' , s'') (postcondition s s' s'' (size l) (flatten l') (size r) (flatten r') postL postR)))
+    step2 : wpSpec relabelSpec2 ⊑ ⟦relabel⟧
+    step2 P (t , s) (fst , snd) = step2' P t s (fst , snd)
 \end{code}
 %endif
 
@@ -879,15 +929,6 @@ give rise to the typical pre- and postcondition reasoning found in the
 verification of imperative programs. It is worth considering some more
 general results that we can show about our programs:
 
-%if style == newcode
-\begin{code}
-  distributePT : {a b : Set} (mx : State a) (f : a -> State b)->
-    ∀ i P → statePT i P (mx >>= f) ≡ statePT i (wpState f λ _ → P) mx
-  distributePT (Pure x) f i P = refl
-  distributePT (Step Get k) f i P = distributePT (k i) f i P
-  distributePT (Step (Put x) k) f i P = distributePT (k tt) f x P
-\end{code}
-%endif
 \begin{code}
   monotone : {a : Set} (mx : State a) ->
     (Forall (P Q)) P ⊆ Q -> ∀ i -> statePT i P mx -> statePT i Q mx
