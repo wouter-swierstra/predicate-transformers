@@ -111,9 +111,6 @@ module Check where
 open import Prelude hiding (map)
 open import Level hiding (lift)
 
-postulate
-  undefinedTim : {a : Set} -> a
-
 module Free where
 \end{code}
 %endif
@@ -152,6 +149,9 @@ show that the |Free| datatype is indeed a monad:
   infixr 20 _>>=_
   _>>_ : forall {a b C R} -> Free C R a -> Free C R b -> Free C R b
   c1 >> c2 = c1 >>= \_ -> c2
+
+  _>=>_ : forall {a b c C R} -> (a → Free C R b) -> (b → Free C R c) -> a → Free C R c
+  f >=> g = λ x → f x >>= g
 \end{code}
 %endif
 The examples of effects studied in this paper will be phrased in terms
@@ -681,6 +681,13 @@ predicate transformer semantics:
   wpState : forall { a b} -> (a -> State b) -> (P : a × s -> b × s -> Set) -> (a × s -> Set)
   wpState f P (x , i) = wp f (\_ -> statePT i (P (x , i))) x
 \end{code}
+\todo{It might be nicer to change the argument format to |statePT|, giving |statePT'|, so we can use it in the refinement relation.}
+%if style == newcode
+\begin{code}
+  statePT' : {b : Set} -> State b -> (s -> b × s -> Set) -> s -> Set
+  statePT' S P i = statePT i (P i) S
+\end{code}
+%endif
 Given any predicate |P| relating the input, initial state, final state
 and result, it computes the weakest precondition required of the input
 and initial state to ensure |P| holds upon completing the
@@ -819,7 +826,28 @@ transitive:
   ⊑-refl {a} {b} {P} p x H = H  
 \end{code}
 %endif
-Furthermore, we can formulate and prove the usual laws for
+Furthermore, we can distribute the predicate transformer over a bind: for all
+|mx| and |f|, the weakest precondition of |mx >>= f| for a postcondition |P|
+consists of the weakest precondition such that running |mx| satisfies the
+weakest precondition of |f| for |P|. Since this is exactly the predicate
+transformer semantics of sequencing~\cite{back2012refinement}, disributivity
+expresses in a formal sense the slogan that the bind operator is a
+``programmable semicolon''~\cite{osullivan2008real}.
+More practically, since the definition of |relabel (Node l r)| contains
+recursive calls to |relabel| sequenced using the |_>>=_| operator,
+distributivity is what we need to do structural induction on the tree.
+\begin{code}
+  distributePT : {a b : Set} (mx : State a) (f : a -> State b)->
+    ∀ i P → statePT i P (mx >>= f) == statePT i (wpState f λ _ → P) mx
+\end{code}
+%if style == newcode
+\begin{code}
+  distributePT (Pure x) f i P = refl
+  distributePT (Step Get k) f i P = distributePT (k i) f i P
+  distributePT (Step (Put x) k) f i P = distributePT (k tt) f x P
+\end{code}
+%endif
+Finally, we can formulate and prove the usual laws for
 weakening of preconditions and strengthening of postconditions:
 \begin{code} 
   weakenPre  : (implicit(a : Set)) (implicit(b : a -> Set)) (implicit(P P' : a -> Set)) (implicit(Q : (x : a) -> b x -> Set)) P ⊆ P' -> wpSpec [[ P , Q ]] ⊑ wpSpec [[ P' , Q ]]
@@ -846,22 +874,60 @@ example, we can strengthen our postcondition as follows:
 Using the transitivity of the refinement relation and strengthening of
 postcondition lemmas, we can now complete the proof that the |relabel|
 function satisfies its specification.
+
 %if style == newcode
 \begin{code}
   correctnessRelabel = ⊑-trans {Q = wpSpec relabelSpec2} (strengthenPost step1) step2
     where
-      step1 : ∀ {a} -> (x : Tree a × Nat) -> (Spec.post relabelSpec2 x) ⊆ (Spec.post relabelSpec1 x)
-      step1 x y (fst , snd) = fst
-      step2 : wpSpec relabelSpec2 ⊑ ⟦relabel⟧
-      step2 P (Leaf x , s) (fst , snd) = undefinedTim
-      step2 P (Node l r , s) y = undefinedTim
+    step1 : ∀ {a} -> (x : Tree a × Nat) -> (Spec.post relabelSpec2 x) ⊆ (Spec.post relabelSpec1 x)
+    step1 x y (fst , snd) = fst
+    open NaturalLemmas
+    -- Simplify proofs of refining a specification,
+    -- by first proving one side of the bind, then the second.
+    -- This is essentially the first law of consequence,
+    -- specialized to the effects of State and Spec.
+    prove-bind : ∀ {a b} (mx : State a) (f : a → State b) P i →
+      statePT i (wpState f λ _ → P) mx → statePT i P (mx >>= f)
+    prove-bind mx f P i x = coerce (sym (distributePT mx f i P)) x
+    prove-bind-spec : ∀ {a b} (mx : State a) (f : a → State b) spec →
+      ∀ P i → (∀ Q → Spec.pre spec i × (Spec.post spec i ⊆ Q) → statePT i Q mx) →
+      Spec.pre spec i × (Spec.post spec i ⊆ wpState f (λ _ → P)) →
+      statePT i P (mx >>= f)
+    prove-bind-spec mx f spec P i Hmx Hf = prove-bind mx f P i (Hmx (wpState f (λ _ → P)) Hf)
+
+    -- Partially apply a specification.
+    partialSpec : ∀ {a b s} → SpecK (a × s) (b × s) → a → SpecK s (b × s)
+    partialSpec [[ pre , post ]] x = [[ (λ s → pre (x , s)) , (λ s → post (x , s)) ]]
+
+    -- Ingredients for proving the postcondition holds.
+    -- By abstracting over the origin of the numbers,
+    -- we can do induction on them nicely.
+    append-seq : ∀ a b c → seq a b ++ seq (a + b) c ≡ seq a (b + c)
+    append-seq a Zero c = cong (λ a' → seq a' c) (sym (plus-zero a))
+    append-seq a (Succ b) c = cong (Cons a) (trans
+      (cong (λ a+b → seq (Succ a) b ++ seq a+b c) (+-succ a b))
+      (append-seq (Succ a) b c))
+    postcondition : ∀ s s' s'' sl fl sr fr →
+      Pair (fl ≡ seq s sl) (s + sl ≡ s') →
+      Pair (fr ≡ seq s' sr) (s' + sr ≡ s'') →
+      Pair (fl ++ fr ≡ seq s (sl + sr)) (s + (sl + sr) ≡ s'')
+    postcondition s .(s + sl) .(s + sl + sr) sl .(seq s sl) sr .(seq (s + sl) sr)
+      (refl , refl) (refl , refl) = append-seq s sl sr , +-assoc s sl sr
+
+    -- We have to rewrite the formulation of step2 slightly to make it acceptable for the termination checker.
+    step2' : ∀ {a} P (t : Tree a) s → wpSpec relabelSpec2 P (t , s) → statePT s (P (t , s)) (relabel t)
+    step2' P (Leaf x) s (fst , snd) = snd (Leaf s , Succ s) (refl , plus-one s)
+    step2' P (Node l r) s (fst , snd) = prove-bind-spec (relabel l) _ (partialSpec relabelSpec2 l) _ _
+      (λ Q → step2' (λ _ → Q) l s)
+      (tt , λ l',s' postL → let l' = Pair.fst l',s' ; s' = Pair.snd l',s'
+        in prove-bind-spec (relabel r) _ (partialSpec relabelSpec2 r) _ _
+          (λ Q → step2' (λ _ → Q) r s')
+          (tt , λ r',s'' postR → let r' = Pair.fst r',s'' ; s'' = Pair.snd r',s''
+            in snd (Node l' r' , s'') (postcondition s s' s'' (size l) (flatten l') (size r) (flatten r') postL postR)))
+    step2 : wpSpec relabelSpec2 ⊑ ⟦relabel⟧
+    step2 P (t , s) (fst , snd) = step2' P t s (fst , snd)
 \end{code}
 %endif
-
-\todo{Tim: kan jij het bewijs in de sourcode hierboven afmaken?
-  Gebruiken we hier de rules of consequence hieronder? En gelden die
-  niet voor alle effecten (mits de bijbehorende predicate transformers
-  monotoon zijn?)}
 
 \subsection*{Rule of consequence}
 \label{sec:consequence}
@@ -871,17 +937,45 @@ give rise to the typical pre- and postcondition reasoning found in the
 verification of imperative programs. It is worth considering some more
 general results that we can show about our programs:
 
-\begin{spec}
+\begin{code}
+  monotone : {a : Set} (mx : State a) ->
+    (Forall (P Q)) P ⊆ Q -> ∀ i -> statePT i P mx -> statePT i Q mx
+\end{code}
+%if style == newcode
+\begin{code}
+  monotone (Pure x) H i H1 = H (x , i) H1
+  monotone (Step Get k) H i H1 = monotone (k i) H i H1
+  monotone (Step (Put x) k) H i H1 = monotone (k tt) H x H1
+\end{code}
+%endif
+\begin{code}
   consequence1 : {a b : Set} (mx my : State a) (f : a -> State b)->
-    wpStateR mx ⊑ wpStateR my ->
-    wpStateR (mx >>= f) ⊑ wpStateR (my >>= f)
-  consequence1 mx my f H P s H1  = let ih = H {!\i o -> !} s {!!} in {!!}
-
+    statePT' mx ⊑ statePT' my ->
+    statePT' (mx >>= f) ⊑ statePT' (my >>= f)
+\end{code}
+%if style == newcode
+\begin{code}
+  consequence1 mx my f H P i H1 =
+    let H1' = coerce (distributePT mx f i (P i)) H1
+    in coerce (sym (distributePT my f i (P i))) (H (λ x → wpState f (λ _ → P i)) i H1')
+\end{code}
+%endif
+\begin{code}
   consequence2 : {a b : Set} (mx : State a) (f g : a -> State b)->
-    ((x : a) -> wpStateR (f x) ⊑ wpStateR (g x)) ->
-    wpStateR (mx >>= f) ⊑ wpStateR (mx >>= g)
-  consequence2 mx f g H P s H1 = {!!}
-\end{spec}
+    ((x : a) -> statePT' (f x) ⊑ statePT' (g x)) ->
+    statePT' (mx >>= f) ⊑ statePT' (mx >>= g)
+\end{code}
+%if style == newcode
+\begin{code}
+  consequence2 (Pure x) f g H P i H1 = H x (λ _ → P i) i H1
+  consequence2 (Step Get k) f g H P i H1 = consequence2 (k i) f g (λ x P' i' → H x (λ _ → P' i') i') (λ _ → P i) i H1
+  consequence2 (Step (Put x) k) f g H P i H1 = consequence2 (k tt) f g (λ x' P' i' → H x' (λ _ → P' i') i') (λ _ → P i) x H1
+\end{code}
+%endif
+
+The proof of the first rule of consequence uses the distributivity of the predicate transformer over a bind.  The same property holds for every predicate transformer defined as a fold over the program, so we can prove the first rule of consequence for all such semantics.
+
+Apart from distributing the predicate transformer, the second rule of consequence makes essential use of the monotonicity of the predicate transformer. In fact, if the effects are expressive enough, monotonicity and the second rule of consequence are equivalent. Suppose we have two predicates |P| and |Q| such that |P ⊆ Q|, and we want to prove for all |mx| that |wp mx P ⊆ wp mx Q|. If we can find |P'|, |f| and |g| (for instance, by using the |I| data type of Section \ref{sec:stepwise-refinement}) such that |P| is equivalent to |wp f P'| and |Q| is equivalent to |wp g P'|, then apply the second rule of consequence, we get exactly |wp mx P ⊆ wp mx Q|.
 
 \todo{What is the refinement relation arising from wpState?}
 
@@ -1170,6 +1264,7 @@ f91-spec i o | no _ = o == 91
 % \end{code}
 
 \section{Stepwise refinement}
+\label{sec:stepwise-refinement}
 
 In the examples we have seen so far, we have typically related a
 \emph{complete} program to its specification. Most work on the
