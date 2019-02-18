@@ -666,19 +666,19 @@ The usual handler for stateful computations maps our free monad,
 |State s|, to the state monad:
 \begin{code}
   run : (Forall(a)) State a -> s -> a × s
-  run (Pure x) s          = (x , s)
-  run (Step Get k) s      = run (k s) s
-  run (Step (Put x) k) s  = run (k tt) x 
+  run (Pure x)           s = (x , s)
+  run (Step Get k)       s = run (k s) s
+  run (Step (Put s) k)   _ = run (k tt) s
 \end{code}
 Inspired by the previous section, we can define the following
 predicate transformer semantics:
 \begin{code}
-  statePT : {b : Set} -> s -> (b × s -> Set) -> State b -> Set
-  statePT s P (Pure x) = P (x , s)
-  statePT s P (Step Get k) = statePT s P (k s)
-  statePT _ P (Step (Put s) k) = statePT s P (k tt)
+  statePT : (Forall(b)) s -> (b × s -> Set) -> State b -> Set
+  statePT s P (Pure x)          = P (x , s)
+  statePT s P (Step Get k)      = statePT s P (k s)
+  statePT _ P (Step (Put s) k)  = statePT s P (k tt)
   
-  wpState : forall { a b} -> (a -> State b) -> (P : a × s -> b × s -> Set) -> (a × s -> Set)
+  wpState : (Forall(a b)) (a -> State b) -> (P : a × s -> b × s -> Set) -> (a × s -> Set)
   wpState f P (x , i) = wp f (\_ -> statePT i (P (x , i))) x
 \end{code}
 Given any predicate |P| relating the input, initial state, final state
@@ -688,8 +688,7 @@ computation. As we did in the previous section for |wpDefault|, we can
 prove soundness of this semantics with respect to the |run| function:
 \todo{fix soundness}
 \begin{code}
-  soundness : {a b : Set} -> (P : a × s -> b × s -> Set) -> (c : a -> State b) ->
-    (i : s) -> (x : a) ->
+  soundness : (Forall(a b : Set)) (P : a × s -> b × s -> Set) -> (c : a -> State b) -> (i : s) -> (x : a) ->
     wpState c P (x , i) -> P (x , i) (run (c x) i)
 \end{code}
 %if style == newcode           
@@ -700,7 +699,6 @@ prove soundness of this semantics with respect to the |run| function:
     lemma i (Pure y) H = H
     lemma i (Step Get k) H = lemma i (k i) H
     lemma i (Step (Put s) k) H = lemma s (k tt) H
-  
 \end{code}
 %endif
 
@@ -735,8 +733,6 @@ pose is to reason about the program, without expanding the definition
 of the monadic operations. As we do so, we will show how several
 familiar properties of the refinement relation that can be used to
 reason about \emph{arbitrary} effects.
-
-
 
 We begin by defining the type of binary trees:
 \begin{code}
@@ -858,7 +854,7 @@ function satisfies its specification.
 \end{code}
 %endif
 
-\todo{Tim: kan jij het bewijs in de sourcode hierboven afmaken?
+\todo{Tim: kan jij het bewijs in de sourcecode hierboven afmaken?
   Gebruiken we hier de rules of consequence hieronder? En gelden die
   niet voor alle effecten (mits de bijbehorende predicate transformers
   monotoon zijn?)}
@@ -915,10 +911,13 @@ weakest precondition semantics presented here?
 Firstly, we can define the following equivalence relation between
 stateful computations:
 \todo{fixme}
-\begin{spec}
-  _≃_ : (Forall(a)) State a  -> State a -> Set
-  t1 ≃ t2 = (wpStateR t1 ⊑ wpStateR t2) ∧ (wpStateR t2 ⊑ wpStateR t1)
-\end{spec}  
+\begin{code}
+  wpState' : forall { a } -> (State a) -> (P : s -> a × s -> Set) -> (s -> Set)
+  wpState' {a} t P s = wpState {⊤} {a} (\ _ -> t) (λ { (tt , s') y → P s' y}) (tt , s)
+  _≃_ : {a : Set} -> State a  -> State a -> Set
+  t1 ≃ t2 = (wpState' t1 ⊑ wpState' t2) ∧ (wpState' t2 ⊑ wpState' t1)
+\end{code}
+
 To establish that an equation between two terms |t1| and |t2| holds
 with respect to the |wpStateR| semantics, amounts to proving that |t1
 ≃ t2|. For example, the following four laws follow immediately from
@@ -938,10 +937,10 @@ our definitions for all |k|, |x|, and |y|:
 %}
 %if style == newcode
 \begin{spec}
-  law1 = (λ P x z → z) , (λ P x z → z)
-  law2 = (λ P x z → z) , (λ P x z → z)
-  law3 = (λ P x z → z) , (λ P x z → z)
-  law4 = (λ P x z → z) , (λ P x z → z)
+  law1 = (λ P x H → H) , (λ P x H → H)
+  law2 = (λ P x H → H) , (λ P x H → H)
+  law3 = (λ P x H → H) , (λ P x H → H)
+  law4 = (λ P x H → H) , (λ P x H → H)  
 \end{spec}
 %endif
 More generally, we can use such an equivalence relation to verify that
