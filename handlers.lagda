@@ -1425,20 +1425,22 @@ checks whether a call-graph |Free I O (O i)| satisfies a given
 specification:
 \begin{code}
   invariant : (Forall(I)) (implicit(O : I -> Set)) (i : I) -> Spec I O  -> Free I O (O i) -> Set
-  invariant i [[ pre , post ]] (Pure x)    = post i x
-  invariant i [[ pre , post ]] (Step j k)  = pre j ∧ (∀ o -> invariant i [[ pre , post ]] (k o))
+  invariant i [[ pre , post ]] (Pure x)    = pre i -> post i x
+  invariant i [[ pre , post ]] (Step j k)  = (pre i -> pre j) ∧ (∀ o -> post j o -> invariant i [[ pre , post ]] (k o))
 \end{code}
-If there are no recursive calls, the postcondition must hold \todo{Tim
-  wat denk jij: moet dit niet pre i -> post i x zijn?}. If there is a
-recursive call on the argument |j : I|, the precondition must hold for
-|j| and any for result |o : O j|, the remaining continuation |k o|
-must also satisfy the desired specification.
+Ignoring the precondition for a moment, we get: If there are no recursive
+calls, the postcondition must hold.  If there is a recursive call on the
+argument |j : I|, for any result |o : O j| that satisfies the postcondition,
+the remaining continuation |k o| must also satisfy the desired specification.
+When we also consider the precondtion, we must show it holds at the start of
+each recursive call, but when proving that a condition holds, we are allowed to
+assume the precondition is satisfied by the original argument |i|.
 
 Using this definition, we can now formulate a predicate transformer
 semantics for Kleisli arrows of the form |I ~~> O|:
 \begin{code}
   wpRec : (Forall(I)) (implicit(O : I -> Set)) Spec I O -> (I ~~> O) -> (P : (i : I) -> O i -> Set) -> (I -> Set)
-  wpRec spec t P i = wpSpec spec P i ∧ invariant i spec (t i) 
+  wpRec spec t P i = wpSpec spec P i ∧ invariant i spec (t i)
 \end{code}
 In words, we require the Kleisli arrow |I ~~> O| to satisfy the
 specification |spec| and that |wpSpec spec P i| also holds.
