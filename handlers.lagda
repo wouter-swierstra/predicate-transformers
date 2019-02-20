@@ -1350,7 +1350,7 @@ module Recursion where
       ; _∸_ to _-_
       )
   open NaturalLemmas
-  open Maybe using (SpecK; [[_,_]]; Spec)
+  open Maybe using (SpecK; [[_,_]]; Spec; wpSpec)
 \end{code}
 %endif
 
@@ -1437,13 +1437,16 @@ must also satisfy the desired specification.
 Using this definition, we can now formulate a predicate transformer
 semantics for Kleisli arrows of the form |I ~~> O|:
 \begin{code}
-  wpRec : (Forall(I)) (implicit(O : I -> Set)) Spec I O -> (I ~~> O) -> (I -> Set)
-  wpRec s t i = invariant i s (t i)
+  wpRec : (Forall(I)) (implicit(O : I -> Set)) Spec I O -> (I ~~> O) -> (P : (i : I) -> O i -> Set) -> (I -> Set)
+  wpRec spec t P i = wpSpec spec P i ∧ invariant i spec (t i) 
 \end{code}
+In words, we require the Kleisli arrow |I ~~> O| to satisfy the
+specification |spec| and that |wpSpec spec P i| also holds.
 
 \todo{Soundness?}
 \todo{Example correctness proof?}
 \todo{Refinement?}
+\todo{Mention loop invariants?}
 
 \section{Stepwise refinement}
 \label{sec:stepwise-refinement}
