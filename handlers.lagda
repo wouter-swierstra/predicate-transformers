@@ -1338,18 +1338,18 @@ postcondition, |y ∈ xs|.
 %if style == newcode
 \begin{code}
 module Recursion where
-
   open Free
   open import Data.Nat public
     using
-      (_+_; _>_; _*_
+      (_+_; _>_; _*_; _∸_
       )
     renaming
       ( ℕ to Nat
       ; zero to Zero
       ; suc to Succ
       )
-
+  open NaturalLemmas
+  open Maybe using (SpecK; [[_,_]]; Spec)
 \end{code}
 %endif
 
@@ -1403,71 +1403,46 @@ only concern ourselves with proving \emph{partial correctness} of our
 programs: provided a program terminates, it should produce the right
 result.
 
-\begin{spec}
-f91-spec : Nat → Nat → Set
-f91-spec i o with 100 lt i
-f91-spec i o | yes _ = o == i - 10
-f91-spec i o | no _ = o == 91
+To prove partial correctness of the |f91| function, we define the
+following specification:
+\begin{code}
+  f91-post : Nat → Nat → Set
+  f91-post i o with 100 lt i
+  f91-post i o | yes _ = o == i ∸ 10
+  f91-post i o | no _ = o == 91
 
--- f91-proof : (n : Nat) → partial-correctness (pt f91-spec) f91 n
--- f91-proof = ?
-\end{spec}
+  f91-spec : SpecK Nat Nat
+  f91-spec = [[ K ⊤ , f91-post ]]
+\end{code}
 
-\todo{Soundness? Total vs partial correctness? Termination?}
+Although we cannot directly run `recursive' functions defined in this
+style, such the |f91| function, we can reason about their
+correctness. To do so, we would like to show that a Kleisli arrow |I
+~~> O| satisfies some specification of type |Spec I O|. To achieve
+this, we begin by defining an auxiliary function, |invariant|, that
+checks whether a call-graph |Free I O (O i)| satisfies a given
+specification:
+\begin{code}
+  invariant : (Forall(I)) (implicit(O : I -> Set)) (i : I) -> Spec I O  -> Free I O (O i) -> Set
+  invariant i [[ pre , post ]] (Pure x)    = post i x
+  invariant i [[ pre , post ]] (Step j k)  = pre j ∧ (∀ o -> invariant i [[ pre , post ]] (k o))
+\end{code}
+If there are no recursive calls, the postcondition must hold \todo{Tim
+  wat denk jij: moet dit niet pre i -> post i x zijn?}. If there is a
+recursive call on the argument |j : I|, the precondition must hold for
+|j| and any for result |o : O j|, the remaining continuation |k o|
+must also satisfy the desired specification.
 
-\todo{What is the refinement relation? Is there one?}
+Using this definition, we can now formulate a predicate transformer
+semantics for Kleisli arrows of the form |I ~~> O|:
+\begin{code}
+  wpRec : (Forall(I)) (implicit(O : I -> Set)) Spec I O -> (I ~~> O) -> (I -> Set)
+  wpRec s t i = invariant i s (t i)
+\end{code}
 
-% There are many different handlers that we can use: generating a
-% coinductive trace, unfolding a fixed number of calls, calculating
-% Bove-Capretta predicates, or providing a proof of
-% well-foundedness. Here, we will take a slightly different approach,
-% requiring that all recursive calls satisfy an \emph{invariant} to
-% ensure that a given property of the output holds:
-
-% > handle : (Inv : I -> O -> Set) (P : O -> Set) -> Rec O -> Set
-% > handle Inv P (Pure x)           = P x
-% > handle Inv P (Step (Call x) k)  = (o : O) -> Inv x o -> handle Inv P (k o)
-
-% \todo{Soundness?}
-
-% \subsection*{Example: quickSort}
-% \label{quicksort}
-
-% %if style == newcode
-% \begin{code}
-% module QS where  
-%   open Free
-% \end{code}
-% %endif
-
-% To illustrate how to reason with these invariants, we will show how to
-% reason about a function that is not structurally recursive, namely
-% |quickSort|. To do so, we import the |General| module, fixing the type
-% of our |quickSort| function
-
-
-% > open General (Pair (Nat -> Bool) (List Nat)) (List Nat)
-
-% \begin{code}  
-%     qs : List Nat -> Rec (List Nat)
-%     qs Nil = return Nil
-%     qs (Cons x xs) =
-%        call (<=-dec x , filter (<=-dec x) xs) >>= \lts ->
-%        call (>-dec x , filter (>-dec x) xs) >>= \gts ->
-%        return (lts ++ ([ x ] ++ gts))
-
-%     data IsSorted : List Nat -> Set where
-%       Base : IsSorted Nil
-%       Single : ∀ {x} -> IsSorted ([ x ])
-%       Step : ∀ {x y ys} -> So (<=-dec x y) -> IsSorted (Cons y ys) ->
-%         IsSorted (Cons x (Cons y ys))
-
-%     correct : (xs : List Nat) ->
-%       handle (\ { (p , is) o → Pair (IsSorted o) (all p o) }) IsSorted (qs xs)
-%     correct Nil = Base
-%     correct (Cons x xs) sxs (fst , snd) sys (fst₁ , snd₁) = {!!}
-  
-% \end{code}
+\todo{Soundness?}
+\todo{Example correctness proof?}
+\todo{Refinement?}
 
 \section{Stepwise refinement}
 \label{sec:stepwise-refinement}
@@ -1475,17 +1450,19 @@ f91-spec i o | no _ = o == 91
 In the examples we have seen so far, we have typically related a
 \emph{complete} program to its specification. Most work on the
 refinement calculus, however, allows programs and specifications to
-mix freely. Can we achieve something similar in this setting?
+mix freely, thereby enabling the step by step refinement of a
+specification into an executable program. How can we achieve something
+similar in this setting?
 
 
 
 \begin{spec}
   data I (a : Set) : Set1 where
     Done : a -> I a
-    Spec : Spec T a -> I a
+    Spec : SpecK T a -> I a
 
   M : Set -> Set
-  M a = Partial (I a)
+  M a = Free C R (I a)
 \end{spec}
 A value of type |I a| is either a result of type |a| or a
 specification of type |a -> Set|, corresponding to an unfinished part
@@ -1529,12 +1506,8 @@ How can we use this? Let's see another example.
 \item How can we use this technology to reason about combinations of
   effects? Eg mixing state and exceptions -- tim's forthcoming paper
 
+\item Control flow -- such as pattern matching/if-then-else?
   
-\item How can we reason about compound computations built with |>>=|
-  and |>>|?  There must be some 'law of consequence' that we can
-  derive for specific handlers/effects -- is there a more general
-  form? What about loops/if?
-
 \item wp (s,q) or wp (s,p) implies wp(s,q or p) -- but not the other
   way around. The implication in the other direction only holds when
   the program is deterministic.

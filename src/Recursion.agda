@@ -97,47 +97,47 @@ data InOrder {a : Set} (R : a → a → Set) : (xs : List a) → Set where
 keyed : ∀ {I} → (l : I → Nat) → I → I → Set
 keyed l i j = l i > l j
 
-descending-step : ∀ {I O a} (l : I → Nat) (f : I ⇝ O) (n : Nat) (c : I) (k : O c → Free I O a) →
-  (n > l c) → InOrder (keyed l) (Cons c (trace f (f c >>= k) (Succ (l c)))) → a
-descending-step {O} {a} l f n c k n>c desc with f c >>= k
-descending-step {O} {a} l f n c k n>c desc | Pure x = x
-descending-step {O} {a} l f zero c k () desc | Step c' k'
-descending-step {O} {a} l f (suc n) c k n>c (c>c' :R: desc) | Step c' k' with l c
-descending-step {I} {O} l f (suc n) c k n>c (() :R: desc) | Step c' k' | zero
-descending-step {I} {O} l f (suc n) c k n>c (c>c' :R: desc) | Step c' k' | suc lc = descending-step l f n c' k' (≤-trans c>c' (≤-pred n>c))
-  (coerce (cong (InOrder (keyed l) ∘ Cons c') (trace-chop f (f c' >>= k') (suc lc) (suc (l c')) c>c'))
-    (desc-cons-chop (suc (l c')) c' (trace f ((f c') >>= k') (suc lc)) desc))
-    where
-    -- When we go into recursion on the descending list, we chop off some elements.
-    chop : ∀ {a} → Nat → List a → List a
-    chop Zero _ = Nil
-    chop (Succ n) Nil = Nil
-    chop (Succ n) (x :: xs) = x :: chop n xs
+-- descending-step : ∀ {I O a} (l : I → Nat) (f : I ⇝ O) (n : Nat) (c : I) (k : O c → Free I O a) →
+--   (n > l c) → InOrder (keyed l) (Cons c (trace f (f c >>= k) (Succ (l c)))) → a
+-- descending-step {O} {a} l f n c k n>c desc with f c >>= k
+-- descending-step {O} {a} l f n c k n>c desc | Pure x = x
+-- descending-step {O} {a} l f zero c k () desc | Step c' k'
+-- descending-step {O} {a} l f (suc n) c k n>c (c>c' :R: desc) | Step c' k' with l c
+-- descending-step {I} {O} l f (suc n) c k n>c (() :R: desc) | Step c' k' | zero
+-- descending-step {I} {O} l f (suc n) c k n>c (c>c' :R: desc) | Step c' k' | suc lc = descending-step l f n c' k' (≤-trans c>c' (≤-pred n>c))
+--   (coerce (cong (InOrder (keyed l) ∘ Cons c') (trace-chop f (f c' >>= k') (suc lc) (suc (l c')) c>c'))
+--     (desc-cons-chop (suc (l c')) c' (trace f ((f c') >>= k') (suc lc)) desc))
+--     where
+--     -- When we go into recursion on the descending list, we chop off some elements.
+--     chop : ∀ {a} → Nat → List a → List a
+--     chop Zero _ = Nil
+--     chop (Succ n) Nil = Nil
+--     chop (Succ n) (x :: xs) = x :: chop n xs
 
-    desc-cons-chop : ∀ {a R} (n : Nat) (x : a) (xs : List a) → InOrder R (Cons x xs) → InOrder R (Cons x (chop n xs))
-    desc-cons-chop zero x xs desc = Singleton
-    desc-cons-chop (suc n) x Nil desc = desc
-    desc-cons-chop (suc n) x (y :: ys) (x>y :R: desc) = x>y :R: desc-cons-chop n y ys desc
+--     desc-cons-chop : ∀ {a R} (n : Nat) (x : a) (xs : List a) → InOrder R (Cons x xs) → InOrder R (Cons x (chop n xs))
+--     desc-cons-chop zero x xs desc = Singleton
+--     desc-cons-chop (suc n) x Nil desc = desc
+--     desc-cons-chop (suc n) x (y :: ys) (x>y :R: desc) = x>y :R: desc-cons-chop n y ys desc
 
-    -- If we chop the trace after it is finished, then this gives the same result.
-    trace-chop : ∀ {I O a} (f : I ⇝ O) (p : Free I O a) (n n' : Nat) → n ≥ n' → chop n' (trace f p n) == trace f p n'
-    trace-chop f p n .0 z≤n = refl
-    trace-chop f (Pure _) .(suc _) .(suc _) (s≤s x) = refl
-    trace-chop f (Step c k) (Succ n) (Succ n') (s≤s x) = cong (Cons c) (trace-chop f (f c >>= k) n n' x)
+--     -- If we chop the trace after it is finished, then this gives the same result.
+--     trace-chop : ∀ {I O a} (f : I ⇝ O) (p : Free I O a) (n n' : Nat) → n ≥ n' → chop n' (trace f p n) == trace f p n'
+--     trace-chop f p n .0 z≤n = refl
+--     trace-chop f (Pure _) .(suc _) .(suc _) (s≤s x) = refl
+--     trace-chop f (Step c k) (Succ n) (Succ n') (s≤s x) = cong (Cons c) (trace-chop f (f c >>= k) n n' x)
 
 
-descending : ∀ {I O a} (l : I → Nat) (f : I ⇝ O) (p : Free I O a) →
-  ((n : Nat) → InOrder (keyed l) (trace f p n)) → a
-descending l f (Pure x) desc = x
-descending l f (Step c k) desc = descending-step l f (suc (l c)) c k ≤-refl (desc (suc (suc (l c))))
+-- descending : ∀ {I O a} (l : I → Nat) (f : I ⇝ O) (p : Free I O a) →
+--   ((n : Nat) → InOrder (keyed l) (trace f p n)) → a
+-- descending l f (Pure x) desc = x
+-- descending l f (Step c k) desc = descending-step l f (suc (l c)) c k ≤-refl (desc (suc (suc (l c))))
 
-descending' : ∀ {I O} (l : I → Nat) (f : I ⇝ O) (i : I) →
-  ((n : Nat) → InOrder (keyed l) (Cons i (trace f (f i) n))) → O i
-descending' l f i desc = descending l f (f i) (λ n → desc-uncons i _ (desc n))
-  where
-  desc-uncons : ∀ {a R} (x : a) (xs : List a) → InOrder R (x :: xs) → InOrder R xs
-  desc-uncons x .Nil Singleton = Empty
-  desc-uncons x .(_ :: _) (x₁ :R: desc) = desc
+-- descending' : ∀ {I O} (l : I → Nat) (f : I ⇝ O) (i : I) →
+--   ((n : Nat) → InOrder (keyed l) (Cons i (trace f (f i) n))) → O i
+-- descending' l f i desc = descending l f (f i) (λ n → desc-uncons i _ (desc n))
+--   where
+--   desc-uncons : ∀ {a R} (x : a) (xs : List a) → InOrder R (x :: xs) → InOrder R xs
+--   desc-uncons x .Nil Singleton = Empty
+--   desc-uncons x .(_ :: _) (x₁ :R: desc) = desc
 
 -- In general, the continuation in p can call f with arbitrarily large arguments if the returned values are arbitrarily large.
 -- This does not happen in quicksort: there the recursive calls at each level do not depend on the returned value.

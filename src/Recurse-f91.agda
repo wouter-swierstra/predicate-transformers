@@ -14,14 +14,14 @@ f91 i with 100 lt i
 f91 i | yes _ = Pure (i - 10)
 f91 i | no _ = call (i + 11) >>= call
 
-f91-terminates : (n : Nat) → Nat
-f91-terminates n = descending' (λ i → 101 - i) f91 n λ n₁ → lemma n n₁
-  where
-  lemma : ∀ i n → InOrder (λ i j → (101 ∸ j) < 101 ∸ i) (i :: trace f91 (f91 i) n)
-  lemma i zero = Singleton
-  lemma i (suc n) with 100 lt i
-  lemma i (suc n) | yes p = Singleton
-  lemma i (suc n) | no ¬p = {!!} :R: {!!} -- TODO: what should be the second argument?
+-- f91-terminates : (n : Nat) → Nat
+-- f91-terminates n = descending' (λ i → 101 - i) f91 n λ n₁ → lemma n n₁
+--   where
+--   lemma : ∀ i n → InOrder (λ i j → (101 ∸ j) < 101 ∸ i) (i :: trace f91 (f91 i) n)
+--   lemma i zero = Singleton
+--   lemma i (suc n) with 100 lt i
+--   lemma i (suc n) | yes p = Singleton
+--   lemma i (suc n) | no ¬p = {!!} :R: {!!} -- TODO: what should be the second argument?
 
 f91-spec : Nat → Nat → Set
 f91-spec i o with 100 lt i
