@@ -108,7 +108,7 @@ online.\footnote{\todo{url}}
 
 module Check where
 
-open import Prelude hiding (map)
+open import Prelude hiding (map; all)
 open import Level hiding (lift)
 
 module Free where
@@ -150,8 +150,6 @@ show that the |Free| datatype is indeed a monad:
   _>>_ : forall {a b C R} -> Free C R a -> Free C R b -> Free C R b
   c1 >> c2 = c1 >>= \_ -> c2
 
-  _>=>_ : forall {a b c C R} -> (a → Free C R b) -> (b → Free C R c) -> a → Free C R c
-  f >=> g = \ x → f x >>= g
 \end{code}
 %endif
 The examples of effects studied in this paper will be phrased in terms
@@ -204,6 +202,19 @@ rise to a notion of \emph{refinement}:
   _⊑_ : (implicit(a : Set)) (implicit (b : a -> Set)) (pt1 pt2 : ((x : a) -> b x -> Set) -> (a -> Set)) -> Set
   pt1 ⊑ pt2 = forall P -> pt1 P ⊆ pt2 P
 \end{code}
+It is straightforward to show that this refinement relation is both transitive and reflexive:
+\begin{code}
+  ⊑-trans  : (implicit (a : Set)) (implicit (b : a -> Set)) (implicit (P Q R : ((x : a) -> b x -> Set) -> (a -> Set))) P ⊑ Q -> Q ⊑ R -> P ⊑ R
+
+  ⊑-refl   : (implicit (a : Set)) (implicit (b : a -> Set)) (implicit (P : ((x : a) -> b x -> Set) -> (a -> Set))) P ⊑ P  
+\end{code}
+%if style == newcode
+\begin{code}
+  ⊑-trans {a} {b} {P} {Q} {R} r1 r2 p x y = r2 p x (r1 p x y)
+  ⊑-refl {a} {b} {P} p x H = H  
+\end{code}
+%endif
+
 In a pure setting, this refinement relation is not particularly
 interesting: the refinement relation corresponds to extensional
 equality between functions. The following lemma follows from the
@@ -671,32 +682,51 @@ The usual handler for stateful computations maps our free monad,
   run (Step (Put s) k)   _ = run (k tt) s
 \end{code}
 Inspired by the previous section, we can define the following
-predicate transformer semantics:
+predicate transformer that for every stateful computation of type
+|State b|, maps a postcondition on |b × s| to the required
+precondition on |s|:
 \begin{code}
   statePT : (Forall(b)) State b -> (b × s -> Set) -> s -> Set
   statePT (Pure x) P s          = P (x , s)
   statePT (Step Get k) P s      = statePT (k s) P s
   statePT (Step (Put s) k) P _  = statePT (k tt) P s
-  
-  wpState : (Forall(a b)) (a -> State b) -> (P : a × s -> b × s -> Set) -> (a × s -> Set)
-  wpState f P (x , i) = wp f (\_ c -> statePT c (P (x , i)) i) x
 \end{code}
-%if style == newcode
-\begin{code}
-  statePT' : {b : Set} -> State b -> (s -> b × s -> Set) -> s -> Set
-  statePT' c P i = statePT c (P i) i
-\end{code}
+We can generalise this predicate transformer slightly. As we saw
+before, we sometimes describe postconditions as a \emph{relation}
+between inputs and outputs. In the case for stateful computations,
+this amounts to allowing the postcondition to also refer to the
+initial state:
+%{
+%if style == poly
+%format statePTR = statePT"^\prime"
+%else
+%format statePTR = statePT'
 %endif
-\todo{It might be nicer to change the argument format to |statePT|, giving |statePT'|, so we can use it in the refinement relation.}
-Given any predicate |P| relating the input, initial state, final state
-and result, it computes the weakest precondition required of the input
-and initial state to ensure |P| holds upon completing the
-computation. As we did in the previous section for |wpDefault|, we can
-prove soundness of this semantics with respect to the |run| function:
-\todo{fix soundness}
 \begin{code}
-  soundness : (Forall(a b : Set)) (P : a × s -> b × s -> Set) -> (c : a -> State b) -> (i : s) -> (x : a) ->
-    wpState c P (x , i) -> P (x , i) (run (c x) i)
+  statePTR : (Forall(b : Set)) State b -> (s -> b × s -> Set) -> s -> Set
+  statePTR c P i = statePT c (P i) i
+\end{code}
+In the remainder of this section, we will occasionally alternate
+between these two variations of the |statePT| function; the context
+will disambiguate which version is being used.
+
+Finally, we can define a weakest precondition semantics for Kleisli
+morphisms of the form |a -> State b|:
+%}
+\begin{code}
+  wpState : (Forall(a b))  (a -> State b) -> (P : a × s -> b × s -> Set) -> (a × s -> Set)
+  wpState f P (x , i) = wp f ((hiddenConst (\ c -> statePT' c (\ i -> P (x , i)) i))) x
+\end{code}
+Given any predicate |P| relating the input, initial state, final state
+and result of the computation, the |wpState| function computes the
+weakest precondition required of the input and initial state to ensure
+|P| holds upon completing the computation. The definition amounts to
+composing the |wp| and |statePT'| functions we have seen previously.
+As we did in the previous section for |wpDefault|, we can prove
+soundness of this semantics with respect to the |run| function:
+\begin{code}
+  soundness : (Forall(a b : Set)) (P : a × s -> b × s -> Set) -> (f : a -> State b) -> (i : s) -> (x : a) ->
+    wpState f P (x , i) -> P (x , i) (run (f x) i)
 \end{code}
 %if style == newcode           
 \begin{code}
@@ -764,13 +794,19 @@ We begin by defining the type of binary trees:
 %endif
 One obvious choice of specification might be the following:
 \begin{code}
-  relabelSpec1 : (Forall(a)) SpecK (Tree a × Nat) (Tree Nat × Nat)
-  relabelSpec1 = [[ K ⊤ , (\ { (t , s) (t' , s') → flatten t' == (seq (s) (size t))}) ]]
+  relabelSpec : (Forall(a)) SpecK (Tree a × Nat) (Tree Nat × Nat)
+  relabelSpec = [[ K ⊤ , relabelPost ]]
+    where
+      relabelPost : (Forall(a)) Tree a × Nat -> Tree Nat × Nat -> Set
+      relabelPost (t , s) (t' , s') = (flatten t' == (seq (s) (size t))) ∧ (s + size t == s')
 \end{code}
 The precondition of this specification is trivially true regardless of
-the input tree and initial state; the postcondition states that
-flattening the resulting tree |t'| produces the sequence of numbers
-from |s| to |s + size t|, where |t| is the initial input tree.
+the input tree and initial state; the postcondition consists of a
+conjunction of two auxiliary statements: first, flattening the
+resulting tree |t'| produces the sequence of numbers from |s| to |s +
+size t|, where |t| is the initial input tree; furthermore, the output
+state |s'| should be precisely |size t| larger than the input state
+|s|.
 
 We can now define the obvious relabelling function as follows:
 %if style == newcode
@@ -796,87 +832,55 @@ Next, we would like to show that this definition satisfies the
 intended specification. To do so, we can use our |wpState| function to
 compute the weakest precondition semantics of the relabelling
 function and formulate the desired correctness property:
-
 \begin{code}
-  ⟦relabel⟧ : (Forall(a)) (Tree a × Nat -> Tree Nat × Nat -> Set) -> (Tree a × Nat -> Set)
-  ⟦relabel⟧ P = wpState (relabel) P
-
-  correctnessRelabel : (Forall(a : Set)) wpSpec (instantiate (relabelSpec1)) ⊑ ⟦relabel⟧
+  correctnessRelabel : (Forall(a : Set)) wpSpec (instantiate (relabelSpec)) ⊑ wpState relabel
 \end{code}
-Unfortunately, the direct proof of this statement fails. The induction
-hypothesis in the case for the |Node| constructor is too weak. In
-particular, it does provide any useful information about the
-intermediate state resulting from the traversal of the left subtree.
+The proof is interesting. Initially, it proceeds by induction on the
+input tree. The base case for the |Leaf| constructor is easy enough to
+discharge; the inductive case, however, poses a greater challenge. In
+particular, the goal we wish to prove amounts to the following statement:
+\begin{spec}
+  statePT (relabel l >>= (\ l' → relabel r >>= (\ r' → Pure (Node l' r')))) (P (Node l r , i)) i
+\end{spec}
+At first glance, it is not at all obvious how to apply our induction
+hypothesis!
 
-Fortunately, however, we can define several auxiliary lemmas to find a
-suitable proof. Firstly, the refinement relation is both reflexive and
-transitive:
+To complete the proof, we need an auxiliary lemma that enables us to
+prove a property of a composite computation, |c >>= f|, in terms of
+the semantics of |c| and |f|:
 \begin{code}
-  ⊑-trans  : (implicit (a : Set)) (implicit (b : a -> Set)) (implicit (P Q R : ((x : a) -> b x -> Set) -> (a -> Set))) P ⊑ Q -> Q ⊑ R -> P ⊑ R
-
-  ⊑-refl   : (implicit (a : Set)) (implicit (b : a -> Set)) (implicit (P : ((x : a) -> b x -> Set) -> (a -> Set))) P ⊑ P  
+  compositionality : (Forall(a b : Set)) (c : State a) (f : a -> State b) ->
+    ∀ i P → statePT (c >>= f) P i == statePT c (wpState f (hiddenConst(P))) i
 \end{code}
 %if style == newcode
 \begin{code}
-  ⊑-trans {a} {b} {P} {Q} {R} r1 r2 p x y = r2 p x (r1 p x y)
-  ⊑-refl {a} {b} {P} p x H = H  
+  compositionality (Pure x) f i P = refl
+  compositionality (Step Get k) f i P = compositionality (k i) f i P
+  compositionality (Step (Put x) k) f i P = compositionality (k tt) f x P
 \end{code}
 %endif
-Furthermore, we can distribute the predicate transformer over a bind: for all
-|mx| and |f|, the weakest precondition of |mx >>= f| for a postcondition |P|
-consists of the weakest precondition such that running |mx| satisfies the
-weakest precondition of |f| for |P|. Since this is exactly the predicate
-transformer semantics of sequencing~\cite{back2012refinement}, disributivity
-expresses in a formal sense the slogan that the bind operator is a
-``programmable semicolon''~\cite{osullivan2008real}.
-More practically, since the definition of |relabel (Node l r)| contains
-recursive calls to |relabel| sequenced using the |_>>=_| operator,
-distributivity is what we need to do structural induction on the tree.\todo{Edits}
-\begin{code}
-  distributePT : {a b : Set} (mx : State a) (f : a -> State b)->
-    ∀ i P → statePT (mx >>= f) P i == statePT mx (wpState f \ _ → P) i
-\end{code}
+Most predicate transformer semantics of imperative languages
+have a similar rule, mapping sequential composition of programs to the
+composition of their associated predicate transformers:
+\begin{center}
+\begin{spec}
+wp(c1 ; c2, R) = wp(c1, wp(c2,R))  
+\end{spec}
+\end{center}
+By defining semantics for Kleisli morphisms, |wpState|, in terms of
+the predicate transformer semantics of computations, |statePT|, we can
+prove this analogous result. The proof, by induction on the stateful
+computation |c|, is trivial.
+
+Using this compositionality property, we can massage the proof
+obligation of our correctness lemma to the point where we can indeed
+apply our induction hypotheses and complete the remaining proof
+obligations.
+
 %if style == newcode
 \begin{code}
-  distributePT (Pure x) f i P = refl
-  distributePT (Step Get k) f i P = distributePT (k i) f i P
-  distributePT (Step (Put x) k) f i P = distributePT (k tt) f x P
-\end{code}
-%endif
-Finally, we can formulate and prove the usual laws for
-weakening of preconditions and strengthening of postconditions:
-\begin{code} 
-  weakenPre  : (implicit(a : Set)) (implicit(b : a -> Set)) (implicit(P P' : a -> Set)) (implicit(Q : (x : a) -> b x -> Set)) P ⊆ P' -> wpSpec [[ P , Q ]] ⊑ wpSpec [[ P' , Q ]]
-
-  strengthenPost     : (implicit(a : Set)) (implicit(b : a -> Set)) (implicit(P : a -> Set)) (implicit(Q Q' : (x : a) -> b x -> Set)) (forall (x : a) -> Q' x ⊆ Q x) -> wpSpec [[ P , Q ]] ⊑ wpSpec [[ P , Q' ]]
-\end{code}
-%if style == newcode
-\begin{code}
-  weakenPre H1 p H2 (pre , post) = (H1 H2 pre , post)  
-  strengthenPost H1 p H2 (pre , post) = (pre , \ x y → post x (H1 _ x y))  
-\end{code}
-%endif
-While easy to prove, these results are indispensible: they allow
-complex refinement proofs to be split into smaller pieces. In our
-example, we can strengthen our postcondition as follows:
-
-\begin{code}
-  relabelSpec2 : (Forall(a)) SpecK (Tree a × Nat) (Tree Nat × Nat)
-  relabelSpec2 = [[ K ⊤ , post ]]
+  correctnessRelabel = step2
     where
-    post : (Forall(a)) Tree a × Nat -> Tree Nat × Nat -> Set
-    post (t , s) (t' , s') = (flatten t' == (seq (s) (size t))) ∧ (s + size t == s')
-\end{code}
-Using the transitivity of the refinement relation and strengthening of
-postcondition lemmas, we can now complete the proof that the |relabel|
-function satisfies its specification.
-
-%if style == newcode
-\begin{code}
-  correctnessRelabel = ⊑-trans {Q = wpSpec relabelSpec2} (strengthenPost step1) step2
-    where
-    step1 : ∀ {a} -> (x : Tree a × Nat) -> (Spec.post relabelSpec2 x) ⊆ (Spec.post relabelSpec1 x)
-    step1 x y (fst , snd) = fst
     open NaturalLemmas
     --  Simplify proofs of refining a specification,
     --  by first proving one side of the bind, then the second.
@@ -884,7 +888,7 @@ function satisfies its specification.
     --  specialized to the effects of State and Spec.
     prove-bind : ∀ {a b} (mx : State a) (f : a → State b) P i →
       statePT mx (wpState f \ _ → P) i → statePT (mx >>= f) P i
-    prove-bind mx f P i x = coerce (sym (distributePT mx f i P)) x
+    prove-bind mx f P i x = coerce (sym (compositionality mx f i P)) x
     prove-bind-spec : ∀ {a b} (mx : State a) (f : a → State b) spec →
       ∀ P i → (∀ Q → Spec.pre spec i × (Spec.post spec i ⊆ Q) → statePT mx Q i) →
       Spec.pre spec i × (Spec.post spec i ⊆ wpState f (\ _ → P)) →
@@ -911,81 +915,126 @@ function satisfies its specification.
       (refl , refl) (refl , refl) = append-seq s sl sr , +-assoc s sl sr
 
     --  We have to rewrite the formulation of step2 slightly to make it acceptable for the termination checker.
-    step2' : ∀ {a} P (t : Tree a) s → wpSpec relabelSpec2 P (t , s) → statePT (relabel t) (P (t , s)) s
+    step2' : ∀ {a} P (t : Tree a) s → wpSpec relabelSpec P (t , s) → statePT (relabel t) (P (t , s)) s
     step2' P (Leaf x) s (fst , snd) = snd (Leaf s , Succ s) (refl , plus-one s)
-    step2' P (Node l r) s (fst , snd) = prove-bind-spec (relabel l) _ (partialSpec relabelSpec2 l) _ _
+    step2' P (Node l r) s (fst , snd) = prove-bind-spec (relabel l) _ (partialSpec relabelSpec l) _ _
       (\ Q → step2' (\ _ → Q) l s)
       (tt , \ l',s' postL → let l' = Pair.fst l',s' ; s' = Pair.snd l',s'
-        in prove-bind-spec (relabel r) _ (partialSpec relabelSpec2 r) _ _
+        in prove-bind-spec (relabel r) _ (partialSpec relabelSpec r) _ _
           (\ Q → step2' (\ _ → Q) r s')
           (tt , \ r',s'' postR → let r' = Pair.fst r',s'' ; s'' = Pair.snd r',s''
             in snd (Node l' r' , s'') (postcondition s s' s'' (size l) (flatten l') (size r) (flatten r') postL postR)))
-    step2 : wpSpec relabelSpec2 ⊑ ⟦relabel⟧
+    step2 : wpSpec relabelSpec ⊑ wpState relabel
     step2 P (t , s) (fst , snd) = step2' P t s (fst , snd)
 \end{code}
 %endif
 
+At this point, it is worth pointing out that this compositionality
+property does not hold exclusively for stateful computations. In fact,
+we can prove a more general result that holds for \emph{any} predicate
+transformer semantics |pt| defined as a fold over the free monad:
+%if style == newcode
+\begin{code}
+module Compositionality
+  (C : Set) (R : C -> Set) (ptalgebra : (c : C) -> (R c -> Set) -> Set)
+  where
+  open Free
+  open Maybe using (wpSpec; [[_,_]])
+  
+  postulate
+    ext : {a b : Set} -> {f g : a -> b} ->
+      ((x : a) -> f x ≡ g x) -> f ≡ g
+      
+  pt : {a : Set} -> Free C R a -> (a -> Set) -> Set
+  pt (Pure x) P = P x
+  pt (Step c x) P = ptalgebra c (\r -> pt (x r) P)
+
+  wpCR : {a : Set} {b : a -> Set} ->
+      ((x : a) -> Free C R (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
+  wpCR f P x = pt (f x) (P x)
+\end{code}
+%endif
+\begin{code}
+  compositionality : (Forall(a b : Set)) (c : Free C R a) (f : a -> Free C R b) ->
+    ∀ P -> pt (c >>= f) P ≡ pt c (wpCR f (hiddenConst(P)))
+\end{code}
+Note that this proof requires that the semantics of Kleisli morphisms,
+|wpCR|, is defined in terms of the predicate transformer |pt|. If we
+restr ourselves to Kleisli arrows, however, we can formulate similar
+properties even more succincly.
+%if style == newcode
+\begin{code}
+  compositionality (Pure x) f P = refl
+  compositionality (Step c x) f P =
+    cong (\h -> ptalgebra c h) (ext (\r -> compositionality (x r) f P))
+\end{code}
+%endif  
+First, we can define the usual composition of Kleisli morphisms as follows:
+\begin{code}
+  _>=>_ : (Forall(a b c C R)) (a → Free C R b) -> (b → Free C R c) -> a → Free C R c
+  f >=> g = \ x → f x >>= g
+\end{code}
+Using this composition operator, we can show that for \emph{any}
+compositional predicate transformer semantics, 
+\begin{code}
+  compositionality1 : (Forall(a b c : Set)) (f1 f2 : a -> Free C R b) (g : b -> Free C R c) ->
+    wpCR f1 ⊑ wpCR f2 ->
+    wpCR (f1 >=> g) ⊑ wpCR (f2 >=> g)
+\end{code}
+%if style == newcode
+\begin{code}
+  compositionality1 mx my f H P x y
+    rewrite compositionality (mx x) f (P x)
+    | compositionality (my x) f (P x) =
+     H (\x y -> pt (f y) (P x)) x y
+\end{code}
+%endif
+A similar property also holds when considering refinements on the
+second argument of a Kleisli composition:
+\begin{code}
+  compositionality2 : (Forall(a b c)) (f : a -> Free C R b) (g1 g2 : b -> Free C R c) ->
+    wpCR g1 ⊑ wpCR g2 ->
+    wpCR (f >=> g1) ⊑ wpCR (f >=> g2)
+  \end{code}    
+%if style == newcode
+  \begin{code}
+  postulate
+\end{code}
+%endif
+This second property, however, only holds under the assumption that
+the predicate transformers computed over a free monad are
+\emph{monotone}, that is to say, the function |pt| satisfies the
+following property:
+\begin{code}
+    monotonicity : ∀ {a : Set} P Q -> P ⊆ Q -> (c : Free C R a) -> pt c P -> pt c Q      
+\end{code}
+%if style == newcode
+\begin{code}
+  compositionality2 mx f g H P x wp1
+    rewrite compositionality (mx x) f (P x)
+    | compositionality (mx x) g (P x) = monotonicity _ _ (H _) (mx x) wp1 
+  \end{code}
+%endif  
+
 \subsection*{Rule of consequence}
 \label{sec:consequence}
 
-Unsurprisingly, reasoning about programs written using the state monad
-give rise to the typical pre- and postcondition reasoning found in the
-verification of imperative programs. It is worth considering some more
-general results that we can show about our programs:
+Thise example illustrates how reasoning about programs written using
+the state monad give rise to the typical pre- and postcondition
+reasoning found in the verification of imperative programs. Indeed, it
+is easy enough to show that the familiar laws for the weakening of
+preconditions and strengthening of postconditions also hold:
+\begin{code} 
+  weakenPre  : (implicit(a : Set)) (implicit(b : a -> Set)) (implicit(P P' : a -> Set)) (implicit(Q : (x : a) -> b x -> Set)) P ⊆ P' -> wpSpec [[ P , Q ]] ⊑ wpSpec [[ P' , Q ]]
 
-\begin{code}
-  monotone : {a : Set} (mx : State a) ->
-    (Forall (P Q)) P ⊆ Q -> ∀ i -> statePT mx P i -> statePT mx Q i
+  strengthenPost     : (implicit(a : Set)) (implicit(b : a -> Set)) (implicit(P : a -> Set)) (implicit(Q Q' : (x : a) -> b x -> Set)) (forall (x : a) -> Q' x ⊆ Q x) -> wpSpec [[ P , Q ]] ⊑ wpSpec [[ P , Q' ]]
 \end{code}
 %if style == newcode
 \begin{code}
-  monotone (Pure x) H i H1 = H (x , i) H1
-  monotone (Step Get k) H i H1 = monotone (k i) H i H1
-  monotone (Step (Put x) k) H i H1 = monotone (k tt) H x H1
+  weakenPre H1 p H2 (pre , post) = (H1 H2 pre , post)  
+  strengthenPost H1 p H2 (pre , post) = (pre , \ x y → post x (H1 _ x y))  
 \end{code}
 %endif
-\begin{code}
-  consequence1 : {a b : Set} (mx my : State a) (f : a -> State b)->
-    statePT' mx ⊑ statePT' my ->
-    statePT' (mx >>= f) ⊑ statePT' (my >>= f)
-\end{code}
-%if style == newcode
-\begin{code}
-  consequence1 mx my f H P i H1 =
-    let H1' = coerce (distributePT mx f i (P i)) H1
-    in coerce (sym (distributePT my f i (P i))) (H (\ x → wpState f (\ _ → P i)) i H1')
-\end{code}
-%endif
-\begin{code}
-  consequence2 : {a b : Set} (mx : State a) (f g : a -> State b)->
-    ((x : a) -> statePT' (f x) ⊑ statePT' (g x)) ->
-    statePT' (mx >>= f) ⊑ statePT' (mx >>= g)
-\end{code}
-%if style == newcode
-\begin{code}
-  consequence2 (Pure x) f g H P i H1 = H x (\ _ → P i) i H1
-  consequence2 (Step Get k) f g H P i H1 = consequence2 (k i) f g (\ x P' i' → H x (\ _ → P' i') i') (\ _ → P i) i H1
-  consequence2 (Step (Put x) k) f g H P i H1 = consequence2 (k tt) f g (\ x' P' i' → H x' (\ _ → P' i') i') (\ _ → P i) x H1
-\end{code}
-%endif
-
-The proof of the first rule of consequence uses the distributivity of
-the predicate transformer over a bind.  The same property holds for
-every predicate transformer defined as a fold over the program, so we
-can prove the first rule of consequence for all such semantics.
-
-Apart from distributing the predicate transformer, the second rule of
-consequence makes essential use of the monotonicity of the predicate
-transformer. In fact, if the effects are expressive enough,
-monotonicity and the second rule of consequence are
-equivalent. Suppose we have two predicates |P| and |Q| such that |P ⊆
-Q|, and we want to prove for all |mx| that |wp mx P ⊆ wp mx Q|. If we
-can find |P'|, |f| and |g| (for instance, by using the |I| data type
-of Section \ref{sec:stepwise-refinement}) such that |P| is equivalent
-to |wp f P'| and |Q| is equivalent to |wp g P'|, then apply the second
-rule of consequence, we get exactly |wp mx P ⊆ wp mx Q|.
-
-\todo{Edit paragraphs}
 
 \todo{What is the refinement relation arising from wpState?}
 
@@ -1077,7 +1126,8 @@ computations:
 \begin{code}
 module Nondeterminism where
 
-  open Free
+  open Free hiding (_⊆_)
+  open Maybe using (wpSpec; SpecK; [[_,_]])
 \end{code}
 %endif
 
@@ -1111,43 +1161,176 @@ its constructors:
 \end{code}
 Next, we turn our attention to defining a suitable predicate
 transformer semantics on Kleisli arrows of the form |(x : a) -> ND (b
-x)|. There are two canonical ways to do so:
-
+x)|. There are two canonical ways to do so, following a familiar pattern:
 \begin{code}
-  wpAll : (Forall (a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> ((x : a) -> ND (b x)) -> (a -> Set)
-  wpAll P f = wp f (allPT P)
-    where
-    allPT : (Forall (a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> ND (b x) -> Set
-    allPT P _ (Pure x)         = P _ x
-    allPT P _ (Step Fail k)    = ⊥
-    allPT P _ (Step Choice k)  = allPT P _ (k True) ∧ allPT P _ (k False)
+  allPT : (Forall (a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> ND (b x) -> Set
+  allPT P _ (Pure x)         = P _ x
+  allPT P _ (Step Fail k)    = ⊤
+  allPT P _ (Step Choice k)  = allPT P _ (k True) ∧ allPT P _ (k False)
 
-  wpAny : (Forall (a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> ((x : a) -> ND (b x)) -> (a -> Set)
-  wpAny P f = wp f (anyPT P)
-    where
-    anyPT : (Forall (a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> ND (b x) -> Set
-    anyPT P _ (Pure x)         = P _ x
-    anyPT P _ (Step Fail k)    = ⊤
-    anyPT P _ (Step Choice k)  = anyPT P _ (k True) ∨ anyPT P _ (k False)
+  wpAll : (Forall(  a : Set)) (implicit(b : a -> Set)) ((x : a) -> ND (b x)) -> (P : (x : a) -> b x -> Set) -> (a -> Set)
+  wpAll f P = wp f (allPT P)
+
+  anyPT : (Forall (a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> ND (b x) -> Set
+  anyPT P _ (Pure x)         = P _ x
+  anyPT P _ (Step Fail k)    = ⊥
+  anyPT P _ (Step Choice k)  = anyPT P _ (k True) ∨ anyPT P _ (k False)
+
+  wpAny : (Forall(  a : Set)) (implicit(b : a -> Set)) ((x : a) -> ND (b x)) -> (P : (x : a) -> b x -> Set) -> (a -> Set)
+  wpAny f P = wp f (anyPT P)
 \end{code}
 These two predicate transformers are dual: |allPT P| holds of a
 non-deterministic computation precisely when \emph{all} possible
 results satisfy |P|; |anyPt P| holds of a non-deterministic
 computation precisely when \emph{some} possible result satisfies |P|.
-We can relate both these predicates to the usual `list handler' for
-non-determinism and prove appropriate soundness results.
+Once again, can relate both these predicates to the usual `list
+handler' for non-determinism:
+\begin{code}
+  run : (Forall(a)) ND a -> List a
+  run (Pure x)         = [ x ]
+  run (Step Fail _)    = Nil
+  run (Step Choice k)  = run (k True) ++ run (k False)
+\end{code}
+Finally, we can prove that our predicate transformers are sound with
+respect to these semantics. In the case for the |wpAll| function, for
+example, this boils down to showing:
+%if style == newcode
+\begin{code}
+  all : {a : Set} -> (a -> Set) -> List a -> Set
+  all P Nil = ⊤
+  all P (x :: xs) = P x ∧ all P xs
 
-\todo{soundness}
+  all++ : {a : Set} (P : a -> Set) (xs ys : List a) ->
+    all P xs -> all P ys -> all P (xs ++ ys)
+  all++ P Nil ys H1 H2 = H2
+  all++ P (x :: xs) ys (Px , H1) H2 = Px , all++ P xs ys H1 H2
 
+  allSoundness : {a : Set} {b : a -> Set} (P : (x : a) -> b x -> Set) (x : a) (nd : ND (b x)) ->
+    allPT P x nd -> all (P x) (run nd)
+  allSoundness P x (Pure y) H = H , tt
+  allSoundness P x (Step Fail _) H = tt
+  allSoundness P x (Step Choice k) (H1 , H2) =
+    all++ (P x) (run (k True)) (run (k False)) (allSoundness P x (k True) H1) (allSoundness P x (k False) H2)
+  \end{code}
+%endif
+\begin{code}
+  wpAllSoundness : (Forall(a)) (implicit(b : a -> Set)) (f : (x : a) -> ND (b x)) ->
+    ∀ P x -> wpAll f P x -> all (P x) (run (f x))
+\end{code}
+%if style == newcode
+  \begin{code}
+  wpAllSoundness nd P x H = allSoundness P x (nd x) H
+  \end{code}
+%endif
 
-\todo{These predicate transformers give rise to the following refinement relation}
+\subsection*{Refinement}  
 
+These two predicate transformer semantics give rise to two different
+refinement relations. We can characterize both in terms of the
+elements that the non-deterministic computations may return. We can
+characterize these elements using the following relation:
+\begin{code}
+  data Elem (hidden(a : Set)) (x : a) : ND a -> Set where
+      Here   : Elem x (Pure x)
+      Left   : (Forall(l r))  Elem x l -> Elem x (choice l r)
+      Right  : (Forall(l r))  Elem x r -> Elem x (choice l r)
+\end{code}
+We can extend this relation to define a `subset' relation on
+non-deterministic computations:
+\begin{code}    
+  _⊆_ : (Forall(a)) ND a -> ND a -> Set
+  nd1 ⊆ nd2 = ∀ x -> Elem x nd2 -> Elem x nd1
+\end{code}
+With these relations in place, we can give the following
+characterisation of the refinement relation induced by both the
+|wpAll| and |wpAny| predicate transformers:
 \begin{spec}
-  subset1 :   (f g : a -> ND b) -> ((x : a) -> Subset (g x) (f x)) <-> f ⊑ g
-  subset2 :   (f g : a -> ND b) -> ((x : a) -> Subset (g x) (f x)) <-> g ⊑ f
+  refineAll  : (f g : a -> ND b) -> wpAll f  ⊑ wpAll g  ↔ ((x : a) -> f x  ⊆ g x)
+  refineAny  : (f g : a -> ND b) -> wpAny f  ⊑ wpAny g  ↔ ((x : a) -> g x  ⊆ f x)
+\end{spec}
+Interestingly, the case for the |wpAny| predicate flips the subset
+relation.  Intuitively, if you know that a predicate |P| holds for
+\emph{some} element returned by a non-deterministic computation, it is
+even `better' to know that |P| holds for a non-deterministic
+computation that returns fewer possible results.
+
+\subsection*{Example: non-deterministic deletion}
+
+To illustrate how to reason about such non-deterministic computations,
+we will define a function that non-deterministically removes a single
+element from an input list, returning both the element removed and the
+remaining list. Such a function can typically be used to
+non-deterministically inspect the elements of an input list
+one-by-one.
+
+Once again, we begin by defining the specification of our function:
+\begin{code}
+  selectPost : (Forall(a)) List a -> a × List a -> Set
+  selectPost xs (y , ys) = Sigma (y ∈ xs) (\ e -> delete xs e == ys)
+  
+  removeSpec : (Forall(a)) SpecK (List a) (a × List a)
+  removeSpec = [[ K ⊤ , selectPost ]]
+\end{code}
+The precondition holds trivially; the postcondition consists of two
+parts, paired together using a |Sigma|-type. The first component of
+the postcondition states that the element returned, |y|, is an element
+of the input list |xs|. Here we use the |_∈_| relation characterising
+the elements of a list from the standard library. The second component
+of the postcondition states that removing this element from the input
+list produces the output list. Here we use an auxiliary function,
+|delete|, that removes an existing element from a list:
+\begin{spec}
+    delete : (Forall(a)) (implicit(x : a)) (xs : List a) -> x ∈ xs -> List a  
 \end{spec}
 
-\subsection*{Example: permutations}
+With the specification in place, we can define the following function
+that non-deterministically draws an element from its input list:
+\begin{code}  
+  remove : (Forall(a)) List a -> ND (a × List a)
+  remove Nil        = fail
+  remove (x :: xs)  = choice  (return (x , xs)) (map (add x) (remove xs))
+      where
+      add : (Forall(a)) a -> a × List a -> a × List a
+      add x (y , ys) = (y , (x :: ys))
+\end{code}
+Verifying the correctness of this functions amounts to proving the following lemma:
+\begin{code}  
+  removeCorrect : (Forall(a)) wpSpec (hidden(List a)) (hidden(const (a × List a))) removeSpec ⊑ wpAll remove
+\end{code}
+%if style == newcode
+\begin{code}
+  removeCorrect = undefined
+\end{code}
+%endif
+Note that correctness property merely states that all the pairs
+returned by |remove| satisfy the desired postcondition. It does not
+require that all possible decompositions of the input list also occur
+as possible results of the |remove| function. There is a trivial proof
+that the |fail| computation also satisfies this specification:
+\begin{code}
+  trivialCorrect : (Forall(a)) wpSpec (hidden(List a)) (hidden(const (a × List a))) removeSpec ⊑ wpAll (const fail)  
+\end{code}
+%if style == newcode
+\begin{code}
+  trivialCorrect = λ P xs H → tt
+\end{code}
+%endif
+In other words, the |removeCorrect| guarantees the \emph{soundness},
+but not the \emph{completeness} of our non-deterministic computation.
+
+We can address this by proving an additional lemma, stating that the
+|remove| function returns every possible list decomposition:
+\begin{code}
+  completeness : (Forall(a)) (y : a) (xs ys : List a) -> selectPost xs (y , ys) -> Elem (y , ys) (remove xs)
+\end{code}
+%if style == newcode
+\begin{code}
+  completeness y .(y :: _) ys (∈Head , refl) = Left Here
+  completeness y .(_ :: _) ys (∈Tail fst , snd) = Right undefined
+\end{code}
+%endif
+The proof proceeds by induction on the first component of the
+postcondition, |y ∈ xs|.
 
 \section{General recursion}
 \label{sec:recursion}
@@ -1171,10 +1354,9 @@ module Recursion where
 %endif
 
 
-The description the effects covered so far should be familiar. Giving
-a constructive semantics for \emph{general recursion}, however, may
-seem quite difficult at first glance. There are a variety of
-techniques that account for general recursion in type
+Giving a constructive semantics for \emph{general recursion} may seem
+quite difficult at first glance. There are a variety of techniques
+that account for general recursion in type
 theory~\cite{bove_krauss_sozeau_2016}. Inspired
 by~\citet{mcbride2015turing}, however, we show how the call graph of a
 recursive functions can be described as a free monad, to which we can
@@ -1192,9 +1374,9 @@ moment. We can describe such functions as follows:
 \end{code}
 Once again, we have a Kleisli arrow on the |Free| monad. The choice of
 `commands' and `responses', however, are somewhat puzzling at
-first. The intuition is that the `effect' we allowed to use amounts to
-consulting an oracle, that given an input |i : I| returns the
-corresponding output in |O i|.
+first. The intuition is that the `effect' we are allowed to use
+amounts to consulting an oracle, that given an input |i : I| returns
+the corresponding output in |O i|.
 
 As before, we define a smart constructor to make such calls:
 \begin{spec}
@@ -1215,8 +1397,11 @@ To illustrate this point, we can define McCarthy's 91-function as follows:
 This definition is not recursive, but merely makes the recursive
 structure of the function body, |f91 (f91 (i+11))|, explicit. How can
 we reason about such functions? As is typical in the literature on
-predicate transformer semantics, we can distinguish \emph{total
-  correctness} and \emph{partial correctness}.
+predicate transformer semantics, we distinguish between \emph{total
+  correctness} and \emph{partial correctness}. For the moment, we will
+only concern ourselves with proving \emph{partial correctness} of our
+programs: provided a program terminates, it should produce the right
+result.
 
 \begin{spec}
 f91-spec : Nat → Nat → Set

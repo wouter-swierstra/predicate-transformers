@@ -318,6 +318,7 @@ data _∈_ {a : Set} : a -> List a -> Set where
   ∈Tail : ∀ {x x' xs} -> x ∈ xs -> x ∈ Cons x' xs
 
 delete : {a : Set} {x : a} (xs : List a) -> x ∈ xs -> List a
+
 delete (x :: ys) ∈Head = ys
 delete (y :: ys) (∈Tail i) = Cons y (delete ys i)
 

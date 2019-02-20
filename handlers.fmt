@@ -3,6 +3,7 @@
 %format (Forall (a)) = "\!"
 %format (implicit(a)) = "\!"
 %format (hidden(a)) = "\!"
+%format (hiddenConst (a)) = a
 %format N = "\mathbb{N}"
 %format e1 = e "_1"
 %format e2 = e "_2"
@@ -16,6 +17,12 @@
 %format s2 = s "_2"
 %format c1 = c "_1"
 %format c2 = c "_2"
+%format f1 = f "_1"
+%format f2 = f "_2"
+%format g1 = g "_1"
+%format g2 = g "_2"
+%format nd1 = nd "_1"
+%format nd2 = nd "_2"
 %format law1 = law "_1"
 %format law2 = law "_2"
 %format law3 = law "_3"
@@ -25,12 +32,16 @@
 %format subset = "\subseteq"
 %format elem = "\in"
 %format wpEval = wp "_{" eval "}"
+%format wpCR = wp
 %format ^^ = "\;"
 %format Set1 = Set
 %format forall = "\forall"
 %format _>>=_ = "\_\!\bind\!\_"
+%format _>=>_ = "\_\!>\!\!\!\!\mathbin{=}\!\!\!\!>\!\_"
+%format >=> = ">\!\!\!\!\mathbin{=}\!\!\!\!>"
 %format constructor = "\Keyword{constructor}"
 %format wpState' = wpState
+%format statePT' = statePT
 %format [[ = [
 %format ]] = ]
 %format [[_,_]] = [_,_]
@@ -38,6 +49,7 @@
 %format correctnessProduct = correctness
 %format correctnessRelabel = correctness
 %format forall = "\forall"
+%format Sigma = "\Sigma"
 %format (seq (a) (b)) = "[" a "\ldots" a "+" b "]"
 %format (instantiate (a)) = " " a " "
 %format relabelSpec1 = relabelSpec "_1"
@@ -49,6 +61,7 @@
 %format (implicit(a)) = "{" a "} ->"
 %format (hidden(a)) = "{" a "}"
 %format (instantiate (a)) = "(" a " {a})"
+%format (hiddenConst (a)) = "(const " a ")"
 %format N = "Nat"
 %format top = "⊤"
 %format ^^ = " "
