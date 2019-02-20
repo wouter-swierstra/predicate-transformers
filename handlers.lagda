@@ -1341,12 +1341,13 @@ module Recursion where
   open Free
   open import Data.Nat public
     using
-      (_+_; _>_; _*_; _∸_
+      (_+_; _>_; _*_
       )
     renaming
       ( ℕ to Nat
       ; zero to Zero
       ; suc to Succ
+      ; _∸_ to _-_
       )
   open NaturalLemmas
   open Maybe using (SpecK; [[_,_]]; Spec)
@@ -1379,21 +1380,21 @@ amounts to consulting an oracle, that given an input |i : I| returns
 the corresponding output in |O i|.
 
 As before, we define a smart constructor to make such calls:
-\begin{spec}
+\begin{code}
   call : (Forall (I O)) (i : I) → Free I O (O i)
   call x = Step x Pure
-\end{spec}
+\end{code}
 Note that we do \emph{not} define recursive functions---but
 rather defines an explicit representation of the call graph of the
 function we wish to define.
 
 To illustrate this point, we can define McCarthy's 91-function as follows:
-\begin{spec}
+\begin{code}
   f91 : Nat ~~> K Nat
   f91 i with 100 lt i
   f91 i | yes  _  = return (i - 10)
   f91 i | no   _  = call (i + 11) >>= call
-\end{spec}
+\end{code}
 This definition is not recursive, but merely makes the recursive
 structure of the function body, |f91 (f91 (i+11))|, explicit. How can
 we reason about such functions? As is typical in the literature on
@@ -1408,7 +1409,7 @@ following specification:
 \begin{code}
   f91-post : Nat → Nat → Set
   f91-post i o with 100 lt i
-  f91-post i o | yes _ = o == i ∸ 10
+  f91-post i o | yes _ = o == i - 10
   f91-post i o | no _ = o == 91
 
   f91-spec : SpecK Nat Nat
