@@ -21,6 +21,8 @@
 %format f2 = f "_2"
 %format g1 = g "_1"
 %format g2 = g "_2"
+%format i1 = i "_1"
+%format i2 = i "_2"
 %format nd1 = nd "_1"
 %format nd2 = nd "_2"
 %format law1 = law "_1"

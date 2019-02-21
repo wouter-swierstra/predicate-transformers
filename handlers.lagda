@@ -42,7 +42,7 @@ style~\citep*{algebra-of-programming, pearls}.
 
 Many programs, however, are \emph{not} pure, but instead rely on a
 variety of effects, such as mutable state, exceptions,
-non-termination, or non-determinism. Unfortunately, it is less clear
+general recursion, or non-determinism. Unfortunately, it is less clear
 how to reason about impure programs in a compositional fashion, as we can
 no longer exploit referential transparency to reason about
 subexpressions regardless of their context.
@@ -60,23 +60,19 @@ for effectful programs. It presents a constructive framework for deriving
 verified effectful programs their specifications, inspired by existing
 work on the refinement
 calculus~\cite{back2012refinement,morgan1994programming}. We will
-sketch the key techniques developed herein, before illustrating them
-with numerous examples:
-
-% What is the specification of a program written using algebraic
-% effects?  How can we show that a program satisfies a specification? Or
-% indeed derive a program from its specification?
-
+briefly sketch the key techniques, before illustrating them
+with numerous examples throughout the remainder of the paper:
 
 \begin{itemize}
-\item We show how the syntax of effects may be given by a free monad
-  in type theory. The semantics of these effects are given by a
-  \emph{handler}, that assigns meaning to the syntactic operations
-  provided by the free monad. \todo{Avoid handlers here}
-\item Next we show how to assign \emph{predicate transformer
-    semantics} to computations arising from Kleisli arrows on such
-  free monads. This enables us to specify the desired outcome of an
-  effectful computation and assign it a weakest precondition
+\item The syntax of effectful computations may be represented
+  uniformly by a free monad in type theory. Assigning meaning to such
+  free monads amounts to assigning meaning to the syntactic operations
+  each effect provides. This typically amounts to writing an
+  interpreter, that handles effectful operations.
+\item Such interpreters, however, may also assign \emph{predicate
+    transformer semantics} to computations arising from Kleisli arrows
+  on such free monads. This enables us to specify the desired outcome
+  of an effectful computation and assign it a weakest precondition
   semantics.
 \item Using these weakest precondition semantics, we can define a
   notion of \emph{refinement} on computations using algebraic
@@ -89,8 +85,12 @@ including exceptions (Section~\ref{sec:maybe}), state
 (Section~\ref{sec:state}), non-determinism
 (Section~\ref{sec:non-det}), and general recursion
 (Section~\ref{sec:recursion}). Each section is illustrated with
-numerous examples, each selected for their portrayal of proof principles
-rather than being formidable feats of formalization.
+numerous examples, each selected for their portrayal of proof
+principles rather than being formidable feats of
+formalization. Besides relating effectful programs to their
+specification, we show how to programs and specifications may be mixed
+freely, allowing verified programs to be calculated from their
+specification one step at a time (Section~\ref{sec:stepwise-refinement}).
 
 
 The examples, theorems and proofs have all been formally verified in
@@ -98,7 +98,7 @@ the dependently typed programming language Agda~\cite{agda}, but they
 techniques translate readily to other proof assistants based on
 dependent types such as Idris~\cite{brady} or Coq~\cite{coq}. The sources
 associated with our our development are available
-online.\footnote{\todo{url}}
+online.\footnote{\todo{url withheld to preserve author(s) anonymity}}
 
 \section{Background}
 \label{sec:intro}
@@ -1006,24 +1006,26 @@ the predicate transformers computed over a free monad are
 \emph{monotone}, that is to say, the function |pt| satisfies the
 following property:
 \begin{code}
-    monotonicity : ∀ {a : Set} P Q -> P ⊆ Q -> (c : Free C R a) -> pt c P -> pt c Q      
+    monotonicity : (Forall(a)) (implicit(P Q : a -> Set)) P ⊆ Q -> (c : Free C R a) -> pt c P -> pt c Q      
 \end{code}
 %if style == newcode
 \begin{code}
   compositionality2 mx f g H P x wp1
     rewrite compositionality (mx x) f (P x)
-    | compositionality (mx x) g (P x) = monotonicity _ _ (H _) (mx x) wp1 
+    | compositionality (mx x) g (P x) = monotonicity (H _) (mx x) wp1 
   \end{code}
 %endif  
+  This monotonicity property holds of all the predicate transformers
+  presented in this paper and is straightforward to prove.
 
 \subsection*{Rule of consequence}
 \label{sec:consequence}
 
 Thise example illustrates how reasoning about programs written using
 the state monad give rise to the typical pre- and postcondition
-reasoning found in the verification of imperative programs. Indeed, it
-is easy enough to show that the familiar laws for the weakening of
-preconditions and strengthening of postconditions also hold:
+reasoning found in the verification of imperative programs. Indeed, we
+can also show that the familiar laws for the weakening of preconditions and
+strengthening of postconditions also hold:
 \begin{code} 
   weakenPre  : (implicit(a : Set)) (implicit(b : a -> Set)) (implicit(P P' : a -> Set)) (implicit(Q : (x : a) -> b x -> Set)) P ⊆ P' -> wpSpec [[ P , Q ]] ⊑ wpSpec [[ P' , Q ]]
 
@@ -1035,8 +1037,8 @@ preconditions and strengthening of postconditions also hold:
   strengthenPost H1 p H2 (pre , post) = (pre , \ x y → post x (H1 _ x y))  
 \end{code}
 %endif
-
-\todo{What is the refinement relation arising from wpState?}
+Such laws are particularly useful when `bookkeeping' large proof
+obligations that can sometimes arise during program verification.
 
 \subsection*{Equations}
 
@@ -1421,18 +1423,20 @@ style, such the |f91| function, we can reason about their
 correctness. To do so, we would like to show that a Kleisli arrow |I
 ~~> O| satisfies some specification of type |Spec I O|. To achieve
 this, we begin by defining an auxiliary function, |invariant|, that
-checks whether a call-graph |Free I O (O i)| satisfies a given
-specification:
+asserts that a given call-graph |Free I O (O i)| respects the
+invariant arising from a given specification:
 \begin{code}
   invariant : (Forall(I)) (implicit(O : I -> Set)) (i : I) -> Spec I O  -> Free I O (O i) -> Set
-  invariant i [[ pre , post ]] (Pure x)    = post i x
-  invariant i [[ pre , post ]] (Step j k)  = pre j ∧ (∀ o -> invariant i [[ pre , post ]] (k o))
+  invariant i [[ pre , post ]] (Pure x)    =  pre i -> post i x
+  invariant i [[ pre , post ]] (Step j k)  =  (pre i -> pre j)
+                                              ∧ ∀ o -> post j o -> invariant i [[ pre , post ]] (k o)
 \end{code}
-If there are no recursive calls, the postcondition must hold \todo{Tim
-  wat denk jij: moet dit niet pre i -> post i x zijn?}. If there is a
-recursive call on the argument |j : I|, the precondition must hold for
-|j| and any for result |o : O j|, the remaining continuation |k o|
-must also satisfy the desired specification.
+If there are no recursive calls, the postcondition must hold, provided
+the precondition does. If there is a recursive call on the argument |j
+: I|, the precondition must hold for |j|, assuming it already holds
+for |i|. Furthermore, for any for result |o : O j| satisfying the
+postcondition, the remaining continuation |k o| must continue to
+satisfy the desired specification.
 
 Using this definition, we can now formulate a predicate transformer
 semantics for Kleisli arrows of the form |I ~~> O|:
@@ -1440,112 +1444,219 @@ semantics for Kleisli arrows of the form |I ~~> O|:
   wpRec : (Forall(I)) (implicit(O : I -> Set)) Spec I O -> (I ~~> O) -> (P : (i : I) -> O i -> Set) -> (I -> Set)
   wpRec spec t P i = wpSpec spec P i ∧ invariant i spec (t i) 
 \end{code}
-In words, we require the Kleisli arrow |I ~~> O| to satisfy the
-specification |spec| and that |wpSpec spec P i| also holds.
+Using the |wpRec| function, we can formulate the partial correctness
+of the |f91| function as follows:
 
-\todo{Soundness?}
-\todo{Example correctness proof?}
-\todo{Refinement?}
-\todo{Mention loop invariants?}
+\begin{spec}
+  correctness : wpSpec f91-spec ⊑ wpRec f91-spec f91
+\end{spec}
+There are a variety of techniques to prove the termination of
+recursive functions such as: bounding the number of iterations,
+generating a coinductive trace, adding a monadic fixpoint operator,
+proving the recursive calls are well-founded, or performing inducton
+on an auxiliary data structure~\cite{bove-capretta}.~\todo{citations}
+
+\todo{Soundness?}  \todo{Example correctness proof?}
+\todo{Refinement?}  \todo{Mention loop invariants?}
 
 \section{Stepwise refinement}
 \label{sec:stepwise-refinement}
 
-In the examples we have seen so far, we have typically related a
-\emph{complete} program to its specification. Most work on the
-refinement calculus, however, allows programs and specifications to
-mix freely, thereby enabling the step by step refinement of a
-specification into an executable program. How can we achieve something
-similar in this setting?
+%if style == newcode
+\begin{code}
+module Mix (C : Set) (R : C -> Set) (ptalgebra : (c : C) -> (R c -> Set) -> Set) where
+  open Free
+  open Maybe using (SpecK; [[_,_]]; Spec; wpSpec)
+\end{code}
+%endif
 
 
+In the examples we have seen so far, we have related a \emph{complete}
+program to its specification. Most work on the refinement calculus,
+however, allows programs and specifications to mix freely, thereby
+enabling the step-by-step refinement of a specification into an
+executable program. How can we support this style of program
+calculation using the predicate transformer semantics we have seen so
+far?
 
-\begin{spec}
-  data I (a : Set) : Set1 where
-    Done : a -> I a
-    Spec : SpecK T a -> I a
+Until now we have concerned ourselves with free monads of the form |Free
+C R a| and the Kleisli arrows that produce them. Such free monads give
+a structured representation of a series of interactions, (potentially)
+ending in a value of type |a| in the leaves. By varying this
+information stored in the leaves of the free monad, we can mix
+unfinished specifications and program fragments.
 
+To this end, we define the following data type:
+\begin{code}
+  data I (a : Set) : Set where
+    Done  : a -> I a
+    Hole  : SpecK ⊤ a -> I a
+\end{code}
+A value of type |I a| is either a value of type |a| or a specification
+on |a|. Such a specification consists of a precondition of type |Set|
+and a predicate |a -> Set|; these specifications correspond to some
+unfinished part of the program being calculated. We can define a
+predicate transformer semantics to values of type |I a| easily enough,
+reusing our previous |wpSpec| function:
+\begin{code}
+  ptI : (Forall(a)) I a -> (a -> Set) -> Set
+  ptI (Done x)     P  = P x
+  ptI (Hole spec)  P  = wpSpec spec (hiddenConst(P)) tt
+\end{code}
+Furthermore, given the commands |C| and responses |R| determining the
+operations of a free monad, we can define the following data type for
+partially finished programs:
+\begin{code}  
   M : Set -> Set
   M a = Free C R (I a)
-\end{spec}
-A value of type |I a| is either a result of type |a| or a
-specification of type |a -> Set|, corresponding to an unfinished part
-of our program calculation. The type |M a| then corresponds to
-computations that \emph{mix} code and specifications.  We can easily
-extend our notion of refinement to work over such a mix of code and
-specification:
+\end{code}
+The type |M a| then corresponds to computations that \emph{mix} code
+and specifications. A value of type |M a| consists of a number of
+operations, given by the |Step| constructor of the |Free| type; in
+contrast to free monads we have seen so far, however, the leaves
+contain either values of type |a| or specifications, representing
+unfinished parts of the program's derivation. The refinement
+literature is careful to distinguish \emph{executable code}---that is
+programs without specification fragments---from programs, that may
+still contain specifications. The following predicate characterises
+the executable fragment of |M a|:
+\begin{code}
+  isExecutable : (Forall(a)) M a -> Set
+  isExecutable (Pure (Done _))  = ⊤
+  isExecutable (Pure (Hole _))  = ⊥
+  isExecutable (Step c k)       = ∀ r -> isExecutable (k r)
+\end{code}
+Every executable program can be coerced to a computation free of
+unfinished specifications, as you would expect:
 \begin{spec}
-  wpI : (implicit(a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> I (b x) -> Set
-  wpI P _ (Done y)  = P _ y
-  wpI P x [[ pre , post ]]  = pre ∧ Q ⊆ P x
+  finished : (m : M a) -> isExecutable m -> Free C R a
 \end{spec}
 
+Although we have defined the syntactic structure of our mixed
+computations, |M a|, we have not yet given their semantics. We can use
+the notion of weakest precondition on |I| to define a notion of
+weakest precondition for the computations in |M|. To do so, however,
+we need to assume that we have some weakest precondition semantics for
+Kleisli morphisms. For 
+%if style == newcode
+\begin{code}
+  pt : (Forall(a)) Free C R a -> (a -> Set) -> Set
+  pt (Pure x) P = P x
+  pt (Step c x) P = ptalgebra c (\r -> pt (x r) P)
+\end{code}
+%endif
 
-We can use this notion of weakest precondition on |I| to define a
-notion of weakest precondition for the computations in |M|, that mix
-specifications and code:
+\begin{code}
+  wpCR : (Forall(a)) (implicit(b : a -> Set)) ((x : a) -> Free C R (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
+\end{code}
+%if style == newcode
+\begin{code}
+  wpCR f P x = pt (f x) (P x)
+\end{code}
+%endif
+We have seen many examples of such semantics in the previous
+sections. We can use these semantics andt the predicate transformer
+semantics we have seen previously to define a semantics on unfinished
+programs derivations:
+\begin{code}
+  wpM : (Forall(a)) (implicit(b : a -> Set)) ((x : a) -> M (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
+  wpM f P x = wpCR f (\ x ix -> ptI ix (P x)) x
+\end{code}
+The crucial step here is to transform the argument predicate |P| to
+work on specifications or values of type |I a| using the |ptI|
+function we defined previously.
+
+In general, the process of program calculation now consists of a
+proving a series of refinement steps from some initial specification:
+\begin{center}
 \begin{spec}
-  wpM : {a : Set} -> {b : a -> Set} ->
-    (f : (x : a) -> M (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
-  wpM f = wp f · mustPT · wpI
+  wpSpec spec ⊑ wpM i1 ⊑ wpM i2 ⊑ ... ⊑ wpCR c
 \end{spec}
-Finally, we can revisit our notion of refinement to use these weakest
-precondition semantics:
-\begin{spec}  
-  _⊑_ : {a : Set} {b : a -> Set} (f g : (x : a) -> M (b x)) -> Set1
-  f ⊑ g = ∀ P -> wpM f P ⊆ wpM g P
-\end{spec}
-This refinement relation lets us compare two (possibly unfinished)
-derivation fragments, consisting of a mix of code and specification.
+\end{center}
+Here the intermediate steps (|i1|, |i2|, and so forth) may mix
+specifications and effectful computations; the final program, |c|,
+is executable.
 
-How can we use this? Let's see another example.
+\todo{example}
+\todo{bind}
 
 
 
-\section{Open questions}
-\label{sec:questions}
+\section{Discussion}
+\label{sec:discussion}
 
-
-\begin{itemize}
-\item How can we use this technology to reason about combinations of
-  effects? Eg mixing state and exceptions -- tim's forthcoming paper
-
-\item Control flow -- such as pattern matching/if-then-else?
-  
-\item wp (s,q) or wp (s,p) implies wp(s,q or p) -- but not the other
-  way around. The implication in the other direction only holds when
-  the program is deterministic.
-
-\item Relation with Dijkstra monad?
-  
-\end{itemize}
-
-Can generalize |Spec| further:
-
+Throughout this paper, we have more than once been forced to choose
+between the most general definition possible possible and a less
+general choice, that suffices for the examples we covered. When
+possible, we have favoured simplicity over generality. For instance,
+the type of our specifications can be generalized even further, making
+the postcondition dependent on the precondition:
 \begin{spec}
   record Spec (a : Set) (b : a -> Set) : Set where
     field
       pre : a -> Set
       post : (x : a) -> pre x -> b x -> Set
 \end{spec}
+The resulting definition is that of an \emph{indexed
+  containers}~\cite{indexed}. We have chosen to present a simply-typed
+version of a function---even if a more general dependently typed
+alternative exists---when we did not need the added generality.
 
-\section{Discussion}
-\label{sec:discussion}
+Throughout this paper, we have not concerned ourselves with issues of
+size. Our Agda implementation relies on the unsound axiom that |Set :
+Set|. Yet we are confident these constructions can be statified easily
+enough, either by moving certain definitions to higher universes or
+parameterising parts of our development by a universe |U : Set|
+explicitly. We have no reason to believe that there are fundamental
+size issues; we have made a pragmatic choice for the sake of
+presentation and ease of development.
 
-\subsection{Related work}
+
+\subsection*{Related work}
 \label{sec:related-work}
 
-% Just do it
+Relation with Dijkstra monad?
 
-% Examples:
-% - Dutch National Flag (with recursion)
-% - Goat/Wolf/Bridge crossing
+Just do it.
 
-% \begin{acks}
-% I would like to thank my fans.  
-% \end{acks}
+Other semantics for algebraic effects papers?
 
-\todo{Size doesn't matter}
+Hoare type theory/hoare logic for the state monad
+
+
+
+\subsection*{Further work}
+\label{sec:further-work}
+
+
+This paper does not yet consider \emph{combinations} of different
+effects. This is typically where the separation of syntax and
+semantics that algebraic effects and free monads shine. Exploring how
+to combine predicate transformer semantics of different effects is a
+clear direction for further work, but outside the scope of the current
+paper. In principle, however, we believe it should be possible to take
+the coproduct of our free monads, in the style of
+~\citet{swierstra2008}, to combine the different effects
+syntactically; we hope that the composition of predicate transformers,
+as we have already done in the section on program calculation, can be
+used to assign semantics to programs using a variety of different
+effects.
+
+Throughout this paper, we have chosen to verify small example programs
+to validate our design choices. Scaling these developments to
+larger programs is by no means an easy task.
+
+Not everything is easy to express as a free monad.
+
+Control flow laws.
+
+
+% \item wp (s,q) or wp (s,p) implies wp(s,q or p) -- but not the other
+%   way around. The implication in the other direction only holds when
+%   the program is deterministic.
+\begin{acks}
+  Acknowledgements have been omitted for the sake of anonymity.
+\end{acks}
 
 \DeclareRobustCommand{\tussenvoegsel}[2]{#2}
 \bibliography{handlers}
