@@ -1446,7 +1446,49 @@ In words, we require the Kleisli arrow |I ~~> O| to satisfy the
 specification |spec| and that |wpSpec spec P i| also holds.
 
 \todo{Soundness?}
-\todo{Example correctness proof?}
+
+Now we are ready to prove partial correctness of the |f91| function.
+\begin{code}
+  f91-partial-correctness : (i : Nat) -> invariant i f91-spec (f91 i)
+\end{code}
+%if style == newcode
+\begin{code}
+  f91-partial-correctness i with 100 lt i
+  f91-partial-correctness i | yes p with 100 lt i -- TODO: why do we need to check this twice?
+  f91-partial-correctness i | yes p | yes _ = λ _ → refl
+  f91-partial-correctness i | yes p | no ¬p = magic (¬p p)
+  f91-partial-correctness i | no ¬p = id , λ o post → id , λ o' post' _ → lemma i o o' ¬p post post'
+    where
+    open Data.Nat
+    open import Data.Nat.Properties
+
+    100-≮-91 : (i : Nat) → ¬ (i + 10 ≤ i)
+    100-≮-91 Zero ()
+    100-≮-91 (Succ i) (s≤s pf) = 100-≮-91 i pf
+
+    plus-minus : ∀ b c → (b + c) - c == b
+    plus-minus b c = trans (+-∸-assoc b (NaturalLemmas.≤-refl {c})) (trans (cong (b +_) (n∸n≡0 c)) (sym (plus-zero b)))
+    plus-plus-minus : ∀ i → i + 11 - 10 ≡ Succ i
+    plus-plus-minus i = plus-minus (Succ i) 11
+    between : ∀ a b → ¬ (a < b) → a < Succ b → a ≡ b
+    between Zero Zero ¬lt ltSucc = refl
+    between Zero (Succ b) ¬lt ltSucc = magic (¬lt (s≤s z≤n))
+    between (Succ a) Zero ¬lt (s≤s ())
+    between (Succ a) (Succ b) ¬lt (s≤s ltSucc) = cong Succ (between a b (¬lt ∘ s≤s) ltSucc)
+
+    lemma : ∀ i o o' → ¬ (100 < i) →
+      f91-post (i + 11) o → f91-post o o' → f91-post i o'
+    lemma i o o' i≤100 oPost o'Post with 100 lt i
+    ... | yes p = magic (i≤100 p)
+    ... | no ¬p with 100 lt o
+    lemma i o .(o - 10) i≤100 oPost refl | no ¬p | yes p with 100 lt (i + 11)
+    lemma i .(i + 11 - 10) .(i + 11 - 10 - 10) i≤100 refl refl | no ¬p | yes p | yes p₁ with between 100 i i≤100 (subst (λ i' → 100 < i') (plus-plus-minus i) p)
+    lemma .100 .101 .91 i≤100 refl refl | no ¬p | yes p | yes p₁ | refl = refl
+    lemma i .91 .81 i≤100 refl refl | no ¬p | yes p | no ¬p₁ = magic (100-≮-91 91 p)
+    lemma i o o' i≤100 oPost o'Post | no ¬p | no ¬p₁ = o'Post
+\end{code}
+%endif
+
 \todo{Refinement?}
 \todo{Mention loop invariants?}
 
