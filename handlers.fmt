@@ -50,6 +50,7 @@
 %format correctnessAdd = correctness
 %format correctnessProduct = correctness
 %format correctnessRelabel = correctness
+%format f91-partial-correctness = corectness
 %format forall = "\forall"
 %format Sigma = "\Sigma"
 %format (seq (a) (b)) = "[" a "\ldots" a "+" b "]"

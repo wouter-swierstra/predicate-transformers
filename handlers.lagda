@@ -1447,9 +1447,48 @@ semantics for Kleisli arrows of the form |I ~~> O|:
 Using the |wpRec| function, we can formulate the partial correctness
 of the |f91| function as follows:
 
-\begin{spec}
-  correctness : wpSpec f91-spec ⊑ wpRec f91-spec f91
-\end{spec}
+\begin{code}
+  f91-partial-correctness : wpSpec f91-spec ⊑ wpRec f91-spec f91
+\end{code}
+%if style == newcode
+\begin{code}
+  f91-partial-correctness P i with 100 lt i
+  f91-partial-correctness P i | yes p with 100 lt i --  TODO: why do we need to check this twice?
+  f91-partial-correctness P i | yes p | yes _ = λ H → (tt , (λ x eq → Pair.snd H _ eq)) , (λ x → refl)
+  f91-partial-correctness P i | yes p | no ¬p = magic (¬p p)
+  f91-partial-correctness P i | no ¬p = λ x → (tt , (λ x₁ x₂ → Pair.snd x x₁ x₂)) ,
+                                              ((λ _ → tt) , (λ o x₁ → (λ x₂ → tt) ,
+                                              (λ o₁ x₂ x₃ → lemma i o _ ¬p x₁ x₂)))
+    where
+    open Data.Nat
+    open import Data.Nat.Properties
+
+    100-≮-91 : (i : Nat) → ¬ (i + 10 ≤ i)
+    100-≮-91 Zero ()
+    100-≮-91 (Succ i) (s≤s pf) = 100-≮-91 i pf
+
+    plus-minus : ∀ b c → (b + c) - c == b
+    plus-minus b c = trans (+-∸-assoc b (NaturalLemmas.≤-refl {c})) (trans (cong (b +_) (n∸n≡0 c)) (sym (plus-zero b)))
+    plus-plus-minus : ∀ i → i + 11 - 10 ≡ Succ i
+    plus-plus-minus i = plus-minus (Succ i) 11
+    between : ∀ a b → ¬ (a < b) → a < Succ b → a ≡ b
+    between Zero Zero ¬lt ltSucc = refl
+    between Zero (Succ b) ¬lt ltSucc = magic (¬lt (s≤s z≤n))
+    between (Succ a) Zero ¬lt (s≤s ())
+    between (Succ a) (Succ b) ¬lt (s≤s ltSucc) = cong Succ (between a b (¬lt ∘ s≤s) ltSucc)
+
+    lemma : ∀ i o o' → ¬ (100 < i) →
+      f91-post (i + 11) o → f91-post o o' → f91-post i o'
+    lemma i o o' i≤100 oPost o'Post with 100 lt i
+    ... | yes p = magic (i≤100 p)
+    ... | no ¬p with 100 lt o
+    lemma i o .(o - 10) i≤100 oPost refl | no ¬p | yes p with 100 lt (i + 11)
+    lemma i .(i + 11 - 10) .(i + 11 - 10 - 10) i≤100 refl refl | no ¬p | yes p | yes p₁ with between 100 i i≤100 (subst (λ i' → 100 < i') (plus-plus-minus i) p)
+    lemma .100 .101 .91 i≤100 refl refl | no ¬p | yes p | yes p₁ | refl = refl
+    lemma i .91 .81 i≤100 refl refl | no ¬p | yes p | no ¬p₁ = magic (100-≮-91 91 p)
+    lemma i o o' i≤100 oPost o'Post | no ¬p | no ¬p₁ = o'Post
+\end{code}
+%endif
 There are a variety of techniques to prove the termination of
 recursive functions such as: bounding the number of iterations,
 generating a coinductive trace, adding a monadic fixpoint operator,
