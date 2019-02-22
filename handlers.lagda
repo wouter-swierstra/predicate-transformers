@@ -87,7 +87,7 @@ including exceptions (Section~\ref{sec:maybe}), state
 (Section~\ref{sec:recursion}). Each section is illustrated with
 numerous examples, each selected for their portrayal of proof
 principles rather than being formidable feats of
-formalization. Besides relating effectful programs to their
+formalisation. Besides relating effectful programs to their
 specification, we show how to programs and specifications may be mixed
 freely, allowing verified programs to be calculated from their
 specification one step at a time (Section~\ref{sec:stepwise-refinement}).
@@ -328,13 +328,13 @@ to computations of type |Partial b|:
 \end{code}
 To call the |wp| function we defined previously, we need to show how
 to transform a predicate |P : b -> Set| to a predicate on partial
-results, |Partial b -> Set|.  To do so, we define the auxiary function
+results, |Partial b -> Set|.  To do so, we define the auxiliary function
 |mustPT|; the proposition |mustPT P c| holds when a computation |c| of
 type |Partial b| successfully returns a value of type |b| that
 satisfies |P|.
 
 As a first attempt, we might define the following predicate
-characterizing when evaluation is guaranteed to produce a result:
+characterising when evaluation is guaranteed to produce a result:
 \begin{code}
   SafeDiv : Expr -> Set
   SafeDiv (Val x)       = (Val x ⇓ Zero) -> ⊥
@@ -366,7 +366,7 @@ property.
 
 We may not want to define predicates such as |SafeDiv|
 ourselves. Instead, we can define the more general predicate
-characterizing the \emph{domain} of a partial function:
+characterising the \emph{domain} of a partial function:
 \begin{code}
   dom : (implicit(a : Set)) (implicit (b : a -> Set)) ((x : a) -> Partial (b x)) -> (a -> Set)
   dom f = wpPartial f (\ _ _ -> ⊤)
@@ -431,7 +431,7 @@ fairly straightforward.
 
 The weakest precondition semantics on partial computations defined
 above gives rise to a refinement relation on Kleisli arrows of the
-form |a -> Partial b|. We can characterize this relation by proving
+form |a -> Partial b|. We can characterise this relation by proving
 the following lemma.
 \begin{lemma*}
   For all functions, \emph{|f : a -> Partial b|} and \emph{|g : a -> Partial b|},
@@ -534,10 +534,11 @@ We include this example here to illustrate how to use the refinement
 relation to relate a \emph{specification}, given in terms of a pre-
 and postcondition, to its implementation. When compared to the
 refinement calculus, however, we have not yet described how to mix
-code and specifications---\todo{a point we will return to
-  later}. Before doing so, however, we will explore several other
-effects, their semantics in terms of predicate transformers, and the
-refinement relation that arises from these semantics.
+code and specifications---a point we will return to later
+(Section~\ref{sec:stepwise-refinement}). Before doing so, however, we
+will explore several other effects, their semantics in terms of
+predicate transformers, and the refinement relation that arises from
+these semantics.
 
 \subsection*{Alternatives}
 \label{alternative-abort}
@@ -587,7 +588,7 @@ computation aborts:
     defaultPT x (Pure y)        = P x y 
     defaultPT x (Step Abort _)  = P x d
 \end{code}
-Note that we could generalize this further, allowing for |b| to depend
+Note that we could generalise this further, allowing for |b| to depend
 on |a|---as we do not need this in this example, we will refrain from
 doing so.
 
@@ -961,7 +962,7 @@ module Compositionality
 Note that this proof requires that the semantics of Kleisli morphisms,
 |wpCR|, is defined in terms of the predicate transformer |pt|. If we
 restr ourselves to Kleisli arrows, however, we can formulate similar
-properties even more succincly.
+properties even more succinctly.
 %if style == newcode
 \begin{code}
   compositionality (Pure x) f P = refl
@@ -1021,7 +1022,7 @@ following property:
 \subsection*{Rule of consequence}
 \label{sec:consequence}
 
-Thise example illustrates how reasoning about programs written using
+This example illustrates how reasoning about programs written using
 the state monad give rise to the typical pre- and postcondition
 reasoning found in the verification of imperative programs. Indeed, we
 can also show that the familiar laws for the weakening of preconditions and
@@ -1081,7 +1082,7 @@ stateful computations:
 \end{code}
 %endif
 Here we define a degenerate instance of the previous |wpState| function
-that works on terms of type |State b| rather than Kliesli arrows |a ->
+that works on terms of type |State b| rather than Kleisli arrows |a ->
 State b|. To do so, we simply call the previous semantics,
 instantiating the type variable |a| to the unit type.
 
@@ -1114,7 +1115,7 @@ More generally, we can use such an equivalence relation to verify that
 the predicate transformer semantics defined respect a set of equations
 that are expected to hold for a given algebraic effect.
 
-\section{Nondeterminism}
+\section{Non-determinism}
 \label{sec:non-det}
 
 Can we repeat this construction of predicate transformer semantics for
@@ -1228,9 +1229,9 @@ example, this boils down to showing:
 \subsection*{Refinement}  
 
 These two predicate transformer semantics give rise to two different
-refinement relations. We can characterize both in terms of the
+refinement relations. We can characterise both in terms of the
 elements that the non-deterministic computations may return. We can
-characterize these elements using the following relation:
+characterise these elements using the following relation:
 \begin{code}
   data Elem (hidden(a : Set)) (x : a) : ND a -> Set where
       Here   : Elem x (Pure x)
@@ -1433,7 +1434,7 @@ invariant arising from a given specification:
 \end{code}
 If there are no recursive calls, the postcondition must hold, provided
 the precondition does. If there is a recursive call on the argument |j
-: I|, the precondition must hold for |j|, assuming it already holds
+: I|, the precondition must hold for |j|, assuming it holds initially
 for |i|. Furthermore, for any for result |o : O j| satisfying the
 postcondition, the remaining continuation |k o| must continue to
 satisfy the desired specification.
@@ -1453,7 +1454,7 @@ of the |f91| function as follows:
 %if style == newcode
 \begin{code}
   f91-partial-correctness P i with 100 lt i
-  f91-partial-correctness P i | yes p with 100 lt i --  TODO: why do we need to check this twice?
+  f91-partial-correctness P i | yes p with 100 lt i
   f91-partial-correctness P i | yes p | yes _ = λ H → (tt , (λ x eq → Pair.snd H _ eq)) , (λ x → refl)
   f91-partial-correctness P i | yes p | no ¬p = magic (¬p p)
   f91-partial-correctness P i | no ¬p = λ x → (tt , (λ x₁ x₂ → Pair.snd x x₁ x₂)) ,
@@ -1489,14 +1490,15 @@ of the |f91| function as follows:
     lemma i o o' i≤100 oPost o'Post | no ¬p | no ¬p₁ = o'Post
 \end{code}
 %endif
-There are a variety of techniques to prove the termination of
+There are a variety of techniques to guarantee the termination of
 recursive functions such as: bounding the number of iterations,
-generating a coinductive trace, adding a monadic fixpoint operator,
-proving the recursive calls are well-founded, or performing inducton
-on an auxiliary data structure~\cite{bove-capretta}.~\todo{citations}
+generating a coinductive trace, adding a coinductive fixpoint
+operator~\cite{capretta}, proving the recursive calls are
+well-founded, or performing induction on an auxiliary data
+structure~\cite{bove-capretta}.
 
-\todo{Soundness?}  \todo{Example correctness proof?}
-\todo{Refinement?}  \todo{Mention loop invariants?}
+\todo{Soundness?}
+\todo{Refinement?}  
 
 \section{Stepwise refinement}
 \label{sec:stepwise-refinement}
@@ -1504,7 +1506,7 @@ on an auxiliary data structure~\cite{bove-capretta}.~\todo{citations}
 %if style == newcode
 \begin{code}
 module Mix (C : Set) (R : C -> Set) (ptalgebra : (c : C) -> (R c -> Set) -> Set) where
-  open Free
+  open Free hiding (_>>_=)
   open Maybe using (SpecK; [[_,_]]; Spec; wpSpec)
 \end{code}
 %endif
@@ -1594,7 +1596,7 @@ Kleisli morphisms. For
 \end{code}
 %endif
 We have seen many examples of such semantics in the previous
-sections. We can use these semantics andt the predicate transformer
+sections. We can use these semantics and the predicate transformer
 semantics we have seen previously to define a semantics on unfinished
 programs derivations:
 \begin{code}
@@ -1604,6 +1606,13 @@ programs derivations:
 The crucial step here is to transform the argument predicate |P| to
 work on specifications or values of type |I a| using the |ptI|
 function we defined previously.
+
+\begin{code}
+  _>>=_ : (Forall(a b)) (M a) -> (a -> M b) -> M b
+  Pure (Done x) >>= f     = f x
+  Pure (Hole spec) >>= f  = Pure (Hole {!!})
+  (Step c k) >>= f        = Step c (\ r →  k r >>= f)
+\end{code}
 
 In general, the process of program calculation now consists of a
 proving a series of refinement steps from some initial specification:
@@ -1628,7 +1637,7 @@ Throughout this paper, we have more than once been forced to choose
 between the most general definition possible possible and a less
 general choice, that suffices for the examples we covered. When
 possible, we have favoured simplicity over generality. For instance,
-the type of our specifications can be generalized even further, making
+the type of our specifications can be generalised even further, making
 the postcondition dependent on the precondition:
 \begin{spec}
   record Spec (a : Set) (b : a -> Set) : Set where
@@ -1639,7 +1648,8 @@ the postcondition dependent on the precondition:
 The resulting definition is that of an \emph{indexed
   containers}~\cite{indexed}. We have chosen to present a simply-typed
 version of a function---even if a more general dependently typed
-alternative exists---when we did not need the added generality.
+alternative exists---when the added generality was unnecessary for our
+examples.
 
 Throughout this paper, we have not concerned ourselves with issues of
 size. Our Agda implementation relies on the unsound axiom that |Set :
