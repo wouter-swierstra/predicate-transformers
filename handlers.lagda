@@ -1497,8 +1497,7 @@ operator~\cite{capretta}, proving the recursive calls are
 well-founded, or performing induction on an auxiliary data
 structure~\cite{bove-capretta}.
 
-\todo{Soundness?}
-\todo{Refinement?}  
+\todo{Soundness proof}
 
 \section{Stepwise refinement}
 \label{sec:stepwise-refinement}
@@ -1664,13 +1663,15 @@ presentation and ease of development.
 \subsection*{Related work}
 \label{sec:related-work}
 
-Relation with Dijkstra monad?
+There is a great deal of work studying how to reason about effects in
+type theory\cite{beauty, swierstra-phd, nanevski1, nanevski2,
+  nanevski3}. More
+recently, F$\star$~\cite{fstar} has used Dijkstra
+monads~\cite{dijkstra-monad}.
 
-Just do it.
+In the context of simply typed functional programming, ~\cite{gibbons, gibbons-hinze}
 
-Other semantics for algebraic effects papers?
-
-Hoare type theory/hoare logic for the state monad
+Swierstra and Alpuim~\cite{alpuim1, alpuim2}
 
 
 
@@ -1689,7 +1690,10 @@ the coproduct of our free monads, in the style of
 syntactically; we hope that the composition of predicate transformers,
 as we have already done in the section on program calculation, can be
 used to assign semantics to programs using a variety of different
-effects.
+effects, similarly to \todo{effect handlers in scope}.
+This is similar to monad transformers\cite{liang-hudak-jones:transformers}.
+
+Programming and reasoning with algebraic effects and dependent types (ICFP 2013)
 
 Throughout this paper, we have chosen to verify small example programs
 to validate our design choices. Scaling these developments to
@@ -1698,6 +1702,8 @@ larger programs is by no means an easy task.
 Not everything is easy to express as a free monad.
 
 Control flow laws.
+
+Efficiency of free monads Voigtlander/freer monads (Kiselyov)
 
 
 % \item wp (s,q) or wp (s,p) implies wp(s,q or p) -- but not the other
