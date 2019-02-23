@@ -1497,7 +1497,51 @@ operator~\cite{capretta}, proving the recursive calls are
 well-founded, or performing induction on an auxiliary data
 structure~\cite{bove-capretta}.
 
-\todo{Soundness proof}
+We can give the petrol-driven semantics:
+%if style == newcode
+\begin{code}
+  open import Data.Maybe
+  ifJust : (Forall (a)) (a -> Set) -> Maybe a -> Set
+  ifJust P nothing = ⊤
+  ifJust P (just x) = P x
+\end{code}
+%endif
+\begin{code}
+  petrol : (Forall (I O a)) (f : I ~~> O) -> Free I O a -> Nat -> Maybe a
+  petrol f (Pure x) n = just x
+  petrol f (Step c x) Zero = nothing
+  petrol f (Step c x) (Succ n) = petrol f (f c >>= x) n
+\end{code}
+
+Given these semantics, we can prove that partially correct functions work as expected. Here |ifJust P| is true for |Nothing| and for |Just x| such that |P x|. The proof goes by induction on |n|.
+\begin{code}
+  soundness : (Forall (I O)) (f : I ~~> O) ->
+    (spec : Spec I O) (P : (i : I) -> O i -> Set) ->
+    (∀ i -> wpRec spec f P i) -> ∀ n i → ifJust (P i) (petrol f (f i) n)
+\end{code}
+%if style == newcode
+\begin{code}
+  soundness f spec P wpH n i = soundness' f spec P (f i) n wpH (wpH i)
+    where
+    invariant-compositionality : ∀ {I} {O : I → Set} {i i'} spec
+      (S : Free I O (O i)) (k : (O i) -> Free I O (O i')) ->
+      invariant i spec S -> Spec.pre spec i -> (∀ o → Spec.post spec i o → invariant i' spec (k o)) ->
+      invariant i' spec (S >>= k)
+    invariant-compositionality spec (Pure x) k SH preH kH = kH x (SH preH)
+    invariant-compositionality spec (Step c k') k (fst , snd) preH kH = (λ _ → fst preH) , λ o postH → invariant-compositionality spec (k' o) k (snd o postH) preH kH
+    soundness' : ∀ {I} {O : I → Set} {i}
+      (f : (i : I) → Free I O (O i)) (spec : Spec I O) (P : (i : I) -> O i → Set)
+      (S : Free I O (O i)) (n : Nat) ->
+      (∀ i -> wpRec spec f P i) ->
+      wpSpec spec P i ∧ invariant i spec S ->
+      ifJust (P i) (petrol f S n)
+    soundness' f spec P (Pure x) n wpH ((preH , postH) , invH) = postH x (invH preH)
+    soundness' f spec P (Step c k) Zero wpH H = tt
+    soundness' f spec P (Step c k) (Succ n) wpH (specH , (preH , postH)) = soundness' f spec P (f c >>= k) n wpH (specH , invariant-compositionality spec (f c) k (Pair.snd (wpH c)) (preH (Pair.fst specH)) postH)
+\end{code}
+%endif
+
+\todo{Mention loop invariants?}
 
 \section{Stepwise refinement}
 \label{sec:stepwise-refinement}
@@ -1505,7 +1549,7 @@ structure~\cite{bove-capretta}.
 %if style == newcode
 \begin{code}
 module Mix (C : Set) (R : C -> Set) (ptalgebra : (c : C) -> (R c -> Set) -> Set) where
-  open Free hiding (_>>_=)
+  open Free hiding (_>>=_)
   open Maybe using (SpecK; [[_,_]]; Spec; wpSpec)
 \end{code}
 %endif
