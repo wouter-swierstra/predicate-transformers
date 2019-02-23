@@ -1506,7 +1506,7 @@ structure~\cite{bove-capretta}.
 %if style == newcode
 \begin{code}
 module Mix (C : Set) (R : C -> Set) (ptalgebra : (c : C) -> (R c -> Set) -> Set) where
-  open Free hiding (_>>_=)
+  open Free hiding (_>>=_)
   open Maybe using (SpecK; [[_,_]]; Spec; wpSpec)
 \end{code}
 %endif
@@ -1625,10 +1625,84 @@ Here the intermediate steps (|i1|, |i2|, and so forth) may mix
 specifications and effectful computations; the final program, |c|,
 is executable.
 
-\todo{example}
-\todo{bind}
+%if style == newcode
+\begin{code}
+module StateExample where
+  open Free hiding (_>>=_)
+  open Maybe using (Spec; SpecK; [[_,_]]; wpSpec)
+  open State Nat
+
+  -- We have to redo the Mix section since our specifications incorporate the state
+  data I (a : Set) : Set where
+    Done  : a -> I a
+    Hole  : SpecK Nat (a × Nat) -> I a
+  M : Set -> Set
+  M a = State (I a)
+  ptI : forall { a } ->  I a -> (a × Nat -> Set) -> Nat -> Set
+  ptI (Done x)     P t  = P (x , t)
+  ptI (Hole spec)  P t  = wpSpec spec (const P) t
+  wpM : forall { a b } -> (a -> M b) -> (a × Nat -> b × Nat -> Set) -> (a × Nat -> Set)
+  wpM f P = wpState f (λ i o -> ptI (Pair.fst o) (P i) (Pair.snd o))
+  _>>=_ : forall { a b } ->  (M a) -> (a -> M b) -> M b
+  Pure (Done x) >>= f     = f x
+  Pure (Hole spec) >>= f  = Pure (Hole {!!})
+  (Step c k) >>= f        = Step c (\ r →  k r >>= f)
+  _>=>_ : forall {a b c} -> (a -> M b) -> (b -> M c) -> a -> M c
+  (f >=> g) x = f x >>= g
 
 
+  done : forall {a} -> a -> M a
+  done x = Pure (Done x)
+  get' : ⊤ -> M Nat
+  get' _ = Step Get done
+  put' : Nat -> M ⊤
+  put' t = Step (Put t) done
+\end{code}
+%endif
+
+First, we give specifications for the smart constructors and show they are satisfied:
+\begin{code}
+  getPost : ⊤ × Nat -> Nat × Nat → Set
+  getPost (_ , t) (x , t') = (t == x) × (t == t')
+  putPost : Nat × Nat → ⊤ × Nat → Set
+  putPost (t , _) (_ , t') = t == t'
+
+  doGet : forall { pre } ->  wpSpec [[ pre , (\ i o -> pre i × getPost i o) ]] ⊑ wpM get'
+  doPut : forall { pre } ->  wpSpec [[ pre , (\ i o -> pre i × putPost i o) ]] ⊑ wpM put'
+\end{code}
+%if style == newcode
+\begin{code}
+  doGet P (_ , t) (fst , snd) = snd (t , t) (fst , (refl , refl))
+  doPut P (t , _) (fst , snd) = snd (tt , t) (fst , refl)
+\end{code}
+%endif
+
+Here is how to combine the specification on the right side of a bind,
+given the specification of the left side and of the whole.
+The precondition says that the intermediate value |y| must come from some argument |x| to the left hand side.
+The postcondition says that for all such |x| that could lead to this |y|, the right hand side could lead to the given |z|.
+\begin{code}
+  preR : ∀ {a b} (postL : a → b → Set) (preLR : a → Set) → b → Set
+  preR {a} postL preLR y = Sigma a λ x → preLR x × postL x y
+  postR : ∀ {a b c} (postL : a → b → Set) (preLR : a → Set) (postLR : a → c → Set) → b → c → Set
+  postR postL preLR postLR y z = ∀ x → preLR x × postL x y → postLR x z
+\end{code}
+
+This allows us to refine a specification by applying a |get| or |put|:
+\begin{code}
+  get>=> : ∀ {a pre post} ->
+    (f : Nat -> M a) -> wpSpec [[ preR getPost pre , postR getPost pre post ]] ⊑ wpM f ->
+    wpSpec [[ pre , post ]] ⊑ wpM (get' >=> f)
+  put>=> : ∀ {a pre post} ->
+    (f : ⊤ -> M a) -> wpSpec [[ preR putPost pre , postR putPost pre post ]] ⊑ wpM f ->
+    wpSpec [[ pre , post ]] ⊑ wpM (put' >=> f)
+\end{code}
+%if style == newcode
+\begin{code}
+  get>=> f H P x (fst , snd) = H (λ y z → P x z) (Pair.snd x , Pair.snd x) ((x , (fst , (refl , refl))) , λ z Hpost → snd z (Hpost x (fst , (refl , refl))))
+  put>=> f H P x (fst , snd) = H (λ y z → P x z) (tt , Pair.fst x) ((x , (fst , refl)) , λ z Hpost → snd z (Hpost x (fst , refl)))
+\end{code}
+%endif
 
 \section{Discussion}
 \label{sec:discussion}
