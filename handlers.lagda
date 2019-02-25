@@ -1787,7 +1787,9 @@ module StateExample where
   wpM f P = wpState f (\ i o -> ptI (Pair.fst o) (P i) (Pair.snd o))
   _>>=_ : forall { a b } ->  (M a) -> (a -> M b) -> M b
   Pure (Done x) >>= f     = f x
-  Pure (Hole spec) >>= f  = Pure (Hole {!!})
+  Pure (Hole [[ pre , post ]]) >>= f  =
+    Pure (Hole [[ pre ,
+      (\i ynat ->  ∀ x -> post i (x , i) -> ∀ P -> wpM f P (x , i) -> P (x , i) ynat) ]])
   (Step c k) >>= f        = Step c (\ r →  k r >>= f)
   _>=>_ : forall {a b c} -> (a -> M b) -> (b -> M c) -> a -> M c
   (f >=> g) x = f x >>= g
