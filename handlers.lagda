@@ -2121,8 +2121,9 @@ ideas scale easily beyond such simple examples: custom tactics and
 notation could help facilitate program calculation; further proof
 automation is necessary to keep the complexity of intermediate
 calculations in check. Nonetheless, we believe that the predicate
-transformer semantics defined in this paper \todo{are worth exploring
-  further; are interesting in their own right; are \emph{functional} \ldots }
+transformer semantics defined in this paper offer a \emph{functional}
+account of effects that is worth exploring further.
+
 
 
 \todo{Check bibliography}
