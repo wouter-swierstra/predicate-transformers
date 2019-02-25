@@ -49,14 +49,15 @@ module Maybe where
     Either (f x == g x) (f x == Nothing)
 
   ⊑-eq : {a b : Set} ->
-    (f g : a -> Maybe b) -> f ⊑ g -> LT f g
+    (f g : a -> Maybe b) -> f ⊑ g ->     Either (f x == g x) (f x == Nothing)
+
   ⊑-eq f g R x with f x | g x | R (\y -> f x == Just y) x
   ⊑-eq f g R x | Just y | Just x₁ | H = Inl (H refl)
   ⊑-eq f g R x | Just y | Nothing | H = magic (H refl)
   ⊑-eq f g R x | Nothing | _ | H = Inr refl
 
   eq-⊑ : {a b : Set} ->
-    (f g : a -> Maybe b) -> LT f g ->  f ⊑ g
+    (f g : a -> Maybe b) ->     Either (f x == g x) (f x == Nothing)  ->  f ⊑ g
   eq-⊑ f g eq P x H with f x | g x | eq x
   eq-⊑ f g eq P x H | Just y | Just .y | Inl refl = H
   eq-⊑ f g eq P x H | Just y | Nothing | Inl ()

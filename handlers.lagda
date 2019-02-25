@@ -153,7 +153,10 @@ show that the |Free| datatype is indeed a monad:
 \end{code}
 %endif
 The examples of effects studied in this paper will be phrased in terms
-of such free monads.
+of such free monads; each effect, described in a separate section,
+chooses |C| and |R| differently, depending on its corresponding
+operations.
+
 
 \subsection*{Weakest precondition semantics}
 
@@ -170,38 +173,54 @@ this paper, we will, however, focus on \emph{predicate transformer
 the state space of an (imperative) program, they can be readily
 adapted to the functional setting.
 
-The weakest precondition semantics, given by the function |wp| below,
-maps a function |f : a -> b| and a desired postcondition on the
-function's output, |b -> Set|, to the weakest precondition |a -> Set|
-on the function's input that ensures the postcondition will be
-satisfied:
+In general, we will refer to values of type |a -> Set| as a
+\emph{predicate} on the type |a|; \emph{predicate transformers} are
+functions between such predicates. The most famous example of a
+predicate transformer is the \emph{weakest precondition}, given by the
+function |wp| below:
 \begin{spec}
   wp : (f : a -> b) -> (b -> Set) -> (a -> Set)
   wp f P = \ x -> P (f x)
 \end{spec}
+The |wp| predicate transformer maps a function |f : a -> b| and a
+desired postcondition on the function's output, |b -> Set|, to the
+weakest precondition |a -> Set| on the function's input that ensures
+the postcondition will be satisfied. It's definition, however, is
+simply (reverse) function composition.
 
-This definition is often too restrictive. In particular, there is no
-way to specify that the output is related in a particular way to the
-input. This can be addressed easily enough by allowing the function
-|f| to be \emph{dependent}, yielding the following definition for
-weakest preconditions:
+This notion of weakest precondition semantics is often too
+restrictive. In particular, there is no way to specify that the output
+is related in a particular way to the input. This can be addressed
+easily enough by allowing the function |f| to be \emph{dependent},
+yielding the following definition for weakest preconditions:
 \begin{code}
   wp : (Forall(a : Set)) (implicit(b : a -> Set)) (f : (x : a) -> b x) -> ((x : a) -> b x -> Set) -> (a -> Set)
   wp f P = \ x -> P x (f x)
 \end{code}
+Although this type is a bit more complicated, |wp f| still maps a
+predicate to a predicate---hence we refer to it as a predicate
+transformer semantics for the function |f|. 
+
 When working with predicates and predicate transformers, we will
 sometimes use the following shorthand notation:
 \begin{code}
   _⊆_ : (implicit(a : Set)) (a -> Set) -> (a -> Set) -> Set
   P ⊆ Q = ∀ x -> P x -> Q x  
 \end{code}
-
-One reason to use weakest precondition semantics is that they give
-rise to a notion of \emph{refinement}:
+Predicate transformer semantics give rise to a notion of
+\emph{refinement}~\cite{back2012refinement,morgan1994programming}:
 \begin{code}
   _⊑_ : (implicit(a : Set)) (implicit (b : a -> Set)) (pt1 pt2 : ((x : a) -> b x -> Set) -> (a -> Set)) -> Set
   pt1 ⊑ pt2 = forall P -> pt1 P ⊆ pt2 P
 \end{code}
+This refinement relation is defined between \emph{predicate
+  transformers}. As we assign predicate transformer semantics to
+programs and specifications, we can relate them using this refinement
+relation. For example, we can use this refinement relation to show a
+program satisfies its specification; or to show that one program is
+somehow `better' than another, where the notion of `better' arises
+from the predicate transformer semantics we assign to programs.
+
 It is straightforward to show that this refinement relation is both transitive and reflexive:
 \begin{code}
   ⊑-trans  : (implicit (a : Set)) (implicit (b : a -> Set)) (implicit (P Q R : ((x : a) -> b x -> Set) -> (a -> Set))) P ⊑ Q -> Q ⊑ R -> P ⊑ R
@@ -219,15 +238,44 @@ In a pure setting, this refinement relation is not particularly
 interesting: the refinement relation corresponds to extensional
 equality between functions. The following lemma follows from the
 `Leibniz rule' for equality in intensional type theory:
+\begin{spec}
+  refinement : forall (f g : a -> b) ->
+    (wp f ⊑ wp g) ^^ ↔ ^^ (forall x -> f x == g x)
+\end{spec}
+%if style == newcode
+\begin{code}
+  ⊑-eq : {a b : Set} ->
+    (f g : a -> b) -> wp f ⊑ wp g -> (x : a) -> f x == g x
+  ⊑-eq f g R x = R (\_ y -> f x == y) x refl 
 
-\begin{lemma*}
-  For all functions, \emph{|f : a -> b|} and \emph{|g : a -> b|}, the refinement
-  \emph{|wp f ^^ ⊑ ^^ wp g|} holds if and only if \emph{|f x == g x|} for all \emph{|x : a|}.
-\end{lemma*}
-
-Although these definitions work for arbitrary functions, we have not
-yet mentioned effects at all. We will now explore how to use and adapt
-these definitions to specify, verify, and calculate effectful programs.
+  eq-⊑ :  {a b : Set} ->
+    (f g : a -> b) -> ((x : a) -> f x == g x) ->  wp f ⊑ wp g
+  eq-⊑ f g eq P x H with f x | g x | eq x
+  ... | _ | _ | refl = H
+\end{code}
+%endif
+In the remainder of this paper, we will define predicate transformer
+semantics for \emph{Kleisli arrows} of the form |a -> Free C R
+b|. While we could use the |wp| function to assign these computations
+semantics directly, we are typically not interested in syntactic
+equality between free monads---but rather want to study the semantics
+of the effectful programs they represent. To define a predicate
+transformer semantics for effects we need to define a function of the
+following general form:
+\begin{center}
+\begin{spec}
+  pt : (a -> Set) -> Free C R a -> Set
+\end{spec}
+\end{center}
+These functions show how to lift a predicate on the type |a| over an
+effectful computation returning values of type |a|. The definition of
+|pt| depends very much on the semantics we wish to assign to the
+effects of the free monad; the coming sections will give many examples
+of such semantics. Crucially, the choice of |pt| and our weakest
+precondition semantics, |wp|, together give us a way to assign weakest
+precondition semantics to Kleisli arrows representing effectful
+computations. Using these semantics for effectful computations, we can
+then specify, verify, and calculate effectful programs.
 
 \section{Partiality}
 \label{sec:maybe}
@@ -285,11 +333,19 @@ division and natural numbers:
     Val : Nat -> Expr
     Div : Expr -> Expr -> Expr
 \end{code}
+We can specify the semantics of this language using an inductively
+defined \emph{relation}:
+\begin{code}
+  data _⇓_ : Expr -> Nat -> Set where
+    Base : (Forall(x)) Val x ⇓ x
+    Step : (Forall(l r v1 v2)) l ⇓ v1 -> r ⇓ (Succ v2) -> Div l r ⇓ (v1 div (Succ v2))
+\end{code}
+In this definition, we rule out erroneous results by requiring that
+the divisor always evaluates to a non-zero value.
 
-To evaluate these expressions, we can define a \emph{monadic}
-interpreter, using the |Partial| monad to handle division-by-zero
-errors:
-
+Alternatively we can evaluate expressions by defining a
+\emph{monadic} interpreter, using the |Partial| monad to handle
+division-by-zero errors:
 \begin{code}
   ⟦_⟧ : Expr -> Partial Nat
   ⟦ Val x ⟧      =  return x
@@ -305,21 +361,12 @@ The division operator from the standard library (|div|) requires an
 implicit proof that the divisor is non-zero. In the case when the
 divisor is |Zero|, we fail explicitly.
 
-Alternatively, we can specify the semantics of our language using a
-\emph{relation}:
-\begin{code}
-  data _⇓_ : Expr -> Nat -> Set where
-    Base : (Forall(x)) Val x ⇓ x
-    Step : (Forall(l r v1 v2)) l ⇓ v1 -> r ⇓ (Succ v2) -> Div l r ⇓ (v1 div (Succ v2))
-\end{code}
-In this definition, we rule out erroneous results by requiring that
-the divisor always evaluates to a non-zero value.
 
-How can we relate these two definitions? We can define a weakest
-precondition semantics using the |wp| function defined previously
-to computations of type |Partial b|:
+How can we relate these two definitions? We can assign a weakest
+precondition semantics to Kleisli arrows of the form |a -> Partial b|
+as follows:
 \begin{code}
-  wpPartial : (implicit (a : Set)) (implicit (b : a -> Set)) (f : (x : a) -> Partial (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
+  wpPartial : (implicit (a : Set)) (implicit (b : a -> Set)) (f : (x : a) -> Partial (b x)) -> (P : (x : a) -> b x -> Set) -> (a -> Set)
   wpPartial f P = wp f (mustPT P)
     where
     mustPT : (Forall(a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> Partial (b x) -> Set
@@ -328,20 +375,40 @@ to computations of type |Partial b|:
 \end{code}
 To call the |wp| function we defined previously, we need to show how
 to transform a predicate |P : b -> Set| to a predicate on partial
-results, |Partial b -> Set|.  To do so, we define the auxiliary function
-|mustPT|; the proposition |mustPT P c| holds when a computation |c| of
-type |Partial b| successfully returns a value of type |b| that
-satisfies |P|.
+results, |Partial b -> Set|.  To do so, we define the auxiliary
+function |mustPT|; the proposition |mustPT P c| holds when a
+computation |c| of type |Partial b| successfully returns a value of
+type |b| that satisfies |P|. The predicate transformer semantics we
+wish to assign to partial computations is determined by how we define
+|mustPT|. In this case, we wish to rule out failure entirely; hence
+the case for the |Abort| constructor returns the empty type.
 
-As a first attempt, we might define the following predicate
-characterising when evaluation is guaranteed to produce a result:
+Now that we have a predicate transformer semantics for Kleisli arrows
+in general, we can study the semantics of our monadic interpreter. To
+do so, we pass the interpreter, |⟦_⟧|, and desired postcondition,
+|_⇓_|,  as arguments to |wpPartial|:
+\begin{center}
+\begin{spec}
+  wpPartial ⟦_⟧ _⇓_ : Expr -> Set
+\end{spec}
+\end{center}
+This results in a predicate on expressions. For all expressions
+satisfying this predicate, we know that the monadic interpreter and
+the relational specification, |_⇓_|, must agree on the result of
+evaluation. 
+
+But what does this tell us about the correctness of our interpreter?
+To understand the resulting predicate better, we might consider
+manually defining our own predicate on expressions:
 \begin{code}
   SafeDiv : Expr -> Set
-  SafeDiv (Val x)       = (Val x ⇓ Zero) -> ⊥
-  SafeDiv (Div e1 e2)   = (e2 ⇓ Zero -> ⊥) × SafeDiv e1 × SafeDiv e2
+  SafeDiv (Val x)       = ⊤
+  SafeDiv (Div e1 e2)   = (e2 ⇓ Zero -> ⊥) ∧ SafeDiv e1 ∧ SafeDiv e2
 \end{code}
-We can now show that |SafeDiv| is a sufficient condition for our two
-notions of evaluation to coincide:
+We would expect that any expression |e| for which |SafeDiv e| holds,
+can be evaluated without encountering a division-by-zero
+error. Indeed, we can prove that |SafeDiv| is a sufficient condition
+for our two notions of evaluation to coincide:
 \begin{code}
   correct : SafeDiv ⊆ wpPartial ⟦_⟧ _⇓_
 \end{code}
@@ -355,14 +422,8 @@ notions of evaluation to coincide:
   correct (Div e1 e2) (nz , (h1 , h2)) | Step Abort x | v2 | () | ih2
 \end{code}
 %endif
-That is, we can \emph{compute} the weakest precondition |wpPartial ⟦_⟧
-_⇓_| that guarantees that a partial computation, here the evaluation
-|⟦ e ⟧| of some expression |e|, returns a result satisfying the
-behaviour specified by the relation |_⇓_|. The |wpPartial| function
-assigns a \emph{predicate transformer semantics} to Kleisli arrows;
-the above lemma relates the two semantics, expressed as a relation and
-an evaluator, for those expressions that satisfy the |SafeDiv|
-property.
+This lemma relates the two semantics, expressed as a relation and an
+evaluator, for those expressions that satisfy the |SafeDiv| property.
 
 We may not want to define predicates such as |SafeDiv|
 ourselves. Instead, we can define the more general predicate
@@ -371,8 +432,8 @@ characterising the \emph{domain} of a partial function:
   dom : (implicit(a : Set)) (implicit (b : a -> Set)) ((x : a) -> Partial (b x)) -> (a -> Set)
   dom f = wpPartial f (\ _ _ -> ⊤)
 \end{code}
-Indeed, we use this notion of domain to show that the two semantics
-agree precisely:
+Once again, we can show that the two semantics agree precisely on the
+domain of the interpreter:
 \begin{code}
   sound     : dom ⟦_⟧            ^^ ⊆ ^^ wpPartial ⟦_⟧ _⇓_
   complete  : wpPartial ⟦_⟧ _⇓_  ^^ ⊆ ^^ dom ⟦_⟧
@@ -432,12 +493,11 @@ fairly straightforward.
 The weakest precondition semantics on partial computations defined
 above gives rise to a refinement relation on Kleisli arrows of the
 form |a -> Partial b|. We can characterise this relation by proving
-the following lemma.
-\begin{lemma*}
-  For all functions, \emph{|f : a -> Partial b|} and \emph{|g : a -> Partial b|},
-  the refinement relation \emph{|wpPartial f ⊑ wpPartial g|} holds if and only if for all \emph{|x :
-  a|}, \emph{|f x == g x|} or \emph{|f x == Abort|}.
-\end{lemma*}  
+the following lemma:
+\begin{spec}
+  refinement : (f g : a -> Maybe b) ->
+    (wpPartial f ^^ ⊑ ^^ wpPartial g) ^^ ↔ ^^  (forall x -> (f x == g x) ∨ (f x == Nothing))
+\end{spec}
 Why care about this refinement relation? Not only can we use it to
 relate Kleisli morphisms, but it can also relate a program to a
 specification given by a pre- and postcondition, as we shall see
@@ -496,7 +556,7 @@ predicate transform \emph{semantics} for our specifications. The
 |wpSpec| function does precisely this:
 \begin{code}
   wpSpec : (Forall(a)) (implicit(b : a -> Set)) Spec a b -> (P : (x : a) -> b x -> Set) -> (a -> Set)
-  wpSpec [[ pre , post ]] P = \ x -> (pre x) × (post x ⊆ P x)
+  wpSpec [[ pre , post ]] P = \ x -> (pre x) ∧ (post x ⊆ P x)
 \end{code}
 Given a specification, |Spec a b|, the |wpSpec| function computes the
 weakest precondition necessary to satisfy an arbitrary postcondition
@@ -513,8 +573,8 @@ Defining such a program and verifying its correctness is entirely
 straightforward:
 \begin{code}
   pop : (Forall (a)) List a -> Partial (a × List a)
-  pop Nil = abort
-  pop (x :: xs) = return (x , xs)
+  pop Nil        = abort
+  pop (x :: xs)  = return (x , xs)
 
   add : List Nat -> Partial (List Nat)
   add xs =
@@ -540,7 +600,7 @@ will explore several other effects, their semantics in terms of
 predicate transformers, and the refinement relation that arises from
 these semantics.
 
-\subsection*{Alternatives}
+\subsection*{Alternative semantics}
 \label{alternative-abort}
 
 The predicate transformers arising from the |wpPartial| function are
@@ -581,7 +641,7 @@ do so, we provide the following |wpDefault| function that requires the
 desired postcondition |P| holds of the default value when the
 computation aborts:
 \begin{code}
-  wpDefault : (Forall (a b : Set)) (d : b) -> (a -> Partial b) -> (P : a -> b -> Set) -> (a -> Set)
+  wpDefault : (Forall (a b : Set)) (d : b) -> (f : a -> Partial b) -> (P : a -> b -> Set) -> (a -> Set)
   wpDefault (hidden(a)) (hidden(b)) d f P = wp f defaultPT
     where
     defaultPT : (x : a) -> Partial b -> Set
@@ -633,7 +693,7 @@ semantics with respect to a given handler. Semantics, such as
 |wpDefault| and |wpPartial|, compute \emph{some} predicate; it is only
 by proving such soundness results that we can ensure that this
 predicate is meaningful. Furthermore, this example shows how different
-choices of handler may exist for different effects---a point we shall
+choices of handler may exist for the \emph{same} effect---a point we shall
 return to when discussing non-determinism (Section~\ref{sec:non-det}).
 
 
@@ -707,9 +767,9 @@ initial state:
   statePTR : (Forall(b : Set)) State b -> (s -> b × s -> Set) -> s -> Set
   statePTR c P i = statePT c (P i) i
 \end{code}
-In the remainder of this section, we will occasionally alternate
-between these two variations of the |statePT| function; the context
-will disambiguate which version is being used.
+In the remainder of this section, we will overload the variable name
+|statePT| to refer to both variations of the same function; the
+context and source code can be used to determine the version being used.
 
 Finally, we can define a weakest precondition semantics for Kleisli
 morphisms of the form |a -> State b|:
@@ -846,6 +906,8 @@ particular, the goal we wish to prove amounts to the following statement:
 At first glance, it is not at all obvious how to apply our induction
 hypothesis!
 
+\subsection*{Compositionality}
+\label{sec:compositionality}
 To complete the proof, we need an auxiliary lemma that enables us to
 prove a property of a composite computation, |c >>= f|, in terms of
 the semantics of |c| and |f|:
@@ -865,7 +927,7 @@ have a similar rule, mapping sequential composition of programs to the
 composition of their associated predicate transformers:
 \begin{center}
 \begin{spec}
-wp(c1 ; c2, R) = wp(c1, wp(c2,R))  
+wp(c1 ; c2, R) = wp(c1, wp(c2, R))  
 \end{spec}
 \end{center}
 By defining semantics for Kleisli morphisms, |wpState|, in terms of
@@ -1071,7 +1133,7 @@ weakest precondition semantics presented here?
 Firstly, we can define the following equivalence relation between
 stateful computations:
 \begin{code}
-  _≃_ : {b : Set} -> State b  -> State b -> Set
+  _≃_ : (Forall(b : Set)) State b  -> State b -> Set
   t1 ≃ t2 = (wpState' t1 ⊑ wpState' t2) ∧ (wpState' t2 ⊑ wpState' t1)
     where
     wpState' : (Forall(b)) State b -> (P : s -> b × s -> Set) -> (s -> Set)
@@ -1199,33 +1261,33 @@ respect to these semantics. In the case for the |wpAll| function, for
 example, this boils down to showing:
 %if style == newcode
 \begin{code}
-  all : {a : Set} -> (a -> Set) -> List a -> Set
-  all P Nil = ⊤
-  all P (x :: xs) = P x ∧ all P xs
+  All : {a : Set} -> (a -> Set) -> List a -> Set
+  All P Nil = ⊤
+  All P (x :: xs) = P x ∧ All P xs
 
-  all++ : {a : Set} (P : a -> Set) (xs ys : List a) ->
-    all P xs -> all P ys -> all P (xs ++ ys)
-  all++ P Nil ys H1 H2 = H2
-  all++ P (x :: xs) ys (Px , H1) H2 = Px , all++ P xs ys H1 H2
+  All++ : {a : Set} (P : a -> Set) (xs ys : List a) ->
+    All P xs -> All P ys -> All P (xs ++ ys)
+  All++ P Nil ys H1 H2 = H2
+  All++ P (x :: xs) ys (Px , H1) H2 = Px , All++ P xs ys H1 H2
 
   allSoundness : {a : Set} {b : a -> Set} (P : (x : a) -> b x -> Set) (x : a) (nd : ND (b x)) ->
-    allPT P x nd -> all (P x) (run nd)
+    allPT P x nd -> All (P x) (run nd)
   allSoundness P x (Pure y) H = H , tt
   allSoundness P x (Step Fail _) H = tt
   allSoundness P x (Step Choice k) (H1 , H2) =
-    all++ (P x) (run (k True)) (run (k False)) (allSoundness P x (k True) H1) (allSoundness P x (k False) H2)
+    All++ (P x) (run (k True)) (run (k False)) (allSoundness P x (k True) H1) (allSoundness P x (k False) H2)
   \end{code}
 %endif
 \begin{code}
   wpAllSoundness : (Forall(a)) (implicit(b : a -> Set)) (f : (x : a) -> ND (b x)) ->
-    ∀ P x -> wpAll f P x -> all (P x) (run (f x))
+    ∀ P x -> wpAll f P x -> All (P x) (run (f x))
 \end{code}
 %if style == newcode
   \begin{code}
   wpAllSoundness nd P x H = allSoundness P x (nd x) H
   \end{code}
 %endif
-
+\todo{All requires P to hold for all elements of a list}
 \subsection*{Refinement}  
 
 These two predicate transformer semantics give rise to two different
@@ -1353,7 +1415,7 @@ module Recursion where
       ; _∸_ to _-_
       )
   open NaturalLemmas
-  open Maybe using (SpecK; [[_,_]]; Spec; wpSpec)
+  open Maybe hiding (soundness)
 \end{code}
 %endif
 
@@ -1364,7 +1426,7 @@ that account for general recursion in type
 theory~\cite{bove_krauss_sozeau_2016}. Inspired
 by~\citet{mcbride2015turing}, however, we show how the call graph of a
 recursive functions can be described as a free monad, to which we can
-in turn, assign predicate transformer semantics.
+in turn assign predicate transformer semantics.
 
 Suppose we wish to define a recursive function of type |(i : I) -> O
 i|, for some input type |I : Set| and output type |O : I -> Set|. If
@@ -1379,8 +1441,10 @@ moment. We can describe such functions as follows:
 Once again, we have a Kleisli arrow on the |Free| monad. The choice of
 `commands' and `responses', however, are somewhat puzzling at
 first. The intuition is that the `effect' we are allowed to use
-amounts to consulting an oracle, that given an input |i : I| returns
-the corresponding output in |O i|.
+amounts to consulting an oracle, that given an input |j : I| returns
+the corresponding output in |O j|. A Kleisli arrow of the form |I ~~>
+O| takes an input |i : I| and may make any number of recursive calls,
+before returning a value in |O i|.
 
 As before, we define a smart constructor to make such calls:
 \begin{code}
@@ -1399,24 +1463,28 @@ To illustrate this point, we can define McCarthy's 91-function as follows:
   f91 i | no   _  = call (i + 11) >>= call
 \end{code}
 This definition is not recursive, but merely makes the recursive
-structure of the function body, |f91 (f91 (i+11))|, explicit. How can
-we reason about such functions? As is typical in the literature on
-predicate transformer semantics, we distinguish between \emph{total
-  correctness} and \emph{partial correctness}. For the moment, we will
-only concern ourselves with proving \emph{partial correctness} of our
-programs: provided a program terminates, it should produce the right
-result.
+structure of the function body, |f91 (f91 (i + 11))|, explicit. The
+first |call| corresponds to the inner application |f91 (i + 11)|; the
+result of this is fed to the a second |call|, corresponding to the
+outer application.
+
+How can we reason about such functions? As is typical in the
+literature on predicate transformer semantics, we distinguish between
+\emph{total correctness} and \emph{partial correctness}. For the
+moment, we will only concern ourselves with proving \emph{partial
+  correctness} of our programs: provided a program terminates, it
+should produce the right result.
 
 To prove partial correctness of the |f91| function, we define the
 following specification:
 \begin{code}
-  f91-post : Nat → Nat → Set
-  f91-post i o with 100 lt i
-  f91-post i o | yes _ = o == i - 10
-  f91-post i o | no _ = o == 91
+  f91Post : Nat → Nat → Set
+  f91Post i o with 100 lt i
+  f91Post i o | yes _  = o == i - 10
+  f91Post i o | no _   = o == 91
 
-  f91-spec : SpecK Nat Nat
-  f91-spec = [[ K ⊤ , f91-post ]]
+  f91Spec : SpecK Nat Nat
+  f91Spec = [[ K ⊤ , f91Post ]]
 \end{code}
 
 Although we cannot directly run `recursive' functions defined in this
@@ -1442,22 +1510,29 @@ satisfy the desired specification.
 Using this definition, we can now formulate a predicate transformer
 semantics for Kleisli arrows of the form |I ~~> O|:
 \begin{code}
-  wpRec : (Forall(I)) (implicit(O : I -> Set)) Spec I O -> (I ~~> O) -> (P : (i : I) -> O i -> Set) -> (I -> Set)
-  wpRec spec t P i = wpSpec spec P i ∧ invariant i spec (t i) 
+  wpRec : (Forall(I)) (implicit(O : I -> Set)) Spec I O -> (f : I ~~> O) -> (P : (i : I) -> O i -> Set) -> (I -> Set)
+  wpRec spec f P i = wpSpec spec P i ∧ invariant i spec (f i) 
 \end{code}
+In contrast to the semantics we have seen so far, the |wpRec| function
+requires a \emph{specification} as argument to determine the semantics
+of a \emph{computation}. This is analogous to how imperative programs
+require an explicit loop invariant: assigning semantics to recursive
+functions requires an explicit specification. The predicate
+transformer semantics |wpRec| states that this specification is indeed
+satisfied any recursive call respects the corresponding invariant.
+
 Using the |wpRec| function, we can formulate the partial correctness
 of the |f91| function as follows:
-
 \begin{code}
-  f91-partial-correctness : wpSpec f91-spec ⊑ wpRec f91-spec f91
+  f91Partial-correctness : wpSpec f91Spec ⊑ wpRec f91Spec f91
 \end{code}
 %if style == newcode
 \begin{code}
-  f91-partial-correctness P i with 100 lt i
-  f91-partial-correctness P i | yes p with 100 lt i
-  f91-partial-correctness P i | yes p | yes _ = λ H → (tt , (λ x eq → Pair.snd H _ eq)) , (λ x → refl)
-  f91-partial-correctness P i | yes p | no ¬p = magic (¬p p)
-  f91-partial-correctness P i | no ¬p = λ x → (tt , (λ x₁ x₂ → Pair.snd x x₁ x₂)) ,
+  f91Partial-correctness P i with 100 lt i
+  f91Partial-correctness P i | yes p with 100 lt i
+  f91Partial-correctness P i | yes p | yes _ = λ H → (tt , (λ x eq → Pair.snd H _ eq)) , (λ x → refl)
+  f91Partial-correctness P i | yes p | no ¬p = magic (¬p p)
+  f91Partial-correctness P i | no ¬p = λ x → (tt , (λ x₁ x₂ → Pair.snd x x₁ x₂)) ,
                                               ((λ _ → tt) , (λ o x₁ → (λ x₂ → tt) ,
                                               (λ o₁ x₂ x₃ → lemma i o _ ¬p x₁ x₂)))
     where
@@ -1479,7 +1554,7 @@ of the |f91| function as follows:
     between (Succ a) (Succ b) ¬lt (s≤s ltSucc) = cong Succ (between a b (¬lt ∘ s≤s) ltSucc)
 
     lemma : ∀ i o o' → ¬ (100 < i) →
-      f91-post (i + 11) o → f91-post o o' → f91-post i o'
+      f91Post (i + 11) o → f91Post o o' → f91Post i o'
     lemma i o o' i≤100 oPost o'Post with 100 lt i
     ... | yes p = magic (i≤100 p)
     ... | no ¬p with 100 lt o
@@ -1490,35 +1565,51 @@ of the |f91| function as follows:
     lemma i o o' i≤100 oPost o'Post | no ¬p | no ¬p₁ = o'Post
 \end{code}
 %endif
-There are a variety of techniques to guarantee the termination of
-recursive functions such as: bounding the number of iterations,
-generating a coinductive trace, adding a coinductive fixpoint
-operator~\cite{capretta}, proving the recursive calls are
-well-founded, or performing induction on an auxiliary data
-structure~\cite{bove-capretta}.
+The proof mimics the definition of the |f91| function. After comparing
+the input |i| to 100, the base case follows immediately. The recursive
+case, however, requires various auxiliary lemmas stating properties of subtraction.
 
-We can give the petrol-driven semantics:
-%if style == newcode
-\begin{code}
-  open import Data.Maybe
-  ifJust : (Forall (a)) (a -> Set) -> Maybe a -> Set
-  ifJust P nothing = ⊤
-  ifJust P (just x) = P x
-\end{code}
-%endif
-\begin{code}
-  petrol : (Forall (I O a)) (f : I ~~> O) -> Free I O a -> Nat -> Maybe a
-  petrol f (Pure x) n = just x
-  petrol f (Step c x) Zero = nothing
-  petrol f (Step c x) (Succ n) = petrol f (f c >>= x) n
-\end{code}
+What do we know about the soundness of |wpRec|? The semantics compute
+some predicate on the input |I|, but we would like to have some
+guarantee that this predicate is meaningful. Unfortunately, there is
+no way to run arbitrary recursive functions without compromising the
+soundness of Agda's type system. There are, however, a variety of
+techniques to guarantee the termination of recursive functions such
+as: bounding the number of iterations, generating a coinductive trace,
+adding a coinductive fixpoint operator~\cite{capretta}, proving the
+recursive calls are well-founded, or performing induction on an
+auxiliary data structure~\cite{bove-capretta}.
 
-Given these semantics, we can prove that partially correct functions work as expected. Here |ifJust P| is true for |Nothing| and for |Just x| such that |P x|. The proof goes by induction on |n|.
+We can prove a simple soundness result in terms of the `petrol-driven
+semantics' that runs a computation for a fixed number of steps.
 \begin{code}
-  soundness : (Forall (I O)) (f : I ~~> O) ->
-    (spec : Spec I O) (P : (i : I) -> O i -> Set) ->
-    (∀ i -> wpRec spec f P i) -> ∀ n i → ifJust (P i) (petrol f (f i) n)
+  petrol : (Forall(I O a)) (f : I ~~> O) -> Free I O a -> Nat -> Partial a
+  petrol f (Pure x)    n         = return x
+  petrol f (Step c x)  Zero      = abort
+  petrol f (Step c x)  (Succ n)  = petrol f (f c >>= x) n 
 \end{code}
+The last case is the only interesting one: it unfolds the function |f|
+once, decrementing the number of steps remaining. We would like to use
+this semantics, to formulate and prove the soundness of |wpRec|.
+There is one problem: the |petrol| function may fail to return a
+result and |abort|. Fortunately, we can define yet another predicate
+transformer semantics for partial computations:
+\begin{code}
+  mayPT : (Forall(a)) (a -> Set) -> (Partial a -> Set)
+  mayPT P (Pure x)        = P x
+  mayPT P (Step Abort _)  = ⊤
+\end{code}
+With these definitions in place, we can finally formulate and prove a
+soundness result regarding our |wpRec| semantics:
+\begin{code}
+  soundness : (Forall (I O)) (f : I ~~> O) (spec : Spec I O) (P : (i : I) -> O i -> Set) ->
+    (∀ i -> wpRec spec f P i) -> ∀ n i → mayPT (P i) (petrol f (f i) n)
+\end{code}
+This lemma guarantees that---under the assumption that the semantics
+|wpRec| holds for all inputs---whenever the petrol-driven semantics manage
+to produce a result, this result is guaranteed to satisfy the desired
+postcondition |P|.
+  
 %if style == newcode
 \begin{code}
   soundness f spec P wpH n i = soundness' f spec P (f i) n wpH (wpH i)
@@ -1534,15 +1625,13 @@ Given these semantics, we can prove that partially correct functions work as exp
       (S : Free I O (O i)) (n : Nat) ->
       (∀ i -> wpRec spec f P i) ->
       wpSpec spec P i ∧ invariant i spec S ->
-      ifJust (P i) (petrol f S n)
+      mayPT (P i) (petrol f S n)
     soundness' f spec P (Pure x) n wpH ((preH , postH) , invH) = postH x (invH preH)
     soundness' f spec P (Step c k) Zero wpH H = tt
     soundness' f spec P (Step c k) (Succ n) wpH (specH , (preH , postH)) = soundness' f spec P (f c >>= k) n wpH (specH , invariant-compositionality spec (f c) k (Pair.snd (wpH c)) (preH (Pair.fst specH)) postH)
 \end{code}
 %endif
 
-\todo{Mention loop invariants?}
-\todo{Wouter: read through Tim's text and edit where necessary}
 \section{Stepwise refinement}
 \label{sec:stepwise-refinement}
 
