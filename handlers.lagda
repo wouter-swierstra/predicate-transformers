@@ -1287,7 +1287,8 @@ example, this boils down to showing:
   wpAllSoundness nd P x H = allSoundness P x (nd x) H
   \end{code}
 %endif
-\todo{All requires P to hold for all elements of a list}
+  Here the predicate |All P xs| holds precisely when the predicate |P|
+  holds for all the elements of the list |xs|.
 \subsection*{Refinement}  
 
 These two predicate transformer semantics give rise to two different
@@ -1710,7 +1711,7 @@ computations, |M a|, we have not yet given their semantics. We can use
 the notion of weakest precondition on |I| to define a notion of
 weakest precondition for the computations in |M|. To do so, however,
 we need to assume that we have some weakest precondition semantics for
-Kleisli morphisms. For 
+Kleisli morphisms.
 %if style == newcode
 \begin{code}
   pt : (Forall(a)) Free C R a -> (a -> Set) -> Set
@@ -1736,17 +1737,17 @@ programs derivations:
   wpM f P x = wpCR f (\ x ix -> ptI ix (P x)) x
 \end{code}
 The crucial step here is to transform the argument predicate |P| to
-work on specifications or values of type |I a| using the |ptI|
+work on specifications or values of type |I a|, using the |ptI|
 function we defined previously.
 
-\begin{code}
-  _>>=_ : (Forall(a b)) (M a) -> (a -> M b) -> M b
-  (Step c k) >>= f        = Step c (\ r →  k r >>= f)
-  Pure (Done x) >>= f     = f x
-  Pure (Hole spec) >>= f  = Pure (Hole {!!})
-\end{code}
-The first two branches of this definition of bind should be
-familiar. The interesting case is that for specifications.\todo{Finish explanation and definition}
+% \begin{code}
+%   _>>=_ : (Forall(a b)) (M a) -> (a -> M b) -> M b
+%   (Step c k) >>= f        = Step c (\ r →  k r >>= f)
+%   Pure (Done x) >>= f     = f x
+%   Pure (Hole spec) >>= f  = Pure (Hole {!!})
+% \end{code}
+% The first two branches of this definition of bind should be
+% familiar. The interesting case is that for specifications.\todo{Finish explanation and definition}
 
 
 In general, the process of program calculation now consists of a
@@ -1767,8 +1768,8 @@ is executable.
 \section{Discussion}
 \label{sec:discussion}
 
-Throughout this paper, we have more than once been forced to choose
-between the most general definition possible possible and a less
+Throughout this paper, we have had to choose
+between presenting the most general definition possible possible and a less
 general choice, that suffices for the examples we covered. When
 possible, we have favoured simplicity over generality. For instance,
 the type of our specifications can be generalised even further, making
