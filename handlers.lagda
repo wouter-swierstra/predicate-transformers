@@ -7,7 +7,7 @@
 %include preamble.tex
 
 \begin{document}
-\title{Algebraic effects: specification and refinement}
+\title{Predicate transformer semantics for effects}
 
 \author{Wouter Swierstra}
 \email{w.s.swierstra@@uu.nl}
@@ -52,8 +52,8 @@ to incorporate effectful operations in a purely functional
 language~\cite{plotkin2002notions,pretnar2010logic}.  Algebraic
 effects clearly separate the syntax of effectful operations and their
 semantics, described by \emph{effect handlers}. In contrast to monad
-transformers, different effects may be processed in any given order
-using a series of handlers.
+transformers~\cite{liang-hudak-jones:transformers}, different effects
+may be processed in any given order using a series of handlers.
 
 This paper explores how to define a predicate transformer semantics
 for effectful programs. It presents a constructive framework for deriving
@@ -219,7 +219,7 @@ programs and specifications, we can relate them using this refinement
 relation. For example, we can use this refinement relation to show a
 program satisfies its specification; or to show that one program is
 somehow `better' than another, where the notion of `better' arises
-from the predicate transformer semantics we assign to programs.
+from the predicate transformer semantics we have chosen.
 
 It is straightforward to show that this refinement relation is both transitive and reflexive:
 \begin{code}
@@ -1378,7 +1378,7 @@ that the |fail| computation also satisfies this specification:
 \end{code}
 %if style == newcode
 \begin{code}
-  trivialCorrect = λ P xs H → tt
+  trivialCorrect = \ P xs H → tt
 \end{code}
 %endif
 In other words, the |removeCorrect| guarantees the \emph{soundness},
@@ -1531,11 +1531,11 @@ of the |f91| function as follows:
 \begin{code}
   f91Partial-correctness P i with 100 lt i
   f91Partial-correctness P i | yes p with 100 lt i
-  f91Partial-correctness P i | yes p | yes _ = λ H → (tt , (λ x eq → Pair.snd H _ eq)) , (λ x → refl)
+  f91Partial-correctness P i | yes p | yes _ = \ H → (tt , (\ x eq → Pair.snd H _ eq)) , (\ x → refl)
   f91Partial-correctness P i | yes p | no ¬p = magic (¬p p)
-  f91Partial-correctness P i | no ¬p = λ x → (tt , (λ x₁ x₂ → Pair.snd x x₁ x₂)) ,
-                                              ((λ _ → tt) , (λ o x₁ → (λ x₂ → tt) ,
-                                              (λ o₁ x₂ x₃ → lemma i o _ ¬p x₁ x₂)))
+  f91Partial-correctness P i | no ¬p = \ x → (tt , (\ x₁ x₂ → Pair.snd x x₁ x₂)) ,
+                                              ((\ _ → tt) , (\ o x₁ → (\ x₂ → tt) ,
+                                              (\ o₁ x₂ x₃ → lemma i o _ ¬p x₁ x₂)))
     where
     open Data.Nat
     open import Data.Nat.Properties
@@ -1560,7 +1560,7 @@ of the |f91| function as follows:
     ... | yes p = magic (i≤100 p)
     ... | no ¬p with 100 lt o
     lemma i o .(o - 10) i≤100 oPost refl | no ¬p | yes p with 100 lt (i + 11)
-    lemma i .(i + 11 - 10) .(i + 11 - 10 - 10) i≤100 refl refl | no ¬p | yes p | yes p₁ with between 100 i i≤100 (subst (λ i' → 100 < i') (plus-plus-minus i) p)
+    lemma i .(i + 11 - 10) .(i + 11 - 10 - 10) i≤100 refl refl | no ¬p | yes p | yes p₁ with between 100 i i≤100 (subst (\ i' → 100 < i') (plus-plus-minus i) p)
     lemma .100 .101 .91 i≤100 refl refl | no ¬p | yes p | yes p₁ | refl = refl
     lemma i .91 .81 i≤100 refl refl | no ¬p | yes p | no ¬p₁ = magic (100-≮-91 91 p)
     lemma i o o' i≤100 oPost o'Post | no ¬p | no ¬p₁ = o'Post
@@ -1586,8 +1586,8 @@ semantics' that runs a computation for a fixed number of steps.
 \begin{code}
   petrol : (Forall(I O a)) (f : I ~~> O) -> Free I O a -> Nat -> Partial a
   petrol f (Pure x)    n         = return x
-  petrol f (Step c x)  Zero      = abort
-  petrol f (Step c x)  (Succ n)  = petrol f (f c >>= x) n 
+  petrol f (Step _ _)  Zero      = abort
+  petrol f (Step c k)  (Succ n)  = petrol f (f c >>= k) n 
 \end{code}
 The last case is the only interesting one: it unfolds the function |f|
 once, decrementing the number of steps remaining. We would like to use
@@ -1608,8 +1608,7 @@ soundness result regarding our |wpRec| semantics:
 \end{code}
 This lemma guarantees that---under the assumption that the semantics
 |wpRec| holds for all inputs---whenever the petrol-driven semantics manage
-to produce a result, this result is guaranteed to satisfy the desired
-postcondition |P|.
+to produce a result, this result is guaranteed to satisfy the predicate |P|.
   
 %if style == newcode
 \begin{code}
@@ -1620,7 +1619,7 @@ postcondition |P|.
       invariant i spec S -> Spec.pre spec i -> (∀ o → Spec.post spec i o → invariant i' spec (k o)) ->
       invariant i' spec (S >>= k)
     invariant-compositionality spec (Pure x) k SH preH kH = kH x (SH preH)
-    invariant-compositionality spec (Step c k') k (fst , snd) preH kH = (λ _ → fst preH) , λ o postH → invariant-compositionality spec (k' o) k (snd o postH) preH kH
+    invariant-compositionality spec (Step c k') k (fst , snd) preH kH = (\ _ → fst preH) , \ o postH → invariant-compositionality spec (k' o) k (snd o postH) preH kH
     soundness' : ∀ {I} {O : I → Set} {i}
       (f : (i : I) → Free I O (O i)) (spec : Spec I O) (P : (i : I) -> O i → Set)
       (S : Free I O (O i)) (n : Nat) ->
@@ -1689,11 +1688,14 @@ and specifications. A value of type |M a| consists of a number of
 operations, given by the |Step| constructor of the |Free| type; in
 contrast to free monads we have seen so far, however, the leaves
 contain either values of type |a| or specifications, representing
-unfinished parts of the program's derivation. The refinement
-literature is careful to distinguish \emph{executable code}---that is
-programs without specification fragments---from programs, that may
-still contain specifications. The following predicate characterises
-the executable fragment of |M a|:
+unfinished parts of the program's derivation.
+
+\todo{Bind? Arguably not necessary for examples?}
+
+The refinement literature is careful to distinguish \emph{executable
+  code}---that is programs without specification fragments---from
+programs, that may still contain specifications. The following
+predicate characterises the executable fragment of |M a|:
 \begin{code}
   isExecutable : (Forall(a)) M a -> Set
   isExecutable (Pure (Done _))  = ⊤
@@ -1703,7 +1705,7 @@ the executable fragment of |M a|:
 Every executable program can be coerced to a computation free of
 unfinished specifications, as you would expect:
 \begin{spec}
-  finished : (m : M a) -> isExecutable m -> Free C R a
+  finish : (m : M a) -> isExecutable m -> Free C R a
 \end{spec}
 
 Although we have defined the syntactic structure of our mixed
@@ -1728,10 +1730,9 @@ Kleisli morphisms.
   wpCR f P x = pt (f x) (P x)
 \end{code}
 %endif
-We have seen many examples of such semantics in the previous
-sections. We can use these semantics and the predicate transformer
-semantics we have seen previously to define a semantics on unfinished
-programs derivations:
+We have seen many examples of such semantics in the previous sections
+for specific choices of |C| and |R|. We can now define the semantics of
+`unfinished' programs as follows:
 \begin{code}
   wpM : (Forall(a)) (implicit(b : a -> Set)) ((x : a) -> M (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
   wpM f P x = wpCR f (\ x ix -> ptI ix (P x)) x
@@ -1761,19 +1762,271 @@ Here the intermediate steps (|i1|, |i2|, and so forth) may mix
 specifications and effectful computations; the final program, |c|,
 is executable.
 
-\todo{example}
+\subsection*{Case study: maximum}
+\label{case-study}
 
 
+
+%if style == newcode
+\begin{code}
+module StateExample where
+  open Free hiding (_>>=_)
+  open Maybe using (Spec; SpecK; [[_,_]]; wpSpec)
+  open State Nat
+
+  -- We have to redo the Mix section since our specifications incorporate the state
+  data I (a : Set) : Set where
+    Done  : a -> I a
+    Hole  : SpecK Nat (a × Nat) -> I a
+  M : Set -> Set
+  M a = State (I a)
+  ptI : forall { a } ->  I a -> (a × Nat -> Set) -> Nat -> Set
+  ptI (Done x)     P t  = P (x , t)
+  ptI (Hole spec)  P t  = wpSpec spec (const P) t
+  wpM : forall { a b } -> (a -> M b) -> (a × Nat -> b × Nat -> Set) -> (a × Nat -> Set)
+  wpM f P = wpState f (\ i o -> ptI (Pair.fst o) (P i) (Pair.snd o))
+  _>>=_ : forall { a b } ->  (M a) -> (a -> M b) -> M b
+  Pure (Done x) >>= f     = f x
+  Pure (Hole spec) >>= f  = Pure (Hole {!!})
+  (Step c k) >>= f        = Step c (\ r →  k r >>= f)
+  _>=>_ : forall {a b c} -> (a -> M b) -> (b -> M c) -> a -> M c
+  (f >=> g) x = f x >>= g
+\end{code}
+%endif
+
+First we introduce smart constructors for |M|:
+\begin{code}
+  done : forall {a} -> a -> M a
+  done x = Pure (Done x)
+
+  specF : {a b : Set} → SpecK (a × Nat) (b × Nat) → a → M b
+  specF [[ pre , post ]] x = Pure (Hole [[
+      (\ i → pre (x , i)) ,
+      (\ i → post (x , i))
+    ]])
+
+  get' : ⊤ -> M Nat
+  get' _ = Step Get done
+  put' : Nat -> M ⊤
+  put' t = Step (Put t) done
+\end{code}
+What do they mean? We give specifications for the smart constructors and show they are satisfied:
+\begin{code}
+  getPost : ⊤ × Nat -> Nat × Nat → Set
+  getPost (_ , t) (x , t') = (t == x) × (t == t')
+  putPost : Nat × Nat → ⊤ × Nat → Set
+  putPost (t , _) (_ , t') = t == t'
+
+  doGet : forall { pre } ->  wpSpec [[ pre , (\ i o -> pre i × getPost i o) ]] ⊑ wpM get'
+  doPut : forall { pre } ->  wpSpec [[ pre , (\ i o -> pre i × putPost i o) ]] ⊑ wpM put'
+\end{code}
+%if style == newcode
+\begin{code}
+  doGet P (_ , t) (fst , snd) = snd (t , t) (fst , (refl , refl))
+  doPut P (t , _) (fst , snd) = snd (tt , t) (fst , refl)
+\end{code}
+%endif
+
+Here is how to combine the specification on the right side of a bind,
+given the specification of the left side and of the whole.
+The precondition says that the intermediate value |y| must come from some argument |x| to the left hand side.
+The postcondition says that for all such |x| that could lead to this |y|, the right hand side could lead to the given |z|.
+\begin{code}
+  preR : ∀ {a b} (postL : a → b → Set) (preLR : a → Set) → b → Set
+  preR {a} postL preLR y = Sigma a \ x → preLR x × postL x y
+  postR : ∀ {a b c} (postL : a → b → Set) (preLR : a → Set) (postLR : a → c → Set) → b → c → Set
+  postR postL preLR postLR y z = ∀ x → preLR x × postL x y → postLR x z
+\end{code}
+
+This allows us to refine a specification by applying a |get| or |put|:
+\begin{code}
+  get>=> : ∀ {a pre post} ->
+    (f : Nat -> M a) -> wpSpec [[ preR getPost pre , postR getPost pre post ]] ⊑ wpM f ->
+    wpSpec [[ pre , post ]] ⊑ wpM (get' >=> f)
+  put>=> : ∀ {a pre post} ->
+    (f : ⊤ -> M a) -> wpSpec [[ preR putPost pre , postR putPost pre post ]] ⊑ wpM f ->
+    wpSpec [[ pre , post ]] ⊑ wpM (put' >=> f)
+\end{code}
+%if style == newcode
+\begin{code}
+  get>=> f H P x (fst , snd) = H (\ y z → P x z) (Pair.snd x , Pair.snd x) ((x , (fst , (refl , refl))) , \ z Hpost → snd z (Hpost x (fst , (refl , refl))))
+  put>=> f H P x (fst , snd) = H (\ y z → P x z) (tt , Pair.fst x) ((x , (fst , refl)) , \ z Hpost → snd z (Hpost x (fst , refl)))
+\end{code}
+%endif
+
+%if style == newcode
+\begin{code}
+  open import Data.Nat
+  open import Data.Nat.Properties
+  open NaturalLemmas hiding (≤-refl ; ≤-trans)
+
+  data All {a : Set} (P : a → Set) : List a → Set where
+    AllNil : All P Nil
+    AllCons : ∀ {x xs} → P x → All P xs → All P (x :: xs)
+  unAllCons : ∀ {a P x} {xs : List a} →
+    All P (x :: xs) → All P xs
+  unAllCons (AllCons x₁ x₂) = x₂
+  maxI0 : List Nat → M Nat
+\end{code}
+%endif
+
+Now we have the ingredients to demonstrate incremental refinement.
+We want to show how we can implement a |max| program that gives the maximum of a nonempty list.
+\begin{code}
+  maxPre : List Nat × Nat → Set
+  maxPre (xs , i) = (i == 0) × (¬ (xs == Nil))
+  maxPost : List Nat × Nat → Nat × Nat → Set
+  maxPost (xs , i) (o , _) = All (o ≥_) xs × (o ∈ xs)
+\end{code}
+
+The first step is to modify the specification so it fits with the induction.
+\begin{code}
+  maxPost0 : List Nat × Nat → Nat × Nat → Set
+  maxPost0 (xs , i) (o , _) = All (o ≥_) (i :: xs) × (o ∈ (i :: xs))
+  maxI0 = specF [[ K ⊤  , maxPost0 ]]
+  maxProof0 : wpSpec [[ maxPre , maxPost ]] ⊑ wpM maxI0
+\end{code}
+%if style == newcode
+\begin{code}
+  maxProof0 P (xs , .0) ((refl , Hnil) , snd) = tt , \ o H → snd o (unAllCons (Pair.fst H) , lemma xs Hnil (Pair.fst o) H)
+    where
+    lemma : ∀ xs → ¬ (xs == Nil) →
+      ∀ w → Pair (All (\ n → n ≤ w) (0 :: xs)) (w ∈ (0 :: xs)) → w ∈ xs
+    lemma Nil Hnil w H = magic (Hnil refl)
+    lemma (.0 :: xs) _ .0 (AllCons x₂ (AllCons z≤n fst) , ∈Head) = ∈Head
+    lemma (x :: xs) _ w (_ , ∈Tail snd) = snd
+\end{code}
+%endif
+
+%if style == newcode
+\begin{code}
+  maxI1 : List Nat → M Nat
+  maxPre1 : List Nat → Nat × Nat → Set
+  maxPost1 : List Nat → Nat × Nat → Nat × Nat → Set
+\end{code}
+%endif
+The first intermediate program |maxI1| looks like:
+\begin{code}
+  maxI1 xs = get' tt >>= specF [[ maxPre1 xs , maxPost1 xs ]]
+\end{code}
+The pre- and postcondition of the hole are:
+\begin{code}
+  maxPre1 xs (i , i') = i == i'
+  maxPost1 xs (i , _) (o , _) = All (o ≥_) (i :: xs) × (o ∈ (i :: xs))
+\end{code}
+
+We can prove this (at least partially) implements the specification:
+\begin{code}
+  maxProof1 : wpSpec [[ K ⊤ , maxPost0 ]] ⊑ wpM maxI1
+\end{code}
+%if style == newcode
+\begin{code}
+  maxProof1 P (xs , i) = get>=> {pre = K ⊤} {post = \ xi → maxPost0 (xs , Pair.snd xi)} (specF [[ maxPre1 xs , maxPost1 xs ]]) lemma (\ xi → (P (xs , Pair.snd xi))) (tt , i)
+    where
+    lemma' : ∀ i' o →
+      Pair (All (o ≥_) (i' :: xs)) (o ∈ (i' :: xs)) →
+      ∀ (x : ⊤ × Nat) →
+      Pair ⊤ (Pair (Pair.snd x ≡ i') (Pair.snd x ≡ i')) →
+      Pair (All (o ≥_) (Pair.snd x :: xs))
+      (o ∈ (Pair.snd x :: xs))
+    lemma' i' o H (_ , .i') (_ , (refl , refl)) = H
+
+    lemma : wpSpec [[
+        preR getPost (K ⊤) ,
+        postR getPost (K ⊤) (\ xi → (maxPost0 (xs , Pair.snd xi)))
+      ]] ⊑ wpM (specF [[ maxPre1 xs , maxPost1 xs ]])
+    lemma P (i' , .i') (((_ , .i') , (_ , (refl , refl))) , snd) = refl , \ o H → snd o (lemma' i' (Pair.fst o) H)
+
+  maxI2 : List Nat → Nat → M Nat
+  maxPre2 : Nat → List Nat → Nat × Nat → Set
+  maxPost2 : Nat → List Nat → Nat × Nat → Nat × Nat → Set
+\end{code}
+%endif
+
+After we get the maximum up to now, we look at the next element of the list.
+\begin{code}
+  maxI2 Nil = done
+  maxI2 (x :: xs) = specF [[ maxPre2 x xs , maxPost2 x xs ]]
+  maxPre2 x xs (i , i') = i == i'
+  maxPost2 x xs (i , _) (o , _) = All (o ≥_) (i :: x :: xs) × (o ∈ (i :: x :: xs))
+  maxProof2 : ∀ xs → wpSpec [[ maxPre1 xs , maxPost1 xs ]] ⊑ wpM (maxI2 xs)
+\end{code}
+
+%if style == newcode
+\begin{code}
+  maxProof2 Nil P (i , .i) (refl , snd) = snd _ ((AllCons ≤-refl AllNil) , ∈Head)
+  maxProof2 (x :: xs) P (i , .i) (refl , snd) = refl , snd
+
+  maxI3 : Nat → List Nat → Nat → M Nat
+  maxPre3 : List Nat → Nat × Nat → Set
+  maxPost3 : List Nat → Nat × Nat → Nat × Nat → Set
+\end{code}
+%endif
+
+Given the first element of the list, compare it with the current maximum and pass the largest of the two to the next stage.
+\begin{code}
+  maxI3 x xs i with i lt x
+  ... | yes _ = specF [[ maxPre3 xs , maxPost3 xs ]] x
+  ... | no _ = specF [[ maxPre3 xs , maxPost3 xs ]] i
+  maxPre3 xs (m , i) = i ≤ m
+  maxPost3 xs (m , i) (o , _) = All (o ≥_) (m :: xs) × (o ∈ (m :: xs))
+  maxProof3 : ∀ x xs → wpSpec [[ maxPre2 x xs , maxPost2 x xs ]] ⊑ wpM (maxI3 x xs)
+\end{code}
+
+%if style == newcode
+\begin{code}
+  maxProof3 x xs P (i , .i) (refl , snd) with i lt x
+  ... | yes p = <⇒≤ p , \ x₁ x₂ → snd x₁ (lemmaYes i x xs p (Pair.fst x₁) x₂)
+    where
+    lemmaYes : ∀ i x xs →
+      i < x →
+      ∀ w →
+      Pair (All (w ≥_) (x :: xs)) (w ∈ (x :: xs)) →
+      Pair (All (w ≥_) (i :: x :: xs)) (w ∈ (i :: x :: xs))
+    lemmaYes i x xs x₂ .x (fst , ∈Head) = (AllCons (<⇒≤ x₂) fst) , (∈Tail ∈Head)
+    lemmaYes i x xs x₂ w (AllCons x₄ fst , ∈Tail x₃) = (AllCons (≤-trans (<⇒≤ x₂) x₄) (AllCons x₄ fst)) , ∈Tail (∈Tail x₃)
+  ... | no ¬p = ≤-refl , \ x₁ x₂ → snd x₁ (lemmaNo i x xs ¬p (Pair.fst x₁) x₂)
+    where
+    lemmaNo : ∀ i x xs →
+      ¬ (i < x) →
+      ∀ w →
+      Pair (All (w ≥_) (i :: xs)) (w ∈ (i :: xs)) →
+      Pair (All (w ≥_) (i :: x :: xs)) (w ∈ (i :: x :: xs))
+    lemmaNo i x xs x₂ .i (AllCons x₃ fst , ∈Head) = AllCons x₃ (AllCons (≮⇒≥ x₂) fst) , ∈Head
+    lemmaNo i x xs x₂ w (AllCons x₃ fst , ∈Tail snd) = (AllCons x₃ (AllCons (≤-trans (≮⇒≥ x₂) x₃) fst)) , (∈Tail (∈Tail snd))
+
+  maxI4 : List Nat → Nat → M Nat
+\end{code}
+%endif
+
+Finally, we save the new value of the state and perform a recursive call on the tail of the list.
+\begin{code}
+  maxI4 xs m = put' m >>= \ _ → specF [[ K ⊤ , maxPost0 ]] xs
+  maxProof4 : ∀ xs → wpSpec [[ maxPre3 xs , maxPost3 xs ]] ⊑ wpM (maxI4 xs)
+\end{code}
+
+%if style == newcode
+\begin{code}
+  maxProof4 xs = put>=> {pre = maxPre3 xs} {post = maxPost3 xs} (\ _ → specF [[ K ⊤ , maxPost0 ]] xs) \ P m H → tt , \ o Hpost → Pair.snd H o (lemma xs (Pair.snd m) (Pair.fst o) Hpost)
+    where
+    lemma : ∀ xs m w →
+      Pair (All (\ n → n ≤ w) (m :: xs)) (w ∈ (m :: xs)) →
+      ∀ x → Pair (Pair.snd x ≤ Pair.fst x) (Pair.fst x ≡ m) →
+      Pair (All (\ n → n ≤ w) (Pair.fst x :: xs))
+      (w ∈ (Pair.fst x :: xs))
+    lemma xs m w (wMax , wItem) (.m , snd) (fst₁ , refl) = wMax , wItem
+\end{code}
+%endif
 
 \section{Discussion}
 \label{sec:discussion}
 
-Throughout this paper, we have had to choose
-between presenting the most general definition possible possible and a less
-general choice, that suffices for the examples we covered. When
-possible, we have favoured simplicity over generality. For instance,
-the type of our specifications can be generalised even further, making
-the postcondition dependent on the precondition:
+Throughout this paper, we have had to choose between presenting the
+most general definition possible and a less general choice, that
+sufficed for the examples we intended to cover. When possible, we
+have favoured simplicity over generality. For instance, the type of
+our specifications can be generalised even further, making the
+postcondition dependent on the precondition:
 \begin{spec}
   record Spec (a : Set) (b : a -> Set) : Set where
     field
@@ -1790,56 +2043,74 @@ Throughout this paper, we have not concerned ourselves with issues of
 size. Our Agda implementation relies on the unsound axiom that |Set :
 Set|. Yet we are confident these constructions can be statified easily
 enough, either by moving certain definitions to higher universes or
-parameterising parts of our development by a universe |U : Set|
-explicitly. We have no reason to believe that there are fundamental
-size issues; we have made a pragmatic choice for the sake of
-presentation and ease of development.
+explicitly parameterising parts of our development by a universe |U :
+Set|. We have no reason to believe that there are
+fundamental size issues; we have made a pragmatic choice for the sake
+of presentation and ease of development.
 
 
 \subsection*{Related work}
 \label{sec:related-work}
 
+Traditionally, reasoning about pure functional programs is done
+through equational reasoning. There are several attempts to extend
+these techniques to the kinds of effectful programs we have presented in
+this paper~\cite{gibbons, gibbons-hinze, hutton2008reasoning}.
+
 There is a great deal of work studying how to reason about effects in
-type theory\cite{beauty, swierstra-phd, nanevski1, nanevski2,
-  nanevski3}. More
-recently, F$\star$~\cite{fstar} has used Dijkstra
-monads~\cite{dijkstra-monad}.
+type theory~\cite{beauty, swierstra-phd, nanevski1, nanevski2,
+  nanevski3, brady-effects}. The developers behind
+F$\star$~\cite{fstar} have introduced the notion used Dijkstra
+monads~\cite{dijkstra-monad} to collect the verification conditions
+arising from a program using a weakest precondition semantics.
 
-In the context of simply typed functional programming, ~\cite{gibbons, gibbons-hinze}
-
-Swierstra and Alpuim~\cite{alpuim1, alpuim2}
+There is also a great deal of existing work on using interactive
+theorem provers to perform program calculation. \citet{old-hol} have
+given a formalization of several notions, such as weakest precondition
+semantics and the refinement relation, in the interactive theorem
+prover HOL. This was later extended to the \emph{Refinement
+  Calculator}~\cite{butler}, that built a new GUI on top of
+HOL. ~\citet{dongol} have extended these ideas even further in HOL,
+adding a separation logic and its associated algebraic
+structure. \citet{boulme} has given a direct embedding of the
+refinement calculus in Coq. Finally,
+\citeauthor{alpuim2}~\citeyearpar{alpuim2,alpuim1} have given an
+similar development to the one presented here, tailored specifically
+to stateful computations.
 
 
 
 \subsection*{Further work}
 \label{sec:further-work}
 
-
 This paper does not yet consider \emph{combinations} of different
-effects. This is typically where the separation of syntax and
-semantics that algebraic effects and free monads shine. Exploring how
-to combine predicate transformer semantics of different effects is a
-clear direction for further work, but outside the scope of the current
-paper. In principle, however, we believe it should be possible to take
-the coproduct of our free monads, in the style of
-~\citet{swierstra2008}, to combine the different effects
-syntactically; we hope that the composition of predicate transformers,
-as we have already done in the section on program calculation, can be
-used to assign semantics to programs using a variety of different
-effects, similarly to \todo{effect handlers in scope}.
-This is similar to monad transformers\cite{liang-hudak-jones:transformers}.
+effects.  In principle, however, we believe it should be possible to
+take the coproduct of our free monads in the style of
+~\citet{swierstra2008} to combine the different effects
+syntactically. We hope that the composition of predicate transformers
+can be used to assign semantics to programs using a variety of
+different effects---much as we defined the semantics of mixed programs
+and specifications from their constituent parts. Similar ideas have
+already been explored when embedding algebraic effects in Haskell by
+\citet{Wu2014}.
 
-Programming and reasoning with algebraic effects and dependent types (ICFP 2013)
+There are well-known efficiency problems when working with free monads
+directly, as we have done here. While efficiency was never our primary
+concern, we hope that we might adapt existing solutions to avoid these
+issues~\cite{janis,freer}.
 
-Throughout this paper, we have chosen to verify small example programs
-to validate our design choices. Scaling these developments to
-larger programs is by no means an easy task.
+Throughout this paper, we have presented several small example
+programs and verified their correctness. The aim of these examples is
+to \emph{illustrate} our definitions and \emph{validate} our design
+choices, rather than solve any realistic verification challenge. There
+is a great deal of further engineering work necessary to ensure these
+ideas scale easily beyond such simple examples: custom tactics and
+notation could help facilitate program calculation; further proof
+automation is necessary to keep the complexity of intermediate
+calculations in check. Nonetheless, we believe that the predicate
+transformer semantics defined in this paper \todo{are worth exploring
+  further; are interesting in their own right;\ldots }
 
-Not everything is easy to express as a free monad.
-
-Control flow laws.
-
-Efficiency of free monads Voigtlander/freer monads (Kiselyov)
 
 
 % \item wp (s,q) or wp (s,p) implies wp(s,q or p) -- but not the other
