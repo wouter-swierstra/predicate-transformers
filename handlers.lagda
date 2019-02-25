@@ -1,4 +1,4 @@
-\documentclass[acmsmall, anonymous, review=false]{acmart}
+\documentclass[acmsmall, anonymous, review]{acmart}
 \settopmatter{printfolios=true,printccs=false,printacmref=false}
 
 %include agda.fmt
@@ -7,7 +7,7 @@
 %include preamble.tex
 
 \begin{document}
-\title{Predicate transformer semantics for effects}
+\title{A predicate transformer semantics for effects}
 
 \author{Wouter Swierstra}
 \email{w.s.swierstra@@uu.nl}
@@ -18,11 +18,13 @@
 }
 
 \begin{abstract}
-  Pure functions are relatively easy to verify, yet it is much harder
-  to reason about programs using effects. In this paper, we present a
-  general framework, based on predicate transformer semantics, for
-  specifying and calculating effectful programs from their
-  specification. \todo{Finalize abstract and title}
+  Reasoning about programs that use effects can be much harder than
+  reasoning about their pure counterparts. This paper present a
+  predicate transformer semantics for a variety of effects, including
+  exceptions, state, non-determinism, and general recursion. The
+  predicate transformer semantics give rise to a refinement relation
+  that can be used to relate a program to its specification, or even
+  calculate effectful programs that are correct by construction.
 \end{abstract}
 
 %include ccs.tex
@@ -43,7 +45,7 @@ style~\citep*{algebra-of-programming, pearls}.
 Many programs, however, are \emph{not} pure, but instead rely on a
 variety of effects, such as mutable state, exceptions,
 general recursion, or non-determinism. Unfortunately, it is less clear
-how to reason about impure programs in a compositional fashion, as we can
+how to reason about such impure programs in a compositional fashion, as we can
 no longer exploit referential transparency to reason about
 subexpressions regardless of their context.
 
@@ -55,30 +57,27 @@ semantics, described by \emph{effect handlers}. In contrast to monad
 transformers~\cite{liang-hudak-jones:transformers}, different effects
 may be processed in any given order using a series of handlers.
 
-This paper explores how to define a predicate transformer semantics
-for effectful programs. It presents a constructive framework for deriving
-verified effectful programs their specifications, inspired by existing
-work on the refinement
+This paper defines a predicate transformer semantics
+for effectful programs, culminating in a constructive framework for
+deriving verified effectful programs their specifications, inspired by
+existing work on program calculation in the refinement
 calculus~\cite{back2012refinement,morgan1994programming}. We will
-briefly sketch the key techniques, before illustrating them
-with numerous examples throughout the remainder of the paper:
+briefly sketch the key techniques, before illustrating them with
+numerous examples throughout the remainder of the paper:
 
 \begin{itemize}
 \item The syntax of effectful computations may be represented
-  uniformly by a free monad in type theory. Assigning meaning to such
+  by a free monad in type theory. Assigning meaning to such
   free monads amounts to assigning meaning to the syntactic operations
-  each effect provides. This typically amounts to writing an
-  interpreter, that handles effectful operations.
-\item Such interpreters, however, may also assign \emph{predicate
-    transformer semantics} to computations arising from Kleisli arrows
-  on such free monads. This enables us to specify the desired outcome
-  of an effectful computation and assign it a weakest precondition
-  semantics.
+  each effect provides. 
+\item In this paper, we show how to assign \emph{predicate transformer
+    semantics} to computations arising from the Kleisli arrows on
+  these free monads. This enables us to compute the weakest
+  precondition semantics from any associated with a given postcondition.
 \item Using these weakest precondition semantics, we can define a
-  notion of \emph{refinement} on computations using algebraic
-  effects. Finally, we show how to use this refinement relation to
-  show a program satisfies its specification, or indeed,
-  \emph{calculate} a program from its specification.
+  notion of \emph{refinement} on computations. We show how to use this
+  refinement relation to show a program satisfies its specification,
+  or indeed, \emph{calculate} a program from its specification.
 \end{itemize}
 These principles are applicable to a range of different effects,
 including exceptions (Section~\ref{sec:maybe}), state
@@ -93,13 +92,15 @@ freely, allowing verified programs to be calculated from their
 specification one step at a time (Section~\ref{sec:stepwise-refinement}).
 
 
-The examples, theorems and proofs have all been formally verified in
-the dependently typed programming language Agda~\cite{agda}, but they
-techniques translate readily to other proof assistants based on
-dependent types such as Idris~\cite{brady} or Coq~\cite{coq}. The sources
-associated with our our development are available
-online.\footnote{\todo{url withheld to preserve author(s) anonymity}}
+The definitions, examples, theorems and proofs presented in this paper
+have all been formally verified in the dependently typed programming
+language Agda~\cite{agda}, but they techniques translate readily to
+other proof assistants based on dependent types such as
+Idris~\cite{brady} or Coq~\cite{coq}. The sources associated with our
+our development are available online.\footnote{The url has been
+  withheld from this version to preserve the anonymity of the author(s).}
 
+ \todo{Finalize: abstract, intro and title}
 \section{Background}
 \label{sec:intro}
 %if style == newcode
@@ -214,12 +215,12 @@ Predicate transformer semantics give rise to a notion of
   pt1 ⊑ pt2 = forall P -> pt1 P ⊆ pt2 P
 \end{code}
 This refinement relation is defined between \emph{predicate
-  transformers}. As we assign predicate transformer semantics to
+  transformers}. As we will assign predicate transformer semantics to both
 programs and specifications, we can relate them using this refinement
 relation. For example, we can use this refinement relation to show a
 program satisfies its specification; or to show that one program is
 somehow `better' than another, where the notion of `better' arises
-from the predicate transformer semantics we have chosen.
+from our choice of predicate transformer semantics.
 
 It is straightforward to show that this refinement relation is both transitive and reflexive:
 \begin{code}
@@ -318,9 +319,11 @@ sometimes convenient to define a smart constructor for failure:
   abort  = Step Abort (\ ())
 \end{code}
 A computation of type |Partial a| will either return a value of type
-|a| or fail, issuing the |abort| command. With the syntax in place, we
-can turn our attention to verifying programs using a suitable
-predicate transformer semantics.
+|a| or fail, issuing the |abort| command. Note that the responses to
+the |Abort| command are empty; the smart constructor |abort| uses this
+to discharge the continuation in the second argument of the |Step|
+constructor. With the syntax in place, we can turn our attention to
+verifying programs using a suitable predicate transformer semantics.
 
 
 \subsection*{Example: division}
@@ -352,14 +355,22 @@ division-by-zero errors:
   ⟦ Div e1 e2 ⟧  =  ⟦ e1 ⟧ >>= \ v1 ->
                     ⟦ e2 ⟧ >>= \ v2 ->
                     v1 ÷ v2
-                      where
+\end{code}
+%if style == newcode
+\begin{code}                  
+    where
+\end{code}
+%endif
+This interpreter uses the following division operator that may fail
+when the divisor is |Zero|:
+\begin{code}  
                       _÷_ : Nat -> Nat -> Partial Nat
                       n ÷ Zero      = abort
                       n ÷ (Succ k)  = return (n div (Succ k))
 \end{code}
 The division operator from the standard library (|div|) requires an
 implicit proof that the divisor is non-zero. In the case when the
-divisor is |Zero|, we fail explicitly.
+divisor is |Zero|, we fail explicitly using |abort|.
 
 
 How can we relate these two definitions? We can assign a weakest
@@ -433,7 +444,7 @@ characterising the \emph{domain} of a partial function:
   dom f = wpPartial f (\ _ _ -> ⊤)
 \end{code}
 Once again, we can show that the two semantics agree precisely on the
-domain of the interpreter:
+domain of the interpreter.
 \begin{code}
   sound     : dom ⟦_⟧            ^^ ⊆ ^^ wpPartial ⟦_⟧ _⇓_
   complete  : wpPartial ⟦_⟧ _⇓_  ^^ ⊆ ^^ dom ⟦_⟧
@@ -625,7 +636,7 @@ computation:
   fastProduct (k :: xs)           = map (_*_ k) (fastProduct xs)
 \end{code}
 To run this computation, we provide a handler that maps |abort| to
-some default value:
+some default value.
 \begin{code}
   defaultHandler : (Forall(a)) a -> Partial a -> a
   defaultHandler _ (Pure x)          = x
@@ -648,9 +659,6 @@ computation aborts:
     defaultPT x (Pure y)        = P x y 
     defaultPT x (Step Abort _)  = P x d
 \end{code}
-Note that we could generalise this further, allowing for |b| to depend
-on |a|---as we do not need this in this example, we will refrain from
-doing so.
 
 The |wpDefault| function computes \emph{some} predicate on the
 function's input. But how do we know that this predicate is meaningful
@@ -899,12 +907,16 @@ function and formulate the desired correctness property:
 The proof is interesting. Initially, it proceeds by induction on the
 input tree. The base case for the |Leaf| constructor is easy enough to
 discharge; the inductive case, however, poses a greater challenge. In
-particular, the goal we wish to prove amounts to the following statement:
+particular, the goal we wish to prove in the case for the |Node|
+constructor amounts to the following statement:
+\begin{center}
 \begin{spec}
   statePT (relabel l >>= (\ l' → relabel r >>= (\ r' → Pure (Node l' r')))) (P (Node l r , i)) i
 \end{spec}
+\end{center}
 At first glance, it is not at all obvious how to apply our induction
-hypothesis!
+hypothesis! Our induction hypothesis roughly states that |P| holds for
+|l| and |r|---but how can we use this information to prove the above goal?
 
 \subsection*{Compositionality}
 \label{sec:compositionality}
@@ -1200,7 +1212,8 @@ module Nondeterminism where
   data C : Set where
     Fail : C
     Choice : C
-
+  \end{code}
+\begin{code}  
   R : C -> Set
   R Fail    = ⊥
   R Choice  = Bool
@@ -1348,9 +1361,11 @@ list produces the output list. Here we use an auxiliary function,
 \begin{spec}
     delete : (Forall(a)) (implicit(x : a)) (xs : List a) -> x ∈ xs -> List a  
 \end{spec}
+The definition recurses over the proof of |x ∈ xs|, reconstructing the
+output list along the way.
 
 With the specification in place, we can define the following function
-that non-deterministically draws an element from its input list:
+that non-deterministically draws an element from its input list.
 \begin{code}  
   remove : (Forall(a)) List a -> ND (a × List a)
   remove Nil        = fail
@@ -1452,11 +1467,14 @@ As before, we define a smart constructor to make such calls:
   call : (Forall (I O)) (i : I) → Free I O (O i)
   call x = Step x Pure
 \end{code}
-Note that we do \emph{not} define recursive functions---but
-rather defines an explicit representation of the call graph of the
-function we wish to define.
+Note that we do \emph{not} define recursive functions---but rather
+defines an explicit representation of the call graph of the function
+we wish to define. This gives a finite representation of the recursive
+structure of our program.
 
-To illustrate this point, we can define McCarthy's 91-function as follows:
+To illustrate this point, we can define McCarthy's 91-function. The
+recursive structure of this function is notoriously difficult to
+express in a total language such as Agda:
 \begin{code}
   f91 : Nat ~~> K Nat
   f91 i with 100 lt i
@@ -1523,7 +1541,7 @@ transformer semantics |wpRec| states that this specification is indeed
 satisfied any recursive call respects the corresponding invariant.
 
 Using the |wpRec| function, we can formulate the partial correctness
-of the |f91| function as follows:
+of the |f91| function as follows.
 \begin{code}
   f91Partial-correctness : wpSpec f91Spec ⊑ wpRec f91Spec f91
 \end{code}
@@ -1659,18 +1677,18 @@ ending in a value of type |a| in the leaves. By varying this
 information stored in the leaves of the free monad, we can mix
 unfinished specifications and program fragments.
 
-To this end, we define the following data type:
+To this end, we define the data type |I a|, corresponding to either a
+specification on |a| or a value of type |a|.
 \begin{code}
   data I (a : Set) : Set where
     Done  : a -> I a
     Hole  : SpecK ⊤ a -> I a
 \end{code}
-A value of type |I a| is either a value of type |a| or a specification
-on |a|. Such a specification consists of a precondition of type |Set|
-and a predicate |a -> Set|; these specifications correspond to some
-unfinished part of the program being calculated. We can define a
-predicate transformer semantics to values of type |I a| easily enough,
-reusing our previous |wpSpec| function:
+The specifications passed to the |Hole| costructor consist of a
+precondition of type |Set| and a predicate |a -> Set|; these
+specifications correspond to some unfinished part of the program being
+calculated. We can define a predicate transformer semantics to values
+of type |I a| easily enough, reusing our previous |wpSpec| function:
 \begin{code}
   ptI : (Forall(a)) I a -> (a -> Set) -> Set
   ptI (Done x)     P  = P x
@@ -1741,16 +1759,6 @@ The crucial step here is to transform the argument predicate |P| to
 work on specifications or values of type |I a|, using the |ptI|
 function we defined previously.
 
-% \begin{code}
-%   _>>=_ : (Forall(a b)) (M a) -> (a -> M b) -> M b
-%   (Step c k) >>= f        = Step c (\ r →  k r >>= f)
-%   Pure (Done x) >>= f     = f x
-%   Pure (Hole spec) >>= f  = Pure (Hole {!!})
-% \end{code}
-% The first two branches of this definition of bind should be
-% familiar. The interesting case is that for specifications.\todo{Finish explanation and definition}
-
-
 In general, the process of program calculation now consists of a
 proving a series of refinement steps from some initial specification:
 \begin{center}
@@ -1766,7 +1774,7 @@ is executable.
 \label{case-study}
 
 
-
+\todo{Clean up this section} 
 %if style == newcode
 \begin{code}
 module StateExample where
@@ -2061,10 +2069,10 @@ this paper~\cite{gibbons, gibbons-hinze, hutton2008reasoning}.
 
 There is a great deal of work studying how to reason about effects in
 type theory~\cite{beauty, swierstra-phd, nanevski1, nanevski2,
-  nanevski3, brady-effects}. The developers behind
-F$\star$~\cite{fstar} have introduced the notion used Dijkstra
-monads~\cite{dijkstra-monad} to collect the verification conditions
-arising from a program using a weakest precondition semantics.
+  nanevski3, brady-effects}. F$\star$ has introduced the
+notion used Dijkstra monads~\cite{fstar, dijkstra-monad} to collect the
+verification conditions arising from a program using a weakest
+precondition semantics.
 
 There is also a great deal of existing work on using interactive
 theorem provers to perform program calculation. \citet{old-hol} have
@@ -2096,6 +2104,9 @@ and specifications from their constituent parts. Similar ideas have
 already been explored when embedding algebraic effects in Haskell by
 \citet{Wu2014}.
 
+\todo{Nail down theory further -- presheafs, contravariant hom
+  functors, yoneda embedding, etc}
+
 There are well-known efficiency problems when working with free monads
 directly, as we have done here. While efficiency was never our primary
 concern, we hope that we might adapt existing solutions to avoid these
@@ -2111,9 +2122,10 @@ notation could help facilitate program calculation; further proof
 automation is necessary to keep the complexity of intermediate
 calculations in check. Nonetheless, we believe that the predicate
 transformer semantics defined in this paper \todo{are worth exploring
-  further; are interesting in their own right;\ldots }
+  further; are interesting in their own right; are \emph{functional} \ldots }
 
 
+\todo{Check bibliography}
 
 % \item wp (s,q) or wp (s,p) implies wp(s,q or p) -- but not the other
 %   way around. The implication in the other direction only holds when
