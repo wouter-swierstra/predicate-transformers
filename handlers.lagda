@@ -1542,7 +1542,7 @@ Given these semantics, we can prove that partially correct functions work as exp
 %endif
 
 \todo{Mention loop invariants?}
-
+\todo{Wouter: read through Tim's text and edit where necessary}
 \section{Stepwise refinement}
 \label{sec:stepwise-refinement}
 
@@ -1652,10 +1652,13 @@ function we defined previously.
 
 \begin{code}
   _>>=_ : (Forall(a b)) (M a) -> (a -> M b) -> M b
+  (Step c k) >>= f        = Step c (\ r →  k r >>= f)
   Pure (Done x) >>= f     = f x
   Pure (Hole spec) >>= f  = Pure (Hole {!!})
-  (Step c k) >>= f        = Step c (\ r →  k r >>= f)
 \end{code}
+The first two branches of this definition of bind should be
+familiar. The interesting case is that for specifications.\todo{Finish explanation and definition}
+
 
 In general, the process of program calculation now consists of a
 proving a series of refinement steps from some initial specification:
@@ -1669,7 +1672,6 @@ specifications and effectful computations; the final program, |c|,
 is executable.
 
 \todo{example}
-\todo{bind}
 
 
 
