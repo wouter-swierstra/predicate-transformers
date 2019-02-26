@@ -1759,17 +1759,55 @@ The crucial step here is to transform the argument predicate |P| to
 work on specifications or values of type |I a|, using the |ptI|
 function we defined previously.
 
-In general, the process of program calculation now consists of a
-proving a series of refinement steps from some initial specification:
+The |wpM| function assigns a predicate transformer semantics to
+unfinished programs, where the leaves of a free monad may consist of
+values or specifications. We can use this semantics to derive a
+program from its specification in series of refinement steps. A
+\emph{program derivation} consists of a series of refinement steps
+from some initial specification:
 \begin{center}
 \begin{spec}
   wpSpec spec ⊑ wpM i1 ⊑ wpM i2 ⊑ ... ⊑ wpCR c
 \end{spec}
 \end{center}
 Here the intermediate steps (|i1|, |i2|, and so forth) may mix
-specifications and effectful computations; the final program, |c|,
-is executable.
+specifications and effectful computations; the final program, |c|, is
+executable. In the next section, we will present an example of such a
+derivation.
 
+%if style == newcode
+\begin{code}
+-- Tim: hier begint de opzet van expliciete derivaties
+  
+  postulate
+    step : {a b : Set} -> (c : C) -> SpecK a b -> SpecK a b
+    stepCorrect : {a : Set} -> (c : C) -> (spec : SpecK ⊤ a) ->
+      wpSpec spec ⊑ wpM (λ _ → Step c (\r -> Pure (Hole (step c spec))))
+
+  data Derivation {a b : Set} (spec : SpecK a b) : Set where
+    Done : (x : b) -> wpSpec spec ⊑ wpM (const (Pure (Done x))) -> Derivation spec
+    Step :  (c : C) -> (∀ (r : R c) -> Derivation (step c spec)) -> Derivation spec
+    Trans : ∀ spec' -> wpSpec spec ⊑ wpSpec spec' -> Derivation spec' -> Derivation spec
+
+  extract : {a b : Set} (spec : SpecK a b) -> Derivation spec -> a -> Free C R b
+  extract _ (Done y _) x = Pure y
+  extract spec (Step c k) x = Step c \r -> extract (step c spec) (k r) x
+  extract _ (Trans spec' _ d) = extract spec' d
+
+  stepCong : ∀ {a} -> (c : C) (k : R c -> M a) (k' : R c -> Free C R a)->
+    (wpM k  ⊑ wpCR k') ->
+    _⊑_ {⊤} (wpM (const (Step c k))) (wpCR (const (Step c k')))
+  stepCong c k k' H P tt z = {!!}
+    -- z : ptalgebra c (λ r → pt (k r) (λ ix → ptI ix (P tt)))
+    -- ptalgebra c (λ r → pt (k' r) (P tt))
+  correct : {a : Set} (spec : SpecK ⊤ a) -> (d : Derivation spec) ->
+    wpSpec spec ⊑ wpCR (extract spec d)
+  correct spec (Done x p) = p
+  correct spec (Step c k) = ⊑-trans (stepCorrect c spec)
+                            let ih = \r -> correct (step c spec) (k r) in λ P x x₁ → {!ih!} 
+  correct spec (Trans spec' p d) = ⊑-trans p (correct spec' d)
+\end{code}
+%endif
 \subsection*{Case study: maximum}
 \label{case-study}
 
@@ -1804,63 +1842,87 @@ module StateExample where
 \end{code}
 %endif
 
-First we introduce smart constructors for |M|:
+In what should be a familiar pattern, we begin by defining a handful
+of smart constructors:
+%if style == poly
+%format get' = get
+%format put' = put
+%format specF = spec
+%endif
 \begin{code}
-  done : forall {a} -> a -> M a
+  done   : (Forall (a)) a -> M a
+  get'   : ⊤ -> M Nat
+  put'   : Nat -> M ⊤
+  specF  : (Forall(a b)) SpecK (a × Nat) (b × Nat) → a → M b
+\end{code}
+%if style == newcode
+\begin{code}
   done x = Pure (Done x)
-
-  specF : {a b : Set} → SpecK (a × Nat) (b × Nat) → a → M b
+  get' _ = Step Get done
+  put' t = Step (Put t) done
   specF [[ pre , post ]] x = Pure (Hole [[
       (\ i → pre (x , i)) ,
       (\ i → post (x , i))
     ]])
-
-  get' : ⊤ -> M Nat
-  get' _ = Step Get done
-  put' : Nat -> M ⊤
-  put' t = Step (Put t) done
 \end{code}
-What do they mean? We give specifications for the smart constructors and show they are satisfied:
+%endif
+Here we choose to define |get| as a Kleisli morphism, taking a
+spurious argument of the unit type, as this makes the presentation of
+|get| and |put| a bit more uniform. We can define the following
+specifications for |get| and |put|:
 \begin{code}
   getPost : ⊤ × Nat -> Nat × Nat → Set
-  getPost (_ , t) (x , t') = (t == x) × (t == t')
+  getPost (_ , t) (x , t') = (t == x) ∧ (t == t')
   putPost : Nat × Nat → ⊤ × Nat → Set
   putPost (t , _) (_ , t') = t == t'
-
-  doGet : forall { pre } ->  wpSpec [[ pre , (\ i o -> pre i × getPost i o) ]] ⊑ wpM get'
-  doPut : forall { pre } ->  wpSpec [[ pre , (\ i o -> pre i × putPost i o) ]] ⊑ wpM put'
+\end{code}
+As you would expect, |get| returns the current state but does not
+modify it; the |put| command overwrites the current state. We can
+prove that |get| and |put| commands satisfy these postconditions using
+our |wpM| semantics:
+\begin{code}
+  getCorrect  : forall pre ->  wpSpec [[ pre , (\ i o -> pre i ∧ getPost i o) ]]  ⊑ wpM get'
+  putCorrect  : forall pre ->  wpSpec [[ pre , (\ i o -> pre i ∧ putPost i o) ]]  ⊑ wpM put'
 \end{code}
 %if style == newcode
 \begin{code}
-  doGet P (_ , t) (fst , snd) = snd (t , t) (fst , (refl , refl))
-  doPut P (t , _) (fst , snd) = snd (tt , t) (fst , refl)
+  getCorrect _ P (_ , t) (fst , snd) = snd (t , t) (fst , (refl , refl))
+  putCorrect _ P (t , _) (fst , snd) = snd (tt , t) (fst , refl)
 \end{code}
 %endif
+While we will not use these properties in the remainder of our
+calculation, they form an important sanity check to guaranteeing that
+the specifications we have chose for |get| and |put| are correct.
+
+To refine a specification into code, we will prove two lemmas
+explaining how |get|
 
 Here is how to combine the specification on the right side of a bind,
-given the specification of the left side and of the whole.
-The precondition says that the intermediate value |y| must come from some argument |x| to the left hand side.
-The postcondition says that for all such |x| that could lead to this |y|, the right hand side could lead to the given |z|.
+given the specification of the left side and of the whole.  The
+precondition says that the intermediate value |y| must come from some
+argument |x| to the left hand side.  The postcondition says that for
+all such |x| that could lead to this |y|, the right hand side could
+lead to the given |z|.
 \begin{code}
   preR : ∀ {a b} (postL : a → b → Set) (preLR : a → Set) → b → Set
-  preR {a} postL preLR y = Sigma a \ x → preLR x × postL x y
+  preR {a} postL preLR y = Sigma a \ x → preLR x ∧ postL x y
   postR : ∀ {a b c} (postL : a → b → Set) (preLR : a → Set) (postLR : a → c → Set) → b → c → Set
-  postR postL preLR postLR y z = ∀ x → preLR x × postL x y → postLR x z
+  postR postL preLR postLR y z = ∀ x → preLR x ∧ postL x y → postLR x z
 \end{code}
 
 This allows us to refine a specification by applying a |get| or |put|:
 \begin{code}
-  get>=> : ∀ {a pre post} ->
-    (f : Nat -> M a) -> wpSpec [[ preR getPost pre , postR getPost pre post ]] ⊑ wpM f ->
+  getStep : (Forall(a pre post)) (f : Nat -> M a) -> 
+    wpSpec [[ preR getPost pre , postR getPost pre post ]] ⊑ wpM f ->
     wpSpec [[ pre , post ]] ⊑ wpM (get' >=> f)
-  put>=> : ∀ {a pre post} ->
-    (f : ⊤ -> M a) -> wpSpec [[ preR putPost pre , postR putPost pre post ]] ⊑ wpM f ->
+  putStep : (Forall(a pre post)) (f : ⊤ -> M a) -> 
+    wpSpec [[ preR putPost pre , postR putPost pre post ]] ⊑ wpM f ->
     wpSpec [[ pre , post ]] ⊑ wpM (put' >=> f)
 \end{code}
 %if style == newcode
 \begin{code}
-  get>=> f H P x (fst , snd) = H (\ y z → P x z) (Pair.snd x , Pair.snd x) ((x , (fst , (refl , refl))) , \ z Hpost → snd z (Hpost x (fst , (refl , refl))))
-  put>=> f H P x (fst , snd) = H (\ y z → P x z) (tt , Pair.fst x) ((x , (fst , refl)) , \ z Hpost → snd z (Hpost x (fst , refl)))
+  getStep f H P x (fst , snd) = H (\ y z → P x z) (Pair.snd x , Pair.snd x) ((x , (fst , (refl , refl))) , \ z Hpost → snd z (Hpost x (fst , (refl , refl))))
+  putStep f H P x (fst , snd) = H (\ y z → P x z) (tt , Pair.fst x) ((x , (fst , refl)) , \ z Hpost → snd z (Hpost x (fst , refl)))
 \end{code}
 %endif
 
@@ -1931,7 +1993,7 @@ We can prove this (at least partially) implements the specification:
 \end{code}
 %if style == newcode
 \begin{code}
-  maxProof1 P (xs , i) = get>=> {pre = K ⊤} {post = \ xi → maxPost0 (xs , Pair.snd xi)} (specF [[ maxPre1 xs , maxPost1 xs ]]) lemma (\ xi → (P (xs , Pair.snd xi))) (tt , i)
+  maxProof1 P (xs , i) = getStep {pre = K ⊤} {post = \ xi → maxPost0 (xs , Pair.snd xi)} (specF [[ maxPre1 xs , maxPost1 xs ]]) lemma (\ xi → (P (xs , Pair.snd xi))) (tt , i)
     where
     lemma' : ∀ i' o →
       Pair (All (o ≥_) (i' :: xs)) (o ∈ (i' :: xs)) →
@@ -2017,7 +2079,7 @@ Finally, we save the new value of the state and perform a recursive call on the 
 
 %if style == newcode
 \begin{code}
-  maxProof4 xs = put>=> {pre = maxPre3 xs} {post = maxPost3 xs} (\ _ → specF [[ K ⊤ , maxPost0 ]] xs) \ P m H → tt , \ o Hpost → Pair.snd H o (lemma xs (Pair.snd m) (Pair.fst o) Hpost)
+  maxProof4 xs = putStep {pre = maxPre3 xs} {post = maxPost3 xs} (\ _ → specF [[ K ⊤ , maxPost0 ]] xs) \ P m H → tt , \ o Hpost → Pair.snd H o (lemma xs (Pair.snd m) (Pair.fst o) Hpost)
     where
     lemma : ∀ xs m w →
       Pair (All (\ n → n ≤ w) (m :: xs)) (w ∈ (m :: xs)) →
