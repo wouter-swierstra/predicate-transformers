@@ -1257,9 +1257,9 @@ x)|. There are two canonical ways to do so, following a familiar pattern:
   wpAny : (Forall(  a : Set)) (implicit(b : a -> Set)) ((x : a) -> ND (b x)) -> (P : (x : a) -> b x -> Set) -> (a -> Set)
   wpAny f P = wp f (anyPT P)
 \end{code}
-These two predicate transformers are dual: |allPT P| holds of a
+These two predicate transformers are dual: |allPT P| holds for a
 non-deterministic computation precisely when \emph{all} possible
-results satisfy |P|; |anyPt P| holds of a non-deterministic
+results satisfy |P|; |anyPt P| holds for a non-deterministic
 computation precisely when \emph{some} possible result satisfies |P|.
 Once again, can relate both these predicates to the usual `list
 handler' for non-determinism:
@@ -1300,7 +1300,7 @@ example, this boils down to showing:
   wpAllSoundness nd P x H = allSoundness P x (nd x) H
   \end{code}
 %endif
-  Here the predicate |All P xs| holds precisely when the predicate |P|
+  Here, the predicate |All P xs| holds precisely when the predicate |P|
   holds for all the elements of the list |xs|.
 \subsection*{Refinement}  
 
@@ -1396,8 +1396,9 @@ that the |fail| computation also satisfies this specification:
   trivialCorrect = \ P xs H → tt
 \end{code}
 %endif
-In other words, the |removeCorrect| guarantees the \emph{soundness},
-but not the \emph{completeness} of our non-deterministic computation.
+In other words, the lemma |removeCorrect| guarantees the
+\emph{soundness}, but not the \emph{completeness} of our
+non-deterministic computation.
 
 We can address this by proving an additional lemma, stating that the
 |remove| function returns every possible list decomposition:
@@ -1484,7 +1485,7 @@ express in a total language such as Agda:
 This definition is not recursive, but merely makes the recursive
 structure of the function body, |f91 (f91 (i + 11))|, explicit. The
 first |call| corresponds to the inner application |f91 (i + 11)|; the
-result of this is fed to the a second |call|, corresponding to the
+result of this is fed to the second |call|, corresponding to the
 outer application.
 
 How can we reason about such functions? As is typical in the
@@ -2115,7 +2116,7 @@ Throughout this paper, we have not concerned ourselves with issues of
 size. Our Agda implementation relies on the unsound axiom that |Set :
 Set|. Yet we are confident these constructions can be stratified easily
 enough, either by moving certain definitions to higher universes or
-explicitly parameterising parts of our development by a universe |U :
+explicitly parametrising parts of our development by a universe |U :
 Set|. We have no reason to believe that there are
 fundamental size issues; we have made a pragmatic choice for the sake
 of presentation and ease of development.
