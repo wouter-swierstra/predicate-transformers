@@ -416,7 +416,7 @@ manually defining our own predicate on expressions:
   SafeDiv (Val x)       = ⊤
   SafeDiv (Div e1 e2)   = (e2 ⇓ Zero -> ⊥) ∧ SafeDiv e1 ∧ SafeDiv e2
 \end{code}
-We would expect that any expression |e| for which |SafeDiv e| holds,
+We would expect that any expression |e| for which |SafeDiv e| holds
 can be evaluated without encountering a division-by-zero
 error. Indeed, we can prove that |SafeDiv| is a sufficient condition
 for our two notions of evaluation to coincide:
