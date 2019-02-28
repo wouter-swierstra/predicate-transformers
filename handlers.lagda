@@ -19,7 +19,7 @@
 
 \begin{abstract}
   Reasoning about programs that use effects can be much harder than
-  reasoning about their pure counterparts. This paper present a
+  reasoning about their pure counterparts. This paper presents a
   predicate transformer semantics for a variety of effects, including
   exceptions, state, non-determinism, and general recursion. The
   predicate transformer semantics give rise to a refinement relation
@@ -73,7 +73,7 @@ numerous examples throughout the remainder of the paper:
 \item In this paper, we show how to assign \emph{predicate transformer
     semantics} to computations arising from the Kleisli arrows on
   these free monads. This enables us to compute the weakest
-  precondition semantics from any associated with a given postcondition.
+  precondition associated with a given postcondition.
 \item Using these weakest precondition semantics, we can define a
   notion of \emph{refinement} on computations. We show how to use this
   refinement relation to show a program satisfies its specification,
@@ -168,9 +168,9 @@ the paper.
 
 There are many different ways to specify the behaviour of a function
 |f : a -> b|. One might provide a reference implementation, define a
-relation |R : a -> b -> Set|, or write contracts and tests cases. In
+relation |R : a -> b -> Set|, or write contracts and test cases. In
 this paper, we will, however, focus on \emph{predicate transformer
-  semantics}. Where these predicate transformers traditionally relate
+  semantics}. Whereas these predicate transformers traditionally relate
 the state space of an (imperative) program, they can be readily
 adapted to the functional setting.
 
@@ -186,7 +186,7 @@ function |wp| below:
 The |wp| predicate transformer maps a function |f : a -> b| and a
 desired postcondition on the function's output, |b -> Set|, to the
 weakest precondition |a -> Set| on the function's input that ensures
-the postcondition will be satisfied. It's definition, however, is
+the postcondition will be satisfied. Its definition, however, is
 simply (reverse) function composition.
 
 This notion of weakest precondition semantics is often too
@@ -257,8 +257,8 @@ equality between functions. The following lemma follows from the
 %endif
 In the remainder of this paper, we will define predicate transformer
 semantics for \emph{Kleisli arrows} of the form |a -> Free C R
-b|. While we could use the |wp| function to assign these computations
-semantics directly, we are typically not interested in syntactic
+b|. While we could use the |wp| function to assign semantics to these
+computations directly, we are typically not interested in syntactic
 equality between free monads---but rather want to study the semantics
 of the effectful programs they represent. To define a predicate
 transformer semantics for effects we need to define a function of the
@@ -298,8 +298,8 @@ module Maybe where
 \end{code}
 %endif
 
-We can define the datatype for |Partial| computations, corresponding
-to |Maybe| monad, by making the following choice for commands |C| and
+We can define the datatype for |Partial| computations, corresponding to
+the |Maybe| monad, by making the following choice for commands |C| and
 responses |R| in our |Free| datatype:
 \begin{code}
   data C : Set where
@@ -416,7 +416,7 @@ manually defining our own predicate on expressions:
   SafeDiv (Val x)       = ⊤
   SafeDiv (Div e1 e2)   = (e2 ⇓ Zero -> ⊥) ∧ SafeDiv e1 ∧ SafeDiv e2
 \end{code}
-We would expect that any expression |e| for which |SafeDiv e| holds,
+We would expect that any expression |e| for which |SafeDiv e| holds
 can be evaluated without encountering a division-by-zero
 error. Indeed, we can prove that |SafeDiv| is a sufficient condition
 for our two notions of evaluation to coincide:
@@ -1035,7 +1035,7 @@ module Compositionality
 \end{code}
 Note that this proof requires that the semantics of Kleisli morphisms,
 |wpCR|, is defined in terms of the predicate transformer |pt|. If we
-restr ourselves to Kleisli arrows, however, we can formulate similar
+restrict ourselves to Kleisli arrows, however, we can formulate similar
 properties even more succinctly.
 %if style == newcode
 \begin{code}
@@ -1186,7 +1186,7 @@ our definitions for all |k|, |x|, and |y|:
 \end{spec}
 %endif
 More generally, we can use such an equivalence relation to verify that
-the predicate transformer semantics defined respect a set of equations
+the predicate transformer semantics respect a set of equations
 that are expected to hold for a given algebraic effect.
 
 \section{Non-determinism}
@@ -1257,9 +1257,9 @@ x)|. There are two canonical ways to do so, following a familiar pattern:
   wpAny : (Forall(  a : Set)) (implicit(b : a -> Set)) ((x : a) -> ND (b x)) -> (P : (x : a) -> b x -> Set) -> (a -> Set)
   wpAny f P = wp f (anyPT P)
 \end{code}
-These two predicate transformers are dual: |allPT P| holds of a
+These two predicate transformers are dual: |allPT P| holds for a
 non-deterministic computation precisely when \emph{all} possible
-results satisfy |P|; |anyPt P| holds of a non-deterministic
+results satisfy |P|; |anyPt P| holds for a non-deterministic
 computation precisely when \emph{some} possible result satisfies |P|.
 Once again, can relate both these predicates to the usual `list
 handler' for non-determinism:
@@ -1300,7 +1300,7 @@ example, this boils down to showing:
   wpAllSoundness nd P x H = allSoundness P x (nd x) H
   \end{code}
 %endif
-  Here the predicate |All P xs| holds precisely when the predicate |P|
+  Here, the predicate |All P xs| holds precisely when the predicate |P|
   holds for all the elements of the list |xs|.
 \subsection*{Refinement}  
 
@@ -1396,8 +1396,9 @@ that the |fail| computation also satisfies this specification:
   trivialCorrect = \ P xs H → tt
 \end{code}
 %endif
-In other words, the |removeCorrect| guarantees the \emph{soundness},
-but not the \emph{completeness} of our non-deterministic computation.
+In other words, the lemma |removeCorrect| guarantees the
+\emph{soundness}, but not the \emph{completeness} of our
+non-deterministic computation.
 
 We can address this by proving an additional lemma, stating that the
 |remove| function returns every possible list decomposition:
@@ -1468,7 +1469,7 @@ As before, we define a smart constructor to make such calls:
   call x = Step x Pure
 \end{code}
 Note that we do \emph{not} define recursive functions---but rather
-defines an explicit representation of the call graph of the function
+define an explicit representation of the call graph of the function
 we wish to define. This gives a finite representation of the recursive
 structure of our program.
 
@@ -1484,7 +1485,7 @@ express in a total language such as Agda:
 This definition is not recursive, but merely makes the recursive
 structure of the function body, |f91 (f91 (i + 11))|, explicit. The
 first |call| corresponds to the inner application |f91 (i + 11)|; the
-result of this is fed to the a second |call|, corresponding to the
+result of this is fed to the second |call|, corresponding to the
 outer application.
 
 How can we reason about such functions? As is typical in the
@@ -1538,7 +1539,7 @@ of a \emph{computation}. This is analogous to how imperative programs
 require an explicit loop invariant: assigning semantics to recursive
 functions requires an explicit specification. The predicate
 transformer semantics |wpRec| states that this specification is indeed
-satisfied any recursive call respects the corresponding invariant.
+satisfied if any recursive call respects the corresponding invariant.
 
 Using the |wpRec| function, we can formulate the partial correctness
 of the |f91| function as follows.
@@ -1684,7 +1685,7 @@ specification on |a| or a value of type |a|.
     Done  : a -> I a
     Hole  : SpecK ⊤ a -> I a
 \end{code}
-The specifications passed to the |Hole| costructor consist of a
+The specifications passed to the |Hole| constructor consist of a
 precondition of type |Set| and a predicate |a -> Set|; these
 specifications correspond to some unfinished part of the program being
 calculated. We can define a predicate transformer semantics to values
@@ -2106,16 +2107,16 @@ postcondition dependent on the precondition:
       post : (x : a) -> pre x -> b x -> Set
 \end{spec}
 The resulting definition is that of an \emph{indexed
-  containers}~\cite{indexed}. We have chosen to present a simply-typed
+  container}~\cite{indexed}. We have chosen to present a simply-typed
 version of a function---even if a more general dependently typed
 alternative exists---when the added generality was unnecessary for our
 examples.
 
 Throughout this paper, we have not concerned ourselves with issues of
 size. Our Agda implementation relies on the unsound axiom that |Set :
-Set|. Yet we are confident these constructions can be statified easily
+Set|. Yet we are confident these constructions can be stratified easily
 enough, either by moving certain definitions to higher universes or
-explicitly parameterising parts of our development by a universe |U :
+explicitly parametrising parts of our development by a universe |U :
 Set|. We have no reason to believe that there are
 fundamental size issues; we have made a pragmatic choice for the sake
 of presentation and ease of development.
@@ -2132,7 +2133,7 @@ this paper~\cite{gibbons, gibbons-hinze, hutton2008reasoning}.
 There is a great deal of work studying how to reason about effects in
 type theory~\cite{beauty, swierstra-phd, nanevski1, nanevski2,
   nanevski3, brady-effects}. F$\star$ has introduced the
-notion used Dijkstra monads~\cite{fstar, dijkstra-monad} to collect the
+notion of Dijkstra monads~\cite{fstar, dijkstra-monad} to collect the
 verification conditions arising from a program using a weakest
 precondition semantics.
 
