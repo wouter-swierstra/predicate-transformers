@@ -1993,7 +1993,8 @@ We want to show how we can implement a |max| program that gives the maximum of a
   maxPost (xs , i) (o , _) = All (o ≥_) xs × (o ∈ xs)
 \end{code}
 
-The first step is to modify the specification so it fits with the induction.
+The first step is to modify the specification so it fits with the induction,
+giving us a new derivation goal |max'|:
 \begin{code}
   maxPost' : List Nat × Nat → Nat × Nat → Set
   maxPost' (xs , i) (o , _) = All (o ≥_) (i :: xs) × (o ∈ (i :: xs))
@@ -2002,133 +2003,31 @@ The first step is to modify the specification so it fits with the induction.
   max xs = transDerivation ? (max' xs)
 \end{code}
 
-%if style == newcode
+The definition of |max'| reads just like a normal definition in the |Free| monad, except for including correctness proofs at certain points:
 \begin{code}
-  max' = ?
-{-
-  maxProof0 P (xs , .0) ((refl , Hnil) , snd) = tt , \ o H → snd o (unAllCons (Pair.fst H) , lemma xs Hnil (Pair.fst o) H)
-    where
-    lemma : ∀ xs → ¬ (xs == Nil) →
-      ∀ w → Pair (All (\ n → n ≤ w) (0 :: xs)) (w ∈ (0 :: xs)) → w ∈ xs
-    lemma Nil Hnil w H = magic (Hnil refl)
-    lemma (.0 :: xs) _ .0 (AllCons x₂ (AllCons z≤n fst) , ∈Head) = ∈Head
-    lemma (x :: xs) _ w (_ , ∈Tail snd) = snd
-  getStep : forall { a pre post } ->  (f : Nat -> M a) -> 
-    wpSpec [[ preR getPost pre , postR getPost pre post ]] ⊑ wpM f ->
-    wpSpec [[ pre , post ]] ⊑ wpM (get' >=> f)
-  putStep : forall { a pre post } ->  (f : ⊤ -> M a) -> 
-    wpSpec [[ preR putPost pre , postR putPost pre post ]] ⊑ wpM f ->
-    wpSpec [[ pre , post ]] ⊑ wpM (put' >=> f)
-  getStep f H P x (fst , snd) = H (\ y z → P x z) (Pair.snd x , Pair.snd x) ((x , (fst , (refl , refl))) , \ z Hpost → snd z (Hpost x (fst , (refl , refl))))
-  putStep f H P x (fst , snd) = H (\ y z → P x z) (tt , Pair.fst x) ((x , (fst , refl)) , \ z Hpost → snd z (Hpost x (fst , refl)))
+  max' Nil = Step Get λ i → Done i {!!}
+  max' (x :: xs) = Step Get λ i → if' x <? i then (λ x<i -> transDerivation {!!} (max' xs)) else (λ x≥i -> Step (Put x) (const (transDerivation {!!} (max' xs))))
 
-  maxI0 : List Nat → M Nat
-  maxPost0 : List Nat × Nat → Nat × Nat → Set
-  maxPost0 (xs , i) (o , _) = All (o ≥_) (i :: xs) × (o ∈ (i :: xs))
-  maxPre1 : List Nat → Nat × Nat → Set
-  maxPost1 : List Nat → Nat × Nat → Nat × Nat → Set
-  maxPre2 : Nat → List Nat → Nat × Nat → Set
-  maxPost2 : Nat → List Nat → Nat × Nat → Nat × Nat → Set
-  maxPre3 : List Nat → Nat × Nat → Set
-  maxPost3 : List Nat → Nat × Nat → Nat × Nat → Set
+  -- na Step Get:
+  --  0: Goal: (r : R Get) → Derivation (applySpec [[ preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] xs)) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] xs)) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] xs))]] r)
+  -- na case split op xs:
+  --  0: Goal: Derivation (applySpec [[ preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] Nil)) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] Nil)) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] Nil))]] i)
+  --  1: Goal: Derivation (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)
+  -- na Done i in 0:
+  --  0: Goal: wpSpec (applySpec [[ preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] Nil)) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] Nil)) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] Nil))]] i) ⊑ ptM (done i)
+  -- na if' x <? i then ? else ?
+  --  1: Goal: x < i → Derivation (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)
+  --  2: Goal: ¬ x < i → Derivation (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)
 
-  test0 : (xs : List Nat) -> Derivation (applySpec [[ maxPre , maxPost ]] xs)
-  test1 : (xs : List Nat) -> Derivation (applySpec [[ K ⊤ , maxPost0 ]] xs)
-  test2 : (xs : List Nat) (i : Nat) -> Derivation (applySpec [[ maxPre1 xs , maxPost1 xs ]] i)
-  test3 : (x : Nat) (xs : List Nat) (i : Nat) -> Derivation (applySpec [[ maxPre2 x xs , maxPost2 x xs ]] i)
-  test4 : (xs : List Nat) (m : Nat) -> Derivation (applySpec [[ maxPre3 xs , maxPost3 xs ]] m)
-  test0 xs = Trans (applySpec [[ K ⊤ , maxPost0 ]] xs) (proof0 xs) (test1 xs)
-    where
-    lemma : ∀ xs → ¬ (xs == Nil) →
-      ∀ w → Pair (All (\ n → n ≤ w) (0 :: xs)) (w ∈ (0 :: xs)) → w ∈ xs
-    lemma Nil Hnil w H = magic (Hnil refl)
-    lemma (.0 :: xs) _ .0 (AllCons x₂ (AllCons z≤n fst) , ∈Head) = ∈Head
-    lemma (x :: xs) _ w (_ , ∈Tail snd) = snd
-    proof0 : ∀ xs -> wpSpec (applySpec [[ maxPre , maxPost ]] xs) ⊑ wpSpec (applySpec [[ K ⊤ , maxPost0 ]] xs)
-    proof0 xs P .0 ((refl , snd₁) , snd) = tt , λ o H → snd o (unAllCons (Pair.fst H) , lemma xs snd₁ (Pair.fst o) H)
-  test1 xs = Step Get λ i → Trans (applySpec [[ maxPre1 xs , maxPost1 xs ]] i) (proof1 xs i) (test2 xs i)
-    where
-    proof1 : ∀ xs i P x → Pair (Sigma (Pair ⊤ ℕ) (λ x₁ → Pair ⊤ (Pair (Pair.snd x₁ ≡ i) (Pair.snd x₁ ≡ x)))) (∀ x₁ → (∀ x₂ → Pair ⊤ (Pair (Pair.snd x₂ ≡ i) (Pair.snd x₂ ≡ x)) → Pair (All (λ n → n ≤ Pair.fst x₁) (Pair.snd x₂ :: xs)) (Pair.fst x₁ ∈ (Pair.snd x₂ :: xs))) → P x x₁) → Pair (maxPre1 xs (i , x)) (∀ x₁ → maxPost1 xs (i , x) x₁ → P x x₁)
-    proof1 xs i P x ((fst , (fst₁ , (fst₂ , snd₁))) , snd) = {!!}
-  test2 Nil i = Done i λ P x x₁ → {!!}
-  test2 (x :: xs) i = Trans (applySpec [[ maxPre2 x xs , maxPost2 x xs ]] i) {!proof2!} (test3 x xs i)
-  test3 x xs i with x lt i
-  ... | yes _ = Trans (applySpec [[ maxPre3 xs , maxPost3 xs ]] i) {!!} (test4 xs i)
-  ... | no _ = Trans (applySpec [[ maxPre3 xs , maxPost3 xs ]] x) {!!} (test4 xs x)
-  test4 xs m = Step (Put m) (const (Trans (applySpec [[ K ⊤ , maxPost0 ]] xs) {!!} (test1 xs)))
+  -- na transDerivation ? (max' xs) in 1:
+  --  1: Goal: wpSpec (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i) ⊑ wpSpec (applySpec [[ K ⊤ , maxPost' ]] xs)
 
-  maxI0 = specF [[ K ⊤  , maxPost0 ]]
-  maxI1 : List Nat → M Nat
-  maxI1 xs = get' tt >>= specF [[ maxPre1 xs , maxPost1 xs ]]
-  maxPre1 xs (i , i') = i == i'
-  maxPost1 xs (i , _) (o , _) = All (o ≥_) (i :: xs) × (o ∈ (i :: xs))
-  maxProof1 : wpSpec [[ K ⊤ , maxPost0 ]] ⊑ wpM maxI1
-  maxProof1 P (xs , i) = getStep {pre = K ⊤} {post = \ xi → maxPost0 (xs , Pair.snd xi)} (specF [[ maxPre1 xs , maxPost1 xs ]]) lemma (\ xi → (P (xs , Pair.snd xi))) (tt , i)
-    where
-    lemma' : ∀ i' o →
-      Pair (All (o ≥_) (i' :: xs)) (o ∈ (i' :: xs)) →
-      ∀ (x : ⊤ × Nat) →
-      Pair ⊤ (Pair (Pair.snd x ≡ i') (Pair.snd x ≡ i')) →
-      Pair (All (o ≥_) (Pair.snd x :: xs))
-      (o ∈ (Pair.snd x :: xs))
-    lemma' i' o H (_ , .i') (_ , (refl , refl)) = H
+  -- na Step (Put x) in 2:
+  --   2: Goal: (r : R (Put x)) → Derivation (applySpec [[preR (putPost x) (Spec.pre (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)) , postR (putPost x) (Spec.pre (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)) (Spec.post (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i))]] r)
 
-    lemma : wpSpec [[
-        preR getPost (K ⊤) ,
-        postR getPost (K ⊤) (\ xi → (maxPost0 (xs , Pair.snd xi)))
-      ]] ⊑ wpM (specF [[ maxPre1 xs , maxPost1 xs ]])
-    lemma P (i' , .i') (((_ , .i') , (_ , (refl , refl))) , snd) = refl , \ o H → snd o (lemma' i' (Pair.fst o) H)
-
-  maxI2 : List Nat → Nat → M Nat
-  maxI2 Nil = done
-  maxI2 (x :: xs) = specF [[ maxPre2 x xs , maxPost2 x xs ]]
-  maxPre2 x xs (i , i') = i == i'
-  maxPost2 x xs (i , _) (o , _) = All (o ≥_) (i :: x :: xs) × (o ∈ (i :: x :: xs))
-  maxProof2 : ∀ xs → wpSpec [[ maxPre1 xs , maxPost1 xs ]] ⊑ wpM (maxI2 xs)
-  maxProof2 Nil P (i , .i) (refl , snd) = snd _ ((AllCons ≤-refl AllNil) , ∈Head)
-  maxProof2 (x :: xs) P (i , .i) (refl , snd) = refl , snd
-
-  maxI3 : Nat → List Nat → Nat → M Nat
-  maxI3 x xs i with i lt x
-  ... | yes _ = specF [[ maxPre3 xs , maxPost3 xs ]] x
-  ... | no _ = specF [[ maxPre3 xs , maxPost3 xs ]] i
-  maxPre3 xs (m , i) = i ≤ m
-  maxPost3 xs (m , i) (o , _) = All (o ≥_) (m :: xs) × (o ∈ (m :: xs))
-  maxProof3 : ∀ x xs → wpSpec [[ maxPre2 x xs , maxPost2 x xs ]] ⊑ wpM (maxI3 x xs)
-  maxProof3 x xs P (i , .i) (refl , snd) with i lt x
-  ... | yes p = <⇒≤ p , \ x₁ x₂ → snd x₁ (lemmaYes i x xs p (Pair.fst x₁) x₂)
-    where
-    lemmaYes : ∀ i x xs →
-      i < x →
-      ∀ w →
-      Pair (All (w ≥_) (x :: xs)) (w ∈ (x :: xs)) →
-      Pair (All (w ≥_) (i :: x :: xs)) (w ∈ (i :: x :: xs))
-    lemmaYes i x xs x₂ .x (fst , ∈Head) = (AllCons (<⇒≤ x₂) fst) , (∈Tail ∈Head)
-    lemmaYes i x xs x₂ w (AllCons x₄ fst , ∈Tail x₃) = (AllCons (≤-trans (<⇒≤ x₂) x₄) (AllCons x₄ fst)) , ∈Tail (∈Tail x₃)
-  ... | no ¬p = ≤-refl , \ x₁ x₂ → snd x₁ (lemmaNo i x xs ¬p (Pair.fst x₁) x₂)
-    where
-    lemmaNo : ∀ i x xs →
-      ¬ (i < x) →
-      ∀ w →
-      Pair (All (w ≥_) (i :: xs)) (w ∈ (i :: xs)) →
-      Pair (All (w ≥_) (i :: x :: xs)) (w ∈ (i :: x :: xs))
-    lemmaNo i x xs x₂ .i (AllCons x₃ fst , ∈Head) = AllCons x₃ (AllCons (≮⇒≥ x₂) fst) , ∈Head
-    lemmaNo i x xs x₂ w (AllCons x₃ fst , ∈Tail snd) = (AllCons x₃ (AllCons (≤-trans (≮⇒≥ x₂) x₃) fst)) , (∈Tail (∈Tail snd))
-
-  maxI4 : List Nat → Nat → M Nat
-  maxI4 xs m = put' m >>= \ _ → specF [[ K ⊤ , maxPost0 ]] xs
-  maxProof4 : ∀ xs → wpSpec [[ maxPre3 xs , maxPost3 xs ]] ⊑ wpM (maxI4 xs)
-  maxProof4 xs = putStep {pre = maxPre3 xs} {post = maxPost3 xs} (\ _ → specF [[ K ⊤ , maxPost0 ]] xs) \ P m H → tt , \ o Hpost → Pair.snd H o (lemma xs (Pair.snd m) (Pair.fst o) Hpost)
-    where
-    lemma : ∀ xs m w →
-      Pair (All (\ n → n ≤ w) (m :: xs)) (w ∈ (m :: xs)) →
-      ∀ x → Pair (Pair.snd x ≤ Pair.fst x) (Pair.fst x ≡ m) →
-      Pair (All (\ n → n ≤ w) (Pair.fst x :: xs))
-      (w ∈ (Pair.fst x :: xs))
-    lemma xs m w (wMax , wItem) (.m , snd) (fst₁ , refl) = wMax , wItem
--}
+  -- na transDerviation ? (max' xs) in 2:
+  --   2: Goal: wpSpec (applySpec [[preR (putPost x) (Spec.pre (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)) , postR (putPost x) (Spec.pre (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)) (Spec.post (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i))]] tt) ⊑ wpSpec (applySpec [[ K ⊤ , maxPost' ]] xs)
 \end{code}
-%endif
 
 \section{Discussion}
 \label{sec:discussion}
