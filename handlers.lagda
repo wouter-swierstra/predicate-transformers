@@ -1800,10 +1800,10 @@ derivation.
   SpecVal = SpecK ⊤
   applySpec : {a b : Set} -> SpecK a b -> a -> SpecVal b
   applySpec [[ pre , post ]] x = [[ (\_ -> pre x) , (λ _ → post x) ]]
-  holeVal : {a : Set} -> SpecVal a -> M a
-  holeVal spec = Pure (Hole spec)
-  holeFun : {a b : Set} -> SpecK a b -> a -> M b
-  holeFun spec x = holeVal (applySpec spec x)
+  specV : {a : Set} -> SpecVal a -> M a
+  specV spec = Pure (Hole spec)
+  specF : {a b : Set} -> SpecK a b -> a -> M b
+  specF spec x = specV (applySpec spec x)
 
   postulate
     stepFun : {a : Set} -> (c : C) -> SpecVal a -> SpecK (R c) a
@@ -1811,7 +1811,7 @@ derivation.
     stepMonotone : {a : Set} {spec spec' : SpecVal a} (c : C) ->
       wpSpec spec ⊑ wpSpec spec' -> wpSpec (stepFun c spec) ⊑ wpSpec (stepFun c spec')
     stepCorrect : {a : Set} -> (c : C) -> (spec : SpecVal a) ->
-      wpSpec spec ⊑ wpM (λ _ → Step c (holeFun (stepFun c spec)))
+      wpSpec spec ⊑ wpM (λ _ → Step c (specF (stepFun c spec)))
     monotone : (c : C) {P Q : R c -> Set} -> (P ⊆ Q) -> ptalgebra c P -> ptalgebra c Q
 
   stepVal : {a : Set} (c : C) -> SpecVal a -> R c -> SpecVal a
@@ -1853,9 +1853,10 @@ module StateExample where
   open State Nat
 
   -- We have to redo the Mix section since our specifications incorporate the state
+  SpecVal = SpecK Nat
   data I (a : Set) : Set where
     Done  : a -> I a
-    Hole  : SpecK Nat (a × Nat) -> I a
+    Hole  : SpecVal (a × Nat) -> I a
   M : Set -> Set
   M a = State (I a)
   ptI : forall { a } ->  I a -> (a × Nat -> Set) -> Nat -> Set
@@ -1871,6 +1872,11 @@ module StateExample where
   (Step c k) >>= f        = Step c (\ r →  k r >>= f)
   _>=>_ : forall {a b c} -> (a -> M b) -> (b -> M c) -> a -> M c
   (f >=> g) x = f x >>= g
+
+  applySpec : {a b : Set} -> SpecK (a × Nat) (b × Nat) -> a -> SpecVal (b × Nat)
+  applySpec [[ pre , post ]] x = [[ (\ t -> pre (x , t)) , (λ t → post (x , t)) ]]
+  specV : {a : Set} -> SpecVal (a × Nat) -> M a
+  specV spec = Pure (Hole spec)
 \end{code}
 %endif
 
