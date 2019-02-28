@@ -1789,35 +1789,37 @@ derivation.
 
 %if style == newcode
 \begin{code}
--- Tim: hier begint de opzet van expliciete derivaties
-  
+  -- Tim: hier begint de opzet van expliciete derivaties
+
+  -- TODOS : ALGEMEEN
+  --         SpecVal  = SpecK T
+  --         SpecK a b -> (a -> SpecVal b)
+  --       : aanpassen Derivation
+  --       : lemma om  Derivation s -> Derivation s' (mits s \sqsubseteq s' of andersom)
+  -- TODOS : Voorbeeld (en in het algemeen)
+  --       : smart constructors + specificatie v.d. operaties
+  --       : getSpec \sqsubseteq get (etc.)
+  --       : step : C -> Spec -> Spec
+  --       : stepCorrect lemma bewijzen
+  --       : voorbeeld als derivatie opschrijven
   postulate
     step : {a b : Set} -> (c : C) -> SpecK a b -> SpecK a b
     stepCorrect : {a : Set} -> (c : C) -> (spec : SpecK ⊤ a) ->
       wpSpec spec ⊑ wpM (λ _ → Step c (\r -> Pure (Hole (step c spec))))
 
-  data Derivation {a b : Set} (spec : SpecK a b) : Set where
+  data Derivation {b : Set} (spec : SpecK ⊤ b) : Set where
     Done : (x : b) -> wpSpec spec ⊑ wpM (const (Pure (Done x))) -> Derivation spec
     Step :  (c : C) -> (∀ (r : R c) -> Derivation (step c spec)) -> Derivation spec
-    Trans : ∀ spec' -> wpSpec spec ⊑ wpSpec spec' -> Derivation spec' -> Derivation spec
 
   extract : {a b : Set} (spec : SpecK a b) -> Derivation spec -> a -> Free C R b
   extract _ (Done y _) x = Pure y
   extract spec (Step c k) x = Step c \r -> extract (step c spec) (k r) x
-  extract _ (Trans spec' _ d) = extract spec' d
 
-  stepCong : ∀ {a} -> (c : C) (k : R c -> M a) (k' : R c -> Free C R a)->
-    (wpM k  ⊑ wpCR k') ->
-    _⊑_ {⊤} (wpM (const (Step c k))) (wpCR (const (Step c k')))
-  stepCong c k k' H P tt z = {!!}
-    -- z : ptalgebra c (λ r → pt (k r) (λ ix → ptI ix (P tt)))
-    -- ptalgebra c (λ r → pt (k' r) (P tt))
   correct : {a : Set} (spec : SpecK ⊤ a) -> (d : Derivation spec) ->
     wpSpec spec ⊑ wpCR (extract spec d)
   correct spec (Done x p) = p
   correct spec (Step c k) = ⊑-trans (stepCorrect c spec)
-                            let ih = \r -> correct (step c spec) (k r) in λ P x x₁ → {!ih!} 
-  correct spec (Trans spec' p d) = ⊑-trans p (correct spec' d)
+    λ P x x₁ → monotonicity c (\r -> correct (step c  spec) (k r)  P tt) x₁
 \end{code}
 %endif
 \subsection*{Case study: maximum}
@@ -2178,7 +2180,7 @@ and specifications from their constituent parts. Similar ideas have
 already been explored when embedding algebraic effects in Haskell by
 \citet{Wu2014}.
 
-\todo{Nail down theory further -- presheafs, contravariant hom
+\todo{Nail down theory further -- presheaves, contravariant Set-valued hom
   functors, yoneda embedding, etc}
 
 There are well-known efficiency problems when working with free monads
