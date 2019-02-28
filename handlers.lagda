@@ -170,7 +170,7 @@ There are many different ways to specify the behaviour of a function
 |f : a -> b|. One might provide a reference implementation, define a
 relation |R : a -> b -> Set|, or write contracts and test cases. In
 this paper, we will, however, focus on \emph{predicate transformer
-  semantics}. Whereas these predicate transformers traditionally relate
+  semantics}. Where these predicate transformers traditionally relate
 the state space of an (imperative) program, they can be readily
 adapted to the functional setting.
 
