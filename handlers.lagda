@@ -22,7 +22,7 @@
   reasoning about their pure counterparts. This paper presents a
   predicate transformer semantics for a variety of effects, including
   exceptions, state, non-determinism, and general recursion. The
-  predicate transformer semantics give rise to a refinement relation
+  predicate transformer semantics gives rise to a refinement relation
   that can be used to relate a program to its specification, or even
   calculate effectful programs that are correct by construction.
 \end{abstract}
@@ -161,7 +161,8 @@ operations.
 
 \subsection*{Weakest precondition semantics}
 
-Weakest precondition semantics have a rich history, dating back to
+The idea of of associating weakest precondition semantics with
+imperative programs has a rich history, dating back to
 Dijkstra's Guarded Command Language~\citeyearpar{gcl}. In this section, we
 recall the key notions that we will use throughout the remainder of
 the paper.
@@ -502,7 +503,7 @@ fairly straightforward.
 \subsection*{Refinement}
 
 The weakest precondition semantics on partial computations defined
-above gives rise to a refinement relation on Kleisli arrows of the
+above give rise to a refinement relation on Kleisli arrows of the
 form |a -> Partial b|. We can characterise this relation by proving
 the following lemma:
 \begin{spec}
@@ -697,10 +698,10 @@ Now we can finally use our refinement relation to relate the
 %endif
 
 This example shows how to prove soundness of our predicate transformer
-semantics with respect to a given handler. Semantics, such as
-|wpDefault| and |wpPartial|, compute \emph{some} predicate; it is only
-by proving such soundness results that we can ensure that this
-predicate is meaningful. Furthermore, this example shows how different
+semantics with respect to a given handler. The predicate transformers, such as
+|wpDefault| and |wpPartial|, return \emph{some} predicate; it is only
+by proving such soundness results that we can ensure that the
+semantics is meaningful. Furthermore, this example shows how different
 choices of handler may exist for the \emph{same} effect---a point we shall
 return to when discussing non-determinism (Section~\ref{sec:non-det}).
 
@@ -790,7 +791,7 @@ Given any predicate |P| relating the input, initial state, final state
 and result of the computation, the |wpState| function computes the
 weakest precondition required of the input and initial state to ensure
 |P| holds upon completing the computation. The definition amounts to
-composing the |wp| and |statePT'| functions we have seen previously.
+composing the |wp| and |statePT| functions we have seen previously.
 As we did in the previous section for |wpDefault|, we can prove
 soundness of this semantics with respect to the |run| function:
 \begin{code}
@@ -908,7 +909,7 @@ The proof is interesting. Initially, it proceeds by induction on the
 input tree. The base case for the |Leaf| constructor is easy enough to
 discharge; the inductive case, however, poses a greater challenge. In
 particular, the goal we wish to prove in the case for the |Node|
-constructor amounts to the following statement:
+constructor amounts to proving the following statement.
 \begin{center}
 \begin{spec}
   statePT (relabel l >>= (\ l' → relabel r >>= (\ r' → Pure (Node l' r')))) (P (Node l r , i)) i
@@ -1050,7 +1051,8 @@ First, we can define the usual composition of Kleisli morphisms as follows:
   f >=> g = \ x → f x >>= g
 \end{code}
 Using this composition operator, we can show that for \emph{any}
-compositional predicate transformer semantics, 
+compositional predicate transformer semantics, the following
+property holds:
 \begin{code}
   compositionality1 : (Forall(a b c : Set)) (f1 f2 : a -> Free C R b) (g : b -> Free C R c) ->
     wpCR f1 ⊑ wpCR f2 ->
@@ -1064,8 +1066,17 @@ compositional predicate transformer semantics,
      H (\x y -> pt (f y) (P x)) x y
 \end{code}
 %endif
+This is a central result of our development---it shows how the
+compositionality of any weakest precondition semantics is respected
+when considering refinement proofs. Just as referential transparency
+guarantees that \emph{pure} expressions may be substituted freely
+during equational reasoning, this lemma guarantees that predicate
+transformers may be substituted freely during refinement proofs. It is worth
+repeating that this lemma holds for \emph{any} predicate transformer
+semantics defined as a fold over a free monad.
+
 A similar property also holds when considering refinements on the
-second argument of a Kleisli composition:
+second argument of a Kleisli composition.
 \begin{code}
   compositionality2 : (Forall(a b c)) (f : a -> Free C R b) (g1 g2 : b -> Free C R c) ->
     wpCR g1 ⊑ wpCR g2 ->
@@ -1091,7 +1102,7 @@ following property:
   \end{code}
 %endif  
   This monotonicity property holds of all the predicate transformers
-  presented in this paper and is straightforward to prove.
+  presented in this paper and is straightforward to prove for all of them.
 
 \subsection*{Rule of consequence}
 \label{sec:consequence}
@@ -1270,7 +1281,7 @@ handler' for non-determinism:
   run (Step Choice k)  = run (k True) ++ run (k False)
 \end{code}
 Finally, we can prove that our predicate transformers are sound with
-respect to these semantics. In the case for the |wpAll| function, for
+respect to this semantics. In the case for the |wpAll| function, for
 example, this boils down to showing:
 %if style == newcode
 \begin{code}
@@ -1488,7 +1499,7 @@ first |call| corresponds to the inner application |f91 (i + 11)|; the
 result of this is fed to the second |call|, corresponding to the
 outer application.
 
-How can we reason about such functions? As is typical in the
+How can we reason about such functions? As is customary in the
 literature on predicate transformer semantics, we distinguish between
 \emph{total correctness} and \emph{partial correctness}. For the
 moment, we will only concern ourselves with proving \emph{partial
@@ -1534,7 +1545,7 @@ semantics for Kleisli arrows of the form |I ~~> O|:
   wpRec spec f P i = wpSpec spec P i ∧ invariant i spec (f i) 
 \end{code}
 In contrast to the semantics we have seen so far, the |wpRec| function
-requires a \emph{specification} as argument to determine the semantics
+requires a \emph{specification} as argument to determine a semantics
 of a \emph{computation}. This is analogous to how imperative programs
 require an explicit loop invariant: assigning semantics to recursive
 functions requires an explicit specification. The predicate
@@ -1625,7 +1636,7 @@ soundness result regarding our |wpRec| semantics:
   soundness : (Forall (I O)) (f : I ~~> O) (spec : Spec I O) (P : (i : I) -> O i -> Set) ->
     (∀ i -> wpRec spec f P i) -> ∀ n i → mayPT (P i) (petrol f (f i) n)
 \end{code}
-This lemma guarantees that---under the assumption that the semantics
+This lemma guarantees that---under the assumption that 
 |wpRec| holds for all inputs---whenever the petrol-driven semantics manage
 to produce a result, this result is guaranteed to satisfy the predicate |P|.
   
@@ -1688,7 +1699,7 @@ specification on |a| or a value of type |a|.
 The specifications passed to the |Hole| constructor consist of a
 precondition of type |Set| and a predicate |a -> Set|; these
 specifications correspond to some unfinished part of the program being
-calculated. We can define a predicate transformer semantics to values
+calculated. We can assign a predicate transformer semantics to values
 of type |I a| easily enough, reusing our previous |wpSpec| function:
 \begin{code}
   ptI : (Forall(a)) I a -> (a -> Set) -> Set
@@ -1750,7 +1761,7 @@ Kleisli morphisms.
 \end{code}
 %endif
 We have seen many examples of such semantics in the previous sections
-for specific choices of |C| and |R|. We can now define the semantics of
+for specific choices of |C| and |R|. We can now assign semantics to
 `unfinished' programs as follows:
 \begin{code}
   wpM : (Forall(a)) (implicit(b : a -> Set)) ((x : a) -> M (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
@@ -2162,7 +2173,7 @@ take the coproduct of our free monads in the style of
 ~\citet{swierstra2008} to combine the different effects
 syntactically. We hope that the composition of predicate transformers
 can be used to assign semantics to programs using a variety of
-different effects---much as we defined the semantics of mixed programs
+different effects---much as we defined a semantics of mixed programs
 and specifications from their constituent parts. Similar ideas have
 already been explored when embedding algebraic effects in Haskell by
 \citet{Wu2014}.
