@@ -34,6 +34,7 @@
 %format law3 = law "_3"
 %format law4 = law "_4"
 %format top = "\top"
+%format <-> = "\leftrightarrow"
 %format refines = "\sqsubseteq"
 %format subset = "\subseteq"
 %format elem = "\in"

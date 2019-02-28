@@ -102,7 +102,7 @@ our development are available online.\footnote{The url has been
 
  \todo{Finalize: abstract, intro and title}
 \section{Background}
-\label{sec:intro}
+\label{sec:background}
 %if style == newcode
 \begin{code}
 {-# OPTIONS --type-in-type #-}
@@ -263,7 +263,7 @@ computations directly, we are typically not interested in syntactic
 equality between free monads---but rather want to study the semantics
 of the effectful programs they represent. To define a predicate
 transformer semantics for effects we need to define a function of the
-following general form:
+following form:
 \begin{center}
 \begin{spec}
   pt : (a -> Set) -> Free C R a -> Set
@@ -795,8 +795,8 @@ composing the |wp| and |statePT| functions we have seen previously.
 As we did in the previous section for |wpDefault|, we can prove
 soundness of this semantics with respect to the |run| function:
 \begin{code}
-  soundness : (Forall(a b : Set)) (P : a × s -> b × s -> Set) -> (f : a -> State b) -> (i : s) -> (x : a) ->
-    wpState f P (x , i) -> P (x , i) (run (f x) i)
+  soundness : (Forall(a b : Set)) (P : a × s -> b × s -> Set) -> (f : a -> State b) -> 
+    forall i x -> wpState f P (x , i) -> P (x , i) (run (f x) i)
 \end{code}
 %if style == newcode           
 \begin{code}
@@ -1054,13 +1054,13 @@ Using this composition operator, we can show that for \emph{any}
 compositional predicate transformer semantics, the following
 property holds:
 \begin{code}
-  compositionality1 : (Forall(a b c : Set)) (f1 f2 : a -> Free C R b) (g : b -> Free C R c) ->
+  compositionality-left : (Forall(a b c : Set)) (f1 f2 : a -> Free C R b) (g : b -> Free C R c) ->
     wpCR f1 ⊑ wpCR f2 ->
     wpCR (f1 >=> g) ⊑ wpCR (f2 >=> g)
 \end{code}
 %if style == newcode
 \begin{code}
-  compositionality1 mx my f H P x y
+  compositionality-left mx my f H P x y
     rewrite compositionality (mx x) f (P x)
     | compositionality (my x) f (P x) =
      H (\x y -> pt (f y) (P x)) x y
@@ -1078,7 +1078,7 @@ semantics defined as a fold over a free monad.
 A similar property also holds when considering refinements on the
 second argument of a Kleisli composition.
 \begin{code}
-  compositionality2 : (Forall(a b c)) (f : a -> Free C R b) (g1 g2 : b -> Free C R c) ->
+  compositionality-right : (Forall(a b c)) (f : a -> Free C R b) (g1 g2 : b -> Free C R c) ->
     wpCR g1 ⊑ wpCR g2 ->
     wpCR (f >=> g1) ⊑ wpCR (f >=> g2)
   \end{code}    
@@ -1096,7 +1096,7 @@ following property:
 \end{code}
 %if style == newcode
 \begin{code}
-  compositionality2 mx f g H P x wp1
+  compositionality-right mx f g H P x wp1
     rewrite compositionality (mx x) f (P x)
     | compositionality (mx x) g (P x) = monotonicity (H _) (mx x) wp1 
   \end{code}
@@ -1273,7 +1273,7 @@ non-deterministic computation precisely when \emph{all} possible
 results satisfy |P|; |anyPt P| holds for a non-deterministic
 computation precisely when \emph{some} possible result satisfies |P|.
 Once again, can relate both these predicates to the usual `list
-handler' for non-determinism:
+handler' for non-determinism.
 \begin{code}
   run : (Forall(a)) ND a -> List a
   run (Pure x)         = [ x ]
@@ -1335,8 +1335,8 @@ With these relations in place, we can give the following
 characterisation of the refinement relation induced by both the
 |wpAll| and |wpAny| predicate transformers:
 \begin{spec}
-  refineAll  : (f g : a -> ND b) -> wpAll f  ⊑ wpAll g  ↔ ((x : a) -> f x  ⊆ g x)
-  refineAny  : (f g : a -> ND b) -> wpAny f  ⊑ wpAny g  ↔ ((x : a) -> g x  ⊆ f x)
+  refineAll  : (f g : a -> ND b) -> wpAll f  ⊑ wpAll g  <-> ((x : a) -> f x  ⊆ g x)
+  refineAny  : (f g : a -> ND b) -> wpAny f  ⊑ wpAny g  <-> ((x : a) -> g x  ⊆ f x)
 \end{spec}
 Interestingly, the case for the |wpAny| predicate flips the subset
 relation.  Intuitively, if you know that a predicate |P| holds for
@@ -1376,7 +1376,7 @@ The definition recurses over the proof of |x ∈ xs|, reconstructing the
 output list along the way.
 
 With the specification in place, we can define the following function
-that non-deterministically draws an element from its input list.
+that draws an element from its input list non-deterministically.
 \begin{code}  
   remove : (Forall(a)) List a -> ND (a × List a)
   remove Nil        = fail
@@ -1539,7 +1539,7 @@ postcondition, the remaining continuation |k o| must continue to
 satisfy the desired specification.
 
 Using this definition, we can now formulate a predicate transformer
-semantics for Kleisli arrows of the form |I ~~> O|:
+semantics for Kleisli arrows of the form |I ~~> O|.
 \begin{code}
   wpRec : (Forall(I)) (implicit(O : I -> Set)) Spec I O -> (f : I ~~> O) -> (P : (i : I) -> O i -> Set) -> (I -> Set)
   wpRec spec f P i = wpSpec spec P i ∧ invariant i spec (f i) 
@@ -1918,7 +1918,7 @@ lead to the given |z|.
 \begin{code}
   preR : ∀ {a b} (postL : a → b → Set) (preLR : a → Set) → b → Set
   preR {a} postL preLR y = Sigma a \ x → preLR x ∧ postL x y
-  postR : ∀ {a b c} (postL : a → b → Set) (preLR : a → Set) (postLR : a → c → Set) → b → c → Set
+  postR : (Forall (a b c)) (postL : a → b → Set) (preLR : a → Set) (postLR : a → c → Set) → b → c → Set
   postR postL preLR postLR y z = ∀ x → preLR x ∧ postL x y → postLR x z
 \end{code}
 
