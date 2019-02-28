@@ -972,8 +972,8 @@ obligations.
     prove-bind-spec mx f spec P i Hmx Hf = prove-bind mx f P i (Hmx (wpState f (\ _ → P)) Hf)
 
     --  Partially apply a specification.
-    partialSpec : ∀ {a b s} → SpecK (a × s) (b × s) → a → SpecK s (b × s)
-    partialSpec [[ pre , post ]] x = [[ (\ s → pre (x , s)) , (\ s → post (x , s)) ]]
+    applySpec : ∀ {a b s} → SpecK (a × s) (b × s) → a → SpecK s (b × s)
+    applySpec [[ pre , post ]] x = [[ (\ s → pre (x , s)) , (\ s → post (x , s)) ]]
 
     --  Ingredients for proving the postcondition holds.
     --  By abstracting over the origin of the numbers,
@@ -993,10 +993,10 @@ obligations.
     --  We have to rewrite the formulation of step2 slightly to make it acceptable for the termination checker.
     step2' : ∀ {a} P (t : Tree a) s → wpSpec relabelSpec P (t , s) → statePT (relabel t) (P (t , s)) s
     step2' P (Leaf x) s (fst , snd) = snd (Leaf s , Succ s) (refl , plus-one s)
-    step2' P (Node l r) s (fst , snd) = prove-bind-spec (relabel l) _ (partialSpec relabelSpec l) _ _
+    step2' P (Node l r) s (fst , snd) = prove-bind-spec (relabel l) _ (applySpec relabelSpec l) _ _
       (\ Q → step2' (\ _ → Q) l s)
       (tt , \ l',s' postL → let l' = Pair.fst l',s' ; s' = Pair.snd l',s'
-        in prove-bind-spec (relabel r) _ (partialSpec relabelSpec r) _ _
+        in prove-bind-spec (relabel r) _ (applySpec relabelSpec r) _ _
           (\ Q → step2' (\ _ → Q) r s')
           (tt , \ r',s'' postR → let r' = Pair.fst r',s'' ; s'' = Pair.snd r',s''
             in snd (Node l' r' , s'') (postcondition s s' s'' (size l) (flatten l') (size r) (flatten r') postL postR)))
@@ -1864,6 +1864,8 @@ module StateExample where
   ptI (Hole spec)  P t  = wpSpec spec (const P) t
   wpM : forall { a b } -> (a -> M b) -> (a × Nat -> b × Nat -> Set) -> (a × Nat -> Set)
   wpM f P = wpState f (\ i o -> ptI (Pair.fst o) (P i) (Pair.snd o))
+  ptM : {a : Set} -> M a -> (Nat -> a × Nat -> Set) -> (Nat -> Set)
+  ptM S post t = wpM (const S) (const (post t)) (⊤ , t)
   _>>=_ : forall { a b } ->  (M a) -> (a -> M b) -> M b
   Pure (Done x) >>= f     = f x
   Pure (Hole [[ pre , post ]]) >>= f  =
@@ -1889,14 +1891,14 @@ of smart constructors:
 %endif
 \begin{code}
   done   : (Forall (a)) a -> M a
-  get'   : ⊤ -> M Nat
+  get'   : M Nat
   put'   : Nat -> M ⊤
   specF  : (Forall(a b)) SpecK (a × Nat) (b × Nat) → a → M b
 \end{code}
 %if style == newcode
 \begin{code}
   done x = Pure (Done x)
-  get' _ = Step Get done
+  get' = Step Get done
   put' t = Step (Put t) done
   specF [[ pre , post ]] x = Pure (Hole [[
       (\ i → pre (x , i)) ,
@@ -1904,28 +1906,26 @@ of smart constructors:
     ]])
 \end{code}
 %endif
-Here we choose to define |get| as a Kleisli morphism, taking a
-spurious argument of the unit type, as this makes the presentation of
-|get| and |put| a bit more uniform. We can define the following
+We can define the following
 specifications for |get| and |put|:
 \begin{code}
-  getPost : ⊤ × Nat -> Nat × Nat → Set
-  getPost (_ , t) (x , t') = (t == x) ∧ (t == t')
-  putPost : Nat × Nat → ⊤ × Nat → Set
-  putPost (t , _) (_ , t') = t == t'
+  getPost : Nat -> Nat × Nat → Set
+  getPost t (x , t') = (t == x) ∧ (t == t')
+  putPost : Nat -> Nat → ⊤ × Nat → Set
+  putPost t _ (_ , t') = t == t'
 \end{code}
 As you would expect, |get| returns the current state but does not
 modify it; the |put| command overwrites the current state. We can
 prove that |get| and |put| commands satisfy these postconditions using
 our |wpM| semantics:
 \begin{code}
-  getCorrect  : forall pre ->  wpSpec [[ pre , (\ i o -> pre i ∧ getPost i o) ]]  ⊑ wpM get'
-  putCorrect  : forall pre ->  wpSpec [[ pre , (\ i o -> pre i ∧ putPost i o) ]]  ⊑ wpM put'
+  getCorrect  : forall pre ->  wpSpec [[ pre , (\ i o -> pre i ∧ getPost i o) ]]  ⊑ ptM get'
+  putCorrect  : forall pre x ->  wpSpec [[ pre , (\ i o -> pre i ∧ putPost x i o) ]]  ⊑ ptM (put' x)
 \end{code}
 %if style == newcode
 \begin{code}
-  getCorrect _ P (_ , t) (fst , snd) = snd (t , t) (fst , (refl , refl))
-  putCorrect _ P (t , _) (fst , snd) = snd (tt , t) (fst , refl)
+  getCorrect _ P t (fst , snd) = snd (t , t) (fst , (refl , refl))
+  putCorrect _ t P _ (fst , snd) = snd (tt , t) (fst , refl)
 \end{code}
 %endif
 While we will not use these properties in the remainder of our
@@ -1950,22 +1950,27 @@ lead to the given |z|.
 
 This allows us to refine a specification by applying a |get| or |put|:
 \begin{code}
-  getStep : (Forall(a pre post)) (f : Nat -> M a) -> 
-    wpSpec [[ preR getPost pre , postR getPost pre post ]] ⊑ wpM f ->
-    wpSpec [[ pre , post ]] ⊑ wpM (get' >=> f)
-  putStep : (Forall(a pre post)) (f : ⊤ -> M a) -> 
-    wpSpec [[ preR putPost pre , postR putPost pre post ]] ⊑ wpM f ->
-    wpSpec [[ pre , post ]] ⊑ wpM (put' >=> f)
+  step : {b : Set} (c : C) (spec : SpecVal (b × Nat)) -> SpecK (R c × Nat) (b × Nat)
+  step Get [[ pre , post ]] = [[ preR getPost pre , postR getPost pre post ]]
+  step (Put x) [[ pre , post ]] = [[ preR (putPost x) pre , postR (putPost x) pre post ]]
 \end{code}
-%if style == newcode
+
+We can define the |Derivation| data type for this |step|:
 \begin{code}
-  getStep f H P x (fst , snd) = H (\ y z → P x z) (Pair.snd x , Pair.snd x) ((x , (fst , (refl , refl))) , \ z Hpost → snd z (Hpost x (fst , (refl , refl))))
-  putStep f H P x (fst , snd) = H (\ y z → P x z) (tt , Pair.fst x) ((x , (fst , refl)) , \ z Hpost → snd z (Hpost x (fst , refl)))
+  data Derivation {b : Set} (spec : SpecVal (b × Nat)) : Set where
+    Done : (x : b) -> wpSpec spec ⊑ ptM (done x) -> Derivation spec
+    Step : (c : C) -> (∀ (r : R c) -> Derivation (applySpec (step c spec) r)) -> Derivation spec
 \end{code}
-%endif
 
 %if style == newcode
 \begin{code}
+  DerivationFun : {a b : Set} (spec : SpecK (a × Nat) (b × Nat)) -> Set
+  DerivationFun {a} {b} spec = (x : a) -> Derivation (applySpec spec x)
+  transDerivation : {a : Set} {spec spec' : SpecVal (a × Nat)} -> wpSpec spec ⊑ wpSpec spec' ->
+    Derivation spec' -> Derivation spec
+  transDerivation H (Done x Hx) = Done x (⊑-trans H Hx)
+  transDerivation H (Step c d) = Step c λ r → transDerivation {!!} (d r)
+
   open import Data.Nat
   open import Data.Nat.Properties
   open NaturalLemmas hiding (≤-refl ; ≤-trans)
@@ -1976,7 +1981,6 @@ This allows us to refine a specification by applying a |get| or |put|:
   unAllCons : ∀ {a P x} {xs : List a} →
     All P (x :: xs) → All P xs
   unAllCons (AllCons x₁ x₂) = x₂
-  maxI0 : List Nat → M Nat
 \end{code}
 %endif
 
@@ -1991,13 +1995,17 @@ We want to show how we can implement a |max| program that gives the maximum of a
 
 The first step is to modify the specification so it fits with the induction.
 \begin{code}
-  maxPost0 : List Nat × Nat → Nat × Nat → Set
-  maxPost0 (xs , i) (o , _) = All (o ≥_) (i :: xs) × (o ∈ (i :: xs))
-  maxI0 = specF [[ K ⊤  , maxPost0 ]]
-  maxProof0 : wpSpec [[ maxPre , maxPost ]] ⊑ wpM maxI0
+  maxPost' : List Nat × Nat → Nat × Nat → Set
+  maxPost' (xs , i) (o , _) = All (o ≥_) (i :: xs) × (o ∈ (i :: xs))
+  max' : DerivationFun [[ K ⊤ , maxPost' ]]
+  max : DerivationFun [[ maxPre , maxPost ]]
+  max xs = transDerivation ? (max' xs)
 \end{code}
+
 %if style == newcode
 \begin{code}
+  max' = ?
+{-
   maxProof0 P (xs , .0) ((refl , Hnil) , snd) = tt , \ o H → snd o (unAllCons (Pair.fst H) , lemma xs Hnil (Pair.fst o) H)
     where
     lemma : ∀ xs → ¬ (xs == Nil) →
@@ -2005,32 +2013,56 @@ The first step is to modify the specification so it fits with the induction.
     lemma Nil Hnil w H = magic (Hnil refl)
     lemma (.0 :: xs) _ .0 (AllCons x₂ (AllCons z≤n fst) , ∈Head) = ∈Head
     lemma (x :: xs) _ w (_ , ∈Tail snd) = snd
-\end{code}
-%endif
+  getStep : forall { a pre post } ->  (f : Nat -> M a) -> 
+    wpSpec [[ preR getPost pre , postR getPost pre post ]] ⊑ wpM f ->
+    wpSpec [[ pre , post ]] ⊑ wpM (get' >=> f)
+  putStep : forall { a pre post } ->  (f : ⊤ -> M a) -> 
+    wpSpec [[ preR putPost pre , postR putPost pre post ]] ⊑ wpM f ->
+    wpSpec [[ pre , post ]] ⊑ wpM (put' >=> f)
+  getStep f H P x (fst , snd) = H (\ y z → P x z) (Pair.snd x , Pair.snd x) ((x , (fst , (refl , refl))) , \ z Hpost → snd z (Hpost x (fst , (refl , refl))))
+  putStep f H P x (fst , snd) = H (\ y z → P x z) (tt , Pair.fst x) ((x , (fst , refl)) , \ z Hpost → snd z (Hpost x (fst , refl)))
 
-%if style == newcode
-\begin{code}
-  maxI1 : List Nat → M Nat
+  maxI0 : List Nat → M Nat
+  maxPost0 : List Nat × Nat → Nat × Nat → Set
+  maxPost0 (xs , i) (o , _) = All (o ≥_) (i :: xs) × (o ∈ (i :: xs))
   maxPre1 : List Nat → Nat × Nat → Set
   maxPost1 : List Nat → Nat × Nat → Nat × Nat → Set
-\end{code}
-%endif
-The first intermediate program |maxI1| looks like:
-\begin{code}
+  maxPre2 : Nat → List Nat → Nat × Nat → Set
+  maxPost2 : Nat → List Nat → Nat × Nat → Nat × Nat → Set
+  maxPre3 : List Nat → Nat × Nat → Set
+  maxPost3 : List Nat → Nat × Nat → Nat × Nat → Set
+
+  test0 : (xs : List Nat) -> Derivation (applySpec [[ maxPre , maxPost ]] xs)
+  test1 : (xs : List Nat) -> Derivation (applySpec [[ K ⊤ , maxPost0 ]] xs)
+  test2 : (xs : List Nat) (i : Nat) -> Derivation (applySpec [[ maxPre1 xs , maxPost1 xs ]] i)
+  test3 : (x : Nat) (xs : List Nat) (i : Nat) -> Derivation (applySpec [[ maxPre2 x xs , maxPost2 x xs ]] i)
+  test4 : (xs : List Nat) (m : Nat) -> Derivation (applySpec [[ maxPre3 xs , maxPost3 xs ]] m)
+  test0 xs = Trans (applySpec [[ K ⊤ , maxPost0 ]] xs) (proof0 xs) (test1 xs)
+    where
+    lemma : ∀ xs → ¬ (xs == Nil) →
+      ∀ w → Pair (All (\ n → n ≤ w) (0 :: xs)) (w ∈ (0 :: xs)) → w ∈ xs
+    lemma Nil Hnil w H = magic (Hnil refl)
+    lemma (.0 :: xs) _ .0 (AllCons x₂ (AllCons z≤n fst) , ∈Head) = ∈Head
+    lemma (x :: xs) _ w (_ , ∈Tail snd) = snd
+    proof0 : ∀ xs -> wpSpec (applySpec [[ maxPre , maxPost ]] xs) ⊑ wpSpec (applySpec [[ K ⊤ , maxPost0 ]] xs)
+    proof0 xs P .0 ((refl , snd₁) , snd) = tt , λ o H → snd o (unAllCons (Pair.fst H) , lemma xs snd₁ (Pair.fst o) H)
+  test1 xs = Step Get λ i → Trans (applySpec [[ maxPre1 xs , maxPost1 xs ]] i) (proof1 xs i) (test2 xs i)
+    where
+    proof1 : ∀ xs i P x → Pair (Sigma (Pair ⊤ ℕ) (λ x₁ → Pair ⊤ (Pair (Pair.snd x₁ ≡ i) (Pair.snd x₁ ≡ x)))) (∀ x₁ → (∀ x₂ → Pair ⊤ (Pair (Pair.snd x₂ ≡ i) (Pair.snd x₂ ≡ x)) → Pair (All (λ n → n ≤ Pair.fst x₁) (Pair.snd x₂ :: xs)) (Pair.fst x₁ ∈ (Pair.snd x₂ :: xs))) → P x x₁) → Pair (maxPre1 xs (i , x)) (∀ x₁ → maxPost1 xs (i , x) x₁ → P x x₁)
+    proof1 xs i P x ((fst , (fst₁ , (fst₂ , snd₁))) , snd) = {!!}
+  test2 Nil i = Done i λ P x x₁ → {!!}
+  test2 (x :: xs) i = Trans (applySpec [[ maxPre2 x xs , maxPost2 x xs ]] i) {!proof2!} (test3 x xs i)
+  test3 x xs i with x lt i
+  ... | yes _ = Trans (applySpec [[ maxPre3 xs , maxPost3 xs ]] i) {!!} (test4 xs i)
+  ... | no _ = Trans (applySpec [[ maxPre3 xs , maxPost3 xs ]] x) {!!} (test4 xs x)
+  test4 xs m = Step (Put m) (const (Trans (applySpec [[ K ⊤ , maxPost0 ]] xs) {!!} (test1 xs)))
+
+  maxI0 = specF [[ K ⊤  , maxPost0 ]]
+  maxI1 : List Nat → M Nat
   maxI1 xs = get' tt >>= specF [[ maxPre1 xs , maxPost1 xs ]]
-\end{code}
-The pre- and postcondition of the hole are:
-\begin{code}
   maxPre1 xs (i , i') = i == i'
   maxPost1 xs (i , _) (o , _) = All (o ≥_) (i :: xs) × (o ∈ (i :: xs))
-\end{code}
-
-We can prove this (at least partially) implements the specification:
-\begin{code}
   maxProof1 : wpSpec [[ K ⊤ , maxPost0 ]] ⊑ wpM maxI1
-\end{code}
-%if style == newcode
-\begin{code}
   maxProof1 P (xs , i) = getStep {pre = K ⊤} {post = \ xi → maxPost0 (xs , Pair.snd xi)} (specF [[ maxPre1 xs , maxPost1 xs ]]) lemma (\ xi → (P (xs , Pair.snd xi))) (tt , i)
     where
     lemma' : ∀ i' o →
@@ -2048,43 +2080,21 @@ We can prove this (at least partially) implements the specification:
     lemma P (i' , .i') (((_ , .i') , (_ , (refl , refl))) , snd) = refl , \ o H → snd o (lemma' i' (Pair.fst o) H)
 
   maxI2 : List Nat → Nat → M Nat
-  maxPre2 : Nat → List Nat → Nat × Nat → Set
-  maxPost2 : Nat → List Nat → Nat × Nat → Nat × Nat → Set
-\end{code}
-%endif
-
-After we get the maximum up to now, we look at the next element of the list.
-\begin{code}
   maxI2 Nil = done
   maxI2 (x :: xs) = specF [[ maxPre2 x xs , maxPost2 x xs ]]
   maxPre2 x xs (i , i') = i == i'
   maxPost2 x xs (i , _) (o , _) = All (o ≥_) (i :: x :: xs) × (o ∈ (i :: x :: xs))
   maxProof2 : ∀ xs → wpSpec [[ maxPre1 xs , maxPost1 xs ]] ⊑ wpM (maxI2 xs)
-\end{code}
-
-%if style == newcode
-\begin{code}
   maxProof2 Nil P (i , .i) (refl , snd) = snd _ ((AllCons ≤-refl AllNil) , ∈Head)
   maxProof2 (x :: xs) P (i , .i) (refl , snd) = refl , snd
 
   maxI3 : Nat → List Nat → Nat → M Nat
-  maxPre3 : List Nat → Nat × Nat → Set
-  maxPost3 : List Nat → Nat × Nat → Nat × Nat → Set
-\end{code}
-%endif
-
-Given the first element of the list, compare it with the current maximum and pass the largest of the two to the next stage.
-\begin{code}
   maxI3 x xs i with i lt x
   ... | yes _ = specF [[ maxPre3 xs , maxPost3 xs ]] x
   ... | no _ = specF [[ maxPre3 xs , maxPost3 xs ]] i
   maxPre3 xs (m , i) = i ≤ m
   maxPost3 xs (m , i) (o , _) = All (o ≥_) (m :: xs) × (o ∈ (m :: xs))
   maxProof3 : ∀ x xs → wpSpec [[ maxPre2 x xs , maxPost2 x xs ]] ⊑ wpM (maxI3 x xs)
-\end{code}
-
-%if style == newcode
-\begin{code}
   maxProof3 x xs P (i , .i) (refl , snd) with i lt x
   ... | yes p = <⇒≤ p , \ x₁ x₂ → snd x₁ (lemmaYes i x xs p (Pair.fst x₁) x₂)
     where
@@ -2106,17 +2116,8 @@ Given the first element of the list, compare it with the current maximum and pas
     lemmaNo i x xs x₂ w (AllCons x₃ fst , ∈Tail snd) = (AllCons x₃ (AllCons (≤-trans (≮⇒≥ x₂) x₃) fst)) , (∈Tail (∈Tail snd))
 
   maxI4 : List Nat → Nat → M Nat
-\end{code}
-%endif
-
-Finally, we save the new value of the state and perform a recursive call on the tail of the list.
-\begin{code}
   maxI4 xs m = put' m >>= \ _ → specF [[ K ⊤ , maxPost0 ]] xs
   maxProof4 : ∀ xs → wpSpec [[ maxPre3 xs , maxPost3 xs ]] ⊑ wpM (maxI4 xs)
-\end{code}
-
-%if style == newcode
-\begin{code}
   maxProof4 xs = putStep {pre = maxPre3 xs} {post = maxPost3 xs} (\ _ → specF [[ K ⊤ , maxPost0 ]] xs) \ P m H → tt , \ o Hpost → Pair.snd H o (lemma xs (Pair.snd m) (Pair.fst o) Hpost)
     where
     lemma : ∀ xs m w →
@@ -2125,6 +2126,7 @@ Finally, we save the new value of the state and perform a recursive call on the 
       Pair (All (\ n → n ≤ w) (Pair.fst x :: xs))
       (w ∈ (Pair.fst x :: xs))
     lemma xs m w (wMax , wItem) (.m , snd) (fst₁ , refl) = wMax , wItem
+-}
 \end{code}
 %endif
 
