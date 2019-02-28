@@ -1791,35 +1791,53 @@ derivation.
 \begin{code}
   -- Tim: hier begint de opzet van expliciete derivaties
 
-  -- TODOS : ALGEMEEN
-  --         SpecVal  = SpecK T
-  --         SpecK a b -> (a -> SpecVal b)
-  --       : aanpassen Derivation
-  --       : lemma om  Derivation s -> Derivation s' (mits s \sqsubseteq s' of andersom)
   -- TODOS : Voorbeeld (en in het algemeen)
   --       : smart constructors + specificatie v.d. operaties
   --       : getSpec \sqsubseteq get (etc.)
   --       : step : C -> Spec -> Spec
   --       : stepCorrect lemma bewijzen
   --       : voorbeeld als derivatie opschrijven
+  SpecVal = SpecK ⊤
+  applySpec : {a b : Set} -> SpecK a b -> a -> SpecVal b
+  applySpec [[ pre , post ]] x = [[ (\_ -> pre x) , (λ _ → post x) ]]
+  holeVal : {a : Set} -> SpecVal a -> M a
+  holeVal spec = Pure (Hole spec)
+  holeFun : {a b : Set} -> SpecK a b -> a -> M b
+  holeFun spec x = holeVal (applySpec spec x)
+
   postulate
-    step : {a b : Set} -> (c : C) -> SpecK a b -> SpecK a b
-    stepCorrect : {a : Set} -> (c : C) -> (spec : SpecK ⊤ a) ->
-      wpSpec spec ⊑ wpM (λ _ → Step c (\r -> Pure (Hole (step c spec))))
+    stepFun : {a : Set} -> (c : C) -> SpecVal a -> SpecK (R c) a
+    -- TODO: can we prove this (or use a weaker assumption?)
+    stepMonotone : {a : Set} {spec spec' : SpecVal a} (c : C) ->
+      wpSpec spec ⊑ wpSpec spec' -> wpSpec (stepFun c spec) ⊑ wpSpec (stepFun c spec')
+    stepCorrect : {a : Set} -> (c : C) -> (spec : SpecVal a) ->
+      wpSpec spec ⊑ wpM (λ _ → Step c (holeFun (stepFun c spec)))
+    monotone : (c : C) {P Q : R c -> Set} -> (P ⊆ Q) -> ptalgebra c P -> ptalgebra c Q
 
-  data Derivation {b : Set} (spec : SpecK ⊤ b) : Set where
-    Done : (x : b) -> wpSpec spec ⊑ wpM (const (Pure (Done x))) -> Derivation spec
-    Step :  (c : C) -> (∀ (r : R c) -> Derivation (step c spec)) -> Derivation spec
+  stepVal : {a : Set} (c : C) -> SpecVal a -> R c -> SpecVal a
+  stepVal c spec r = applySpec (stepFun c spec) r
 
-  extract : {a b : Set} (spec : SpecK a b) -> Derivation spec -> a -> Free C R b
-  extract _ (Done y _) x = Pure y
-  extract spec (Step c k) x = Step c \r -> extract (step c spec) (k r) x
+  data Derivation {a : Set} (spec : SpecVal a) : Set where
+    Done : (x : a) -> wpSpec spec ⊑ wpM (const (Pure (Done x))) -> Derivation spec
+    Step : (c : C) -> (∀ (r : R c) -> Derivation (stepVal c spec r)) -> Derivation spec
+  DerivationFun : {a b : Set} (spec : SpecK a b) -> Set
+  DerivationFun {a} {b} spec = (x : a) -> Derivation (applySpec spec x)
 
-  correct : {a : Set} (spec : SpecK ⊤ a) -> (d : Derivation spec) ->
-    wpSpec spec ⊑ wpCR (extract spec d)
+  transDerivation : {a : Set} {spec spec' : SpecVal a} -> wpSpec spec ⊑ wpSpec spec' ->
+    Derivation spec' -> Derivation spec
+  transDerivation H (Done x Hx) = Done x (⊑-trans H Hx)
+  transDerivation H (Step c d) = Step c λ r → transDerivation (λ P x x₁ → stepMonotone c H (λ _ → P x) r x₁) (d r)
+
+  extract : {a : Set} (spec : SpecVal a) -> Derivation spec -> Free C R a
+  extract _ (Done y _) = Pure y
+  extract spec (Step c k) = Step c \r -> extract (stepVal c spec r) (k r)
+
+  correct : {a : Set} (spec : SpecVal a) -> (d : Derivation spec) ->
+    wpSpec spec ⊑ wpCR (\_ -> extract spec d)
   correct spec (Done x p) = p
   correct spec (Step c k) = ⊑-trans (stepCorrect c spec)
-    λ P x x₁ → monotonicity c (\r -> correct (step c  spec) (k r)  P tt) x₁
+                            let ih = \r -> correct (stepVal c spec r) (k r)
+                            in λ P x → monotone c (λ x₂ x₃ → ih x₂ _ x x₃)
 \end{code}
 %endif
 \subsection*{Case study: maximum}
