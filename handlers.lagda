@@ -2159,12 +2159,16 @@ prover HOL. This was later extended to the \emph{Refinement
 HOL. ~\citet{dongol} have extended these ideas even further in HOL,
 adding a separation logic and its associated algebraic
 structure. \citet{boulme} has given a direct embedding of the
-refinement calculus in Coq. Finally,
+refinement calculus in Coq.
 \citeauthor{alpuim2}~\citeyearpar{alpuim2,alpuim1} have given an
 similar development to the one presented here, tailored specifically
-to stateful computations.
+to stateful computations. \citet{snapl} have recently proposed using
+the Coq proof assistants to derive correct programs from their
+specification. Their work
+on the Fiat framework is geared towards describing \emph{data refinement}
+and the synthesis of abstract data types, packaging methods and data.
 
-\todo{SNAPL delaware}
+
 
 \subsection*{Further work}
 \label{sec:further-work}
