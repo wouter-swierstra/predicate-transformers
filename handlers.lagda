@@ -97,8 +97,8 @@ have all been formally verified in the dependently typed programming
 language Agda~\cite{agda}, but they techniques translate readily to
 other proof assistants based on dependent types such as
 Idris~\cite{brady} or Coq~\cite{coq}. The sources associated with our
-our development are available online.\footnote{The url has been
-  withheld from this version to preserve the anonymity of the author(s).}
+our development are available online.\footnote{The sources for this
+  version have been anonymized and submitted as supplementary material.}
 
  \todo{Finalize: abstract, intro and title}
 \section{Background}
@@ -1833,7 +1833,7 @@ executable.
 
 
 Before calculating an example program in this style, we will develop a handful
-of auxiliary definitions, specialized to the stateful computations
+of auxiliary definitions, specialised to the stateful computations
 described in Section~\ref{sec:state}; it should be straightforward
 to adapt the definitions to work for other effects.
 In what should be a familiar pattern, we begin by defining a handful
@@ -1890,7 +1890,7 @@ To derive a program from its specification, we will perform a series
 of refinement steps. While we could use the transitivity of the refinement relation
 to chain together various intermediate programs explicitly, we take a slightly
 different approach.
-Each refinement is allowed to introduce a single new command of type |C|, thereby
+Each refinement step is allowed to introduce a single new command of type |C|, thereby
 changing the remaining refinement problem. We can try to make this manifest
 in the following (incomplete) datatype:
 \begin{spec}
@@ -1932,7 +1932,8 @@ specification:
   _trir_ Q [[ pre , post ]] = \ y z -> ∀ x → pre x ∧ Q x y → post x z
 \end{code}
 The new postcondition requires that the original postcondition |post|
-holds, whenever the postcondition |Q| and initial precondition |pre| hold.
+holds, whenever the postcondition |Q|---associated with the new
+command we are introducing---and initial precondition |pre| hold.
 
 Using these definitions, we can complete the definition of the
 |step| function:
@@ -1942,15 +1943,15 @@ Using these definitions, we can complete the definition of the
   step (Put x)  [[ pre , post ]] = [[ (putPost x) tril pre , (putPost x) trir [[ pre , post ]] ]]
 \end{code}
 The |step| function uses the above operators, together with the
-postconditions associated with |get| and |put|, to compute the
+postconditions associated with |get| and |put|, to compute
 a new specification for the remaining derivation.
 
 Before completing the definition of derivations, there is one last
 issue to address. Using the |step| function, we can compute a new
 specification for the remaining continuation after a |put| or |get|
-command. Our derivations, however, refer to specifications of
-values---given by |SpecVal|---rather than the specification of a
-function. Fortunately, we can easily convert between the two:
+command. Our derivations, however, only contain specifications of
+\emph{values}---represented by |SpecVal|---rather than the specification of a
+function, represented by |Spec|. Fortunately, we can easily convert between the two:
 \begin{code}
   intros : (Forall(a b)) SpecK (a × Nat) (b × Nat) -> a -> SpecVal (b × Nat)
 \end{code}
@@ -2048,8 +2049,8 @@ We begin by defining the specification of our desired function:
   maxSpec = [[ maxPre , maxPost ]]
 \end{code}
 Given an initial state |0| and non-empty list |xs|, our |max| function
-should find a number |o| that is greater than or equal to all the
-elements of |xs| and occurs in |xs|.
+should find a number |o| that is both greater than or equal to all the
+elements of |xs| and also occurs in |xs|.
 
 To calculate a suitable implementation amounts to proving that
 |Derivation maxSpec| is inhabited. A direct proof quickly fails, as
@@ -2067,7 +2068,7 @@ to modify the target of our derivation:
 %endif
 The proof recurses over the derivation and relies on the monotonicity of our predicate transformers.
 In particular, we can use this lemma, together with the |weakenPre|
-and |strengthenPost| lemmas from Section~\ref{sec:state} to generalize
+and |strengthenPost| lemmas from Section~\ref{sec:state} to generalise
 our specification and perform the bookkeeping necessary on the
 intermediate specifications we encounter during derivation.
 
@@ -2168,12 +2169,11 @@ directly:
                        else  (\  geq  -> Step (Put x) (hiddenConst((ldotsHere(refineDerivation (max'Proof2 i x xs geq)) (max' xs)))))
 \end{code}
 % }
-The proof steps themselves are not particularly hard and defined in a
-locally-bound variables. In both recursive calls, we need to perform a
-call to the |refineDerivation| lemma and prove that the result of the
-call is strong enough to fulfill the current proof goal. In the base
-case, we can give a direct proof that the current state |i| satisfies
-the desired specification.
+The proof steps themselves are not particularly hard. In both
+recursive calls, we need to perform a call to the |refineDerivation|
+lemma and prove that the result of the call is strong enough to
+fulfil the current proof goal. In the base case, we can give a direct
+proof that the current state |i| satisfies the desired specification.
 
 One result of formulating the |step| in terms of the predicate
 transformers |tril| and |trir| is that the new goals after issuing a
@@ -2181,7 +2181,7 @@ particular command can quickly become cluttered. We could avoid this
 by defining custom transformations on our specifications for |put| and
 |get| directly, at the expense of losing some generality. Nonetheless,
 it is encouraging to see that we can calculate a program
-together with our proof assistant, rather than verify a program
+\emph{together with} our proof assistant, rather than verify a program
 post-hoc.
 %if style == newcode
 \begin{code}
@@ -2237,7 +2237,7 @@ precondition semantics.
 
 There is also a great deal of existing work on using interactive
 theorem provers to perform program calculation. \citet{old-hol} have
-given a formalization of several notions, such as weakest precondition
+given a formalisation of several notions, such as weakest precondition
 semantics and the refinement relation, in the interactive theorem
 prover HOL. This was later extended to the \emph{Refinement
   Calculator}~\cite{butler}, that built a new GUI on top of
@@ -2277,7 +2277,8 @@ directly, as we have done here. While efficiency was never our primary
 concern, we hope that we might adapt existing solutions to avoid these
 issues~\cite{janis,freer}.
 
-Throughout this paper, we have presented several small example
+\subsection*{Conclusions}
+We have presented several small example
 programs and verified their correctness. The aim of these examples is
 to \emph{illustrate} our definitions and \emph{validate} our design
 choices, rather than solve any realistic verification challenge. There
@@ -2290,8 +2291,6 @@ transformer semantics defined in this paper offer a \emph{functional}
 account of effects that is worth exploring further.
 
 
-
-\todo{Check bibliography}
 
 % \item wp (s,q) or wp (s,p) implies wp(s,q or p) -- but not the other
 %   way around. The implication in the other direction only holds when
