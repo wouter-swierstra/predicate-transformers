@@ -2164,7 +2164,7 @@ refinement calculus in Coq. Finally,
 similar development to the one presented here, tailored specifically
 to stateful computations.
 
-
+\todo{SNAPL delaware}
 
 \subsection*{Further work}
 \label{sec:further-work}
