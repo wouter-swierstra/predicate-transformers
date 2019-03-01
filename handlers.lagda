@@ -1673,7 +1673,6 @@ module Mix (C : Set) (R : C -> Set) (ptalgebra : (c : C) -> (R c -> Set) -> Set)
 \end{code}
 %endif
 
-
 In the examples we have seen so far, we have related a \emph{complete}
 program to its specification. Most work on the refinement calculus,
 however, allows programs and specifications to mix freely, thereby
@@ -1689,16 +1688,24 @@ ending in a value of type |a| in the leaves. By varying this
 information stored in the leaves of the free monad, we can mix
 unfinished specifications and program fragments.
 
-To this end, we define the data type |I a|, corresponding to either a
+To this end, we begin by defining the following shorthand for
+specifications on values, rather than the specifications on (Kleisli)
+arrows we have considered previously:
+\begin{code}
+   SpecVal : Set -> Set
+   SpecVal a = SpecK ⊤ a
+ \end{code}
+These specifications passed consist of a
+precondition of type |Set| and a predicate |a -> Set|.
+Next, we can define the datatype |I a|, corresponding to either a
 specification on |a| or a value of type |a|.
 \begin{code}
   data I (a : Set) : Set where
     Done  : a -> I a
-    Hole  : SpecK ⊤ a -> I a
+    Hole  : SpecVal a -> I a
 \end{code}
-The specifications passed to the |Hole| constructor consist of a
-precondition of type |Set| and a predicate |a -> Set|; these
-specifications correspond to some unfinished part of the program being
+Here we use the |Hole| constructor to store
+a specification, corresponding to some unfinished part of the program being
 calculated. We can assign a predicate transformer semantics to values
 of type |I a| easily enough, reusing our previous |wpSpec| function:
 \begin{code}
@@ -1707,7 +1714,7 @@ of type |I a| easily enough, reusing our previous |wpSpec| function:
   ptI (Hole spec)  P  = wpSpec spec (hiddenConst(P)) tt
 \end{code}
 Furthermore, given the commands |C| and responses |R| determining the
-operations of a free monad, we can define the following data type for
+operations of a free monad, we can define the following datatype for
 partially finished programs:
 \begin{code}  
   M : Set -> Set
@@ -1720,9 +1727,7 @@ contrast to free monads we have seen so far, however, the leaves
 contain either values of type |a| or specifications, representing
 unfinished parts of the program's derivation.
 
-\todo{Bind? Arguably not necessary for examples?}
-
-The refinement literature is careful to distinguish \emph{executable
+In what follows, we will be careful to distinguish \emph{executable
   code}---that is programs without specification fragments---from
 programs, that may still contain specifications. The following
 predicate characterises the executable fragment of |M a|:
@@ -1732,11 +1737,6 @@ predicate characterises the executable fragment of |M a|:
   isExecutable (Pure (Hole _))  = ⊥
   isExecutable (Step c k)       = ∀ r -> isExecutable (k r)
 \end{code}
-Every executable program can be coerced to a computation free of
-unfinished specifications, as you would expect:
-\begin{spec}
-  finish : (m : M a) -> isExecutable m -> Free C R a
-\end{spec}
 
 Although we have defined the syntactic structure of our mixed
 computations, |M a|, we have not yet given their semantics. We can use
@@ -1751,7 +1751,6 @@ Kleisli morphisms.
   pt (Step c x) P = ptalgebra c (\r -> pt (x r) P)
 \end{code}
 %endif
-
 \begin{code}
   wpCR : (Forall(a)) (implicit(b : a -> Set)) ((x : a) -> Free C R (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
 \end{code}
@@ -1769,8 +1768,10 @@ for specific choices of |C| and |R|. We can now assign semantics to
 \end{code}
 The crucial step here is to transform the argument predicate |P| to
 work on specifications or values of type |I a|, using the |ptI|
-function we defined previously.
+function defined above.
 
+\subsection*{Defining derivations}
+\label{case-study}
 The |wpM| function assigns a predicate transformer semantics to
 unfinished programs, where the leaves of a free monad may consist of
 values or specifications. We can use this semantics to derive a
@@ -1783,10 +1784,8 @@ from some initial specification:
 \end{spec}
 \end{center}
 Here the intermediate steps (|i1|, |i2|, and so forth) may mix
-specifications and effectful computations; the final program, |c|, is
-executable. In the next section, we will present an example of such a
-derivation.
-
+specifications and effectful computations; the final program, |c|, must be
+executable.
 %if style == newcode
 \begin{code}
   -- Tim: hier begint de opzet van expliciete derivaties
@@ -1822,11 +1821,9 @@ derivation.
     λ P x x₁ → monotonicity c (\r -> correct (step c  spec) (k r)  P tt) x₁
 \end{code}
 %endif
-\subsection*{Case study: maximum}
-\label{case-study}
 
 
-\todo{Clean up this section} 
+
 %if style == newcode
 \begin{code}
 module StateExample where
@@ -1856,6 +1853,11 @@ module StateExample where
 \end{code}
 %endif
 
+
+Before calculating a program in this style, we will develop a handful
+of auxiliary definitions, specialized to the stateful computations
+described in Section~\ref{sec:state}, although it should be straightforward
+to adapt the definitions to work for other effects.
 In what should be a familiar pattern, we begin by defining a handful
 of smart constructors:
 %if style == poly
@@ -1867,23 +1869,20 @@ of smart constructors:
   done   : (Forall (a)) a -> M a
   get'   : ⊤ -> M Nat
   put'   : Nat -> M ⊤
-  specF  : (Forall(a b)) SpecK (a × Nat) (b × Nat) → a → M b
 \end{code}
 %if style == newcode
 \begin{code}
   done x = Pure (Done x)
   get' _ = Step Get done
   put' t = Step (Put t) done
-  specF [[ pre , post ]] x = Pure (Hole [[
-      (\ i → pre (x , i)) ,
-      (\ i → post (x , i))
-    ]])
 \end{code}
 %endif
+Note that these smart constructors now produce computations in |M|, mixing
+effects and specifications, rather than the free monad, |State|, we saw previously.
 Here we choose to define |get| as a Kleisli morphism, taking a
 spurious argument of the unit type, as this makes the presentation of
-|get| and |put| a bit more uniform. We can define the following
-specifications for |get| and |put|:
+|get| and |put| uniform. We can define the following
+posconditions for |get| and |put|:
 \begin{code}
   getPost : ⊤ × Nat -> Nat × Nat → Set
   getPost (_ , t) (x , t') = (t == x) ∧ (t == t')
@@ -1905,204 +1904,297 @@ our |wpM| semantics:
 \end{code}
 %endif
 While we will not use these properties in the remainder of our
-calculation, they form an important sanity check to guaranteeing that
-the specifications we have chose for |get| and |put| are correct.
+calculation directly, they form an important check, guaranteeing that
+the specifications we have chosen for |get| and |put| are correct.
 
-To refine a specification into code, we will prove two lemmas
-explaining how |get|
+To derive a program from its specification, we will perform a series
+of refinement steps. While we could use the transitivity of refinement
+to chain together various intermediate programs, we take a slightly
+more restricted approach.
+Each refinement step may introduce a single new command |C|, thereby
+changing the remaining refinement problem. We can try to make this manifest
+in the following (incomplete) datatype.
+\begin{spec}
+  data Derivation (Forall(b)) (spec : SpecVal b) : Set where
+    Done  : (x : b) -> wpSpec spec ⊑ wpM (done x) -> Derivation spec
+    Step  : (c : C) -> (∀ (r : R c) -> Derivation ...) -> Derivation spec
+\end{spec}
+A value of type |Derivation spec| describes a series of refinement
+steps, yielding a program satisfying the specification |spec|. In the
+base case, the derivation is done and returns a value |x : b| that
+satisfies the desired specification; otherwise, we refine the program
+by performing the command |c|---but how does this change the remaining
+specification problem? To answer this question, we need to make
+explicit what the effect of each command is on the current
+goal. Fortunately, the specifications of |get| and |put| defined
+previously allow us to do just that.
 
-Here is how to combine the specification on the right side of a bind,
-given the specification of the left side and of the whole.  The
-precondition says that the intermediate value |y| must come from some
-argument |x| to the left hand side.  The postcondition says that for
-all such |x| that could lead to this |y|, the right hand side could
-lead to the given |z|.
-\begin{code}
-  preR : ∀ {a b} (postL : a → b → Set) (preLR : a → Set) → b → Set
-  preR {a} postL preLR y = Sigma a \ x → preLR x ∧ postL x y
-  postR : (Forall (a b c)) (postL : a → b → Set) (preLR : a → Set) (postLR : a → c → Set) → b → c → Set
-  postR postL preLR postLR y z = ∀ x → preLR x ∧ postL x y → postLR x z
-\end{code}
 
-This allows us to refine a specification by applying a |get| or |put|:
-\begin{code}
-  getStep : (Forall(a pre post)) (f : Nat -> M a) -> 
-    wpSpec [[ preR getPost pre , postR getPost pre post ]] ⊑ wpM f ->
-    wpSpec [[ pre , post ]] ⊑ wpM (get' >=> f)
-  putStep : (Forall(a pre post)) (f : ⊤ -> M a) -> 
-    wpSpec [[ preR putPost pre , postR putPost pre post ]] ⊑ wpM f ->
-    wpSpec [[ pre , post ]] ⊑ wpM (put' >=> f)
-\end{code}
+\begin{spec}
+  step : (Forall(b)) (c : C) (spec : SpecVal (b × Nat)) -> SpecK (R c × Nat) (b × Nat)
+\end{spec}
 %if style == newcode
 \begin{code}
-  getStep f H P x (fst , snd) = H (\ y z → P x z) (Pair.snd x , Pair.snd x) ((x , (fst , (refl , refl))) , \ z Hpost → snd z (Hpost x (fst , (refl , refl))))
-  putStep f H P x (fst , snd) = H (\ y z → P x z) (tt , Pair.fst x) ((x , (fst , refl)) , \ z Hpost → snd z (Hpost x (fst , refl)))
+  step Get      [[ pre , post ]]  = [[ preR getPost pre , postR getPost pre post ]]
+  step (Put x)  [[ pre , post ]]  = [[ preR (putPost x) pre , postR (putPost x) pre post ]]
 \end{code}
 %endif
 
-%if style == newcode
-\begin{code}
-  open import Data.Nat
-  open import Data.Nat.Properties
-  open NaturalLemmas hiding (≤-refl ; ≤-trans)
+Using this `specification transformer' we can complete the definition
+of derivations:
+\begin{spec}
+  data Derivation (Forall(b)) (spec : SpecVal b) : Set where
+    Done  : (x : b) -> wpSpec spec ⊑ ptM (done x) -> Derivation spec
+    Step  : (c : C) -> (∀ (r : R c) -> Derivation (step c spec)) -> Derivation spec
+\end{spec}
 
-  data All {a : Set} (P : a → Set) : List a → Set where
-    AllNil : All P Nil
-    AllCons : ∀ {x xs} → P x → All P xs → All P (x :: xs)
-  unAllCons : ∀ {a P x} {xs : List a} →
-    All P (x :: xs) → All P xs
-  unAllCons (AllCons x₁ x₂) = x₂
-  maxI0 : List Nat → M Nat
+It is no coincidence that the structure of our derivations mimics that
+of the computations described by our |Free| datatype.  One advantage
+of giving a manifest representation of such derivations is that we
+can easily extract executable code from a given derivation:
+\begin{code}
+  extract : (Forall(b)) (spec : SpecVal b) -> Derivation spec -> Free C R b
+  extract _     (Done y _)  = Pure y
+  extract spec  (Step c k)  = Step c (\ r -> extract (step c spec r) (k r))
 \end{code}
-%endif
+Furthermore, we can show that the extracted code satisfies its specification:
+\begin{spec}
+  correctness : (Forall(a))(spec : SpecVal a) -> (d : Derivation spec) ->
+    wpSpec spec ⊑ wpCR ((hiddenConst(extract spec d)))
+\end{spec}
+The proof proceeds by induction on the derivation and relies on the
+monotonicity of the predicate transformer semantics in play.
 
-Now we have the ingredients to demonstrate incremental refinement.
-We want to show how we can implement a |max| program that gives the maximum of a nonempty list.
-\begin{code}
-  maxPre : List Nat × Nat → Set
-  maxPre (xs , i) = (i == 0) × (¬ (xs == Nil))
-  maxPost : List Nat × Nat → Nat × Nat → Set
-  maxPost (xs , i) (o , _) = All (o ≥_) xs × (o ∈ xs)
-\end{code}
+% Finally, we can repeatedly apply the transitivity of refinement to show:
+% \begin{spec}
+%   refineDerivation : (Forall(a : Set)) (implicit(spec spec' : SpecVal (a × Nat)) wpSpec spec ⊑ wpSpec spec' -> Derivation spec' -> Derivation spec
+% \end{spec}
 
-The first step is to modify the specification so it fits with the induction.
+\subsection*{Case study: calculating the maximum}
+\label{sec:maximum}
+
+In this section, we will derive a simple program that searches for the
+greatest element of a list. Although there is a simple, purely
+functional implementation, we choose to derive a stateful version that
+stores the greatest element encountered so far. Along the way, we will
+develop some of the machinery to describe verified program calculations.
+
+
+We can give the following specification of the maximum function we
+wish to derive:
 \begin{code}
-  maxPost0 : List Nat × Nat → Nat × Nat → Set
-  maxPost0 (xs , i) (o , _) = All (o ≥_) (i :: xs) × (o ∈ (i :: xs))
-  maxI0 = specF [[ K ⊤  , maxPost0 ]]
-  maxProof0 : wpSpec [[ maxPre , maxPost ]] ⊑ wpM maxI0
-\end{code}
-%if style == newcode
-\begin{code}
-  maxProof0 P (xs , .0) ((refl , Hnil) , snd) = tt , \ o H → snd o (unAllCons (Pair.fst H) , lemma xs Hnil (Pair.fst o) H)
+  maxSpec : SpecK (List Nat) Nat
+  maxSpec = [[ maxPre , maxPost ]]
     where
-    lemma : ∀ xs → ¬ (xs == Nil) →
-      ∀ w → Pair (All (\ n → n ≤ w) (0 :: xs)) (w ∈ (0 :: xs)) → w ∈ xs
-    lemma Nil Hnil w H = magic (Hnil refl)
-    lemma (.0 :: xs) _ .0 (AllCons x₂ (AllCons z≤n fst) , ∈Head) = ∈Head
-    lemma (x :: xs) _ w (_ , ∈Tail snd) = snd
+    maxPre : List Nat × Nat → Set
+    maxPre (xs , i) = (i == 0) ∧ (¬ (xs == Nil))
+    maxPost : List Nat × Nat → Nat × Nat → Set
+    maxPost (xs , i) (o , _) = All (o ≥_) xs ∧ (o ∈ xs)
 \end{code}
-%endif
+Given a non-empty list and initial state |0|, the result of the
+computation should be a natural number |o| that is both occurs in the input list |xs|
+and is greater than or equal to all the elements of |xs|.
 
-%if style == newcode
-\begin{code}
-  maxI1 : List Nat → M Nat
-  maxPre1 : List Nat → Nat × Nat → Set
-  maxPost1 : List Nat → Nat × Nat → Nat × Nat → Set
-\end{code}
-%endif
-The first intermediate program |maxI1| looks like:
-\begin{code}
-  maxI1 xs = get' tt >>= specF [[ maxPre1 xs , maxPost1 xs ]]
-\end{code}
-The pre- and postcondition of the hole are:
-\begin{code}
-  maxPre1 xs (i , i') = i == i'
-  maxPost1 xs (i , _) (o , _) = All (o ≥_) (i :: xs) × (o ∈ (i :: xs))
-\end{code}
+Next, we can sketch the process of program calculation. The final
+derivation itself is quite large and `discovered' interactively
+together with the proof assistant; rather than present it in its
+entirety, we shall outline the steps involved.
 
-We can prove this (at least partially) implements the specification:
-\begin{code}
-  maxProof1 : wpSpec [[ K ⊤ , maxPost0 ]] ⊑ wpM maxI1
-\end{code}
-%if style == newcode
-\begin{code}
-  maxProof1 P (xs , i) = getStep {pre = K ⊤} {post = \ xi → maxPost0 (xs , Pair.snd xi)} (specF [[ maxPre1 xs , maxPost1 xs ]]) lemma (\ xi → (P (xs , Pair.snd xi))) (tt , i)
-    where
-    lemma' : ∀ i' o →
-      Pair (All (o ≥_) (i' :: xs)) (o ∈ (i' :: xs)) →
-      ∀ (x : ⊤ × Nat) →
-      Pair ⊤ (Pair (Pair.snd x ≡ i') (Pair.snd x ≡ i')) →
-      Pair (All (o ≥_) (Pair.snd x :: xs))
-      (o ∈ (Pair.snd x :: xs))
-    lemma' i' o H (_ , .i') (_ , (refl , refl)) = H
 
-    lemma : wpSpec [[
-        preR getPost (K ⊤) ,
-        postR getPost (K ⊤) (\ xi → (maxPost0 (xs , Pair.snd xi)))
-      ]] ⊑ wpM (specF [[ maxPre1 xs , maxPost1 xs ]])
-    lemma P (i' , .i') (((_ , .i') , (_ , (refl , refl))) , snd) = refl , \ o H → snd o (lemma' i' (Pair.fst o) H)
 
-  maxI2 : List Nat → Nat → M Nat
-  maxPre2 : Nat → List Nat → Nat × Nat → Set
-  maxPost2 : Nat → List Nat → Nat × Nat → Nat × Nat → Set
-\end{code}
-%endif
+  
+% Here is how to combine the specification on the right side of a bind,
+% given the specification of the left side and of the whole.  The
+% precondition says that the intermediate value |y| must come from some
+% argument |x| to the left hand side.  The postcondition says that for
+% all such |x| that could lead to this |y|, the right hand side could
+% lead to the given |z|.
+% \begin{code}
+%   preR : ∀ {a b} (postL : a → b → Set) (preLR : a → Set) → b → Set
+%   preR {a} postL preLR y = Sigma a \ x → preLR x ∧ postL x y
+%   postR : (Forall (a b c)) (postL : a → b → Set) (preLR : a → Set) (postLR : a → c → Set) → b → c → Set
+%   postR postL preLR postLR y z = ∀ x → preLR x ∧ postL x y → postLR x z
+% \end{code}
 
-After we get the maximum up to now, we look at the next element of the list.
-\begin{code}
-  maxI2 Nil = done
-  maxI2 (x :: xs) = specF [[ maxPre2 x xs , maxPost2 x xs ]]
-  maxPre2 x xs (i , i') = i == i'
-  maxPost2 x xs (i , _) (o , _) = All (o ≥_) (i :: x :: xs) × (o ∈ (i :: x :: xs))
-  maxProof2 : ∀ xs → wpSpec [[ maxPre1 xs , maxPost1 xs ]] ⊑ wpM (maxI2 xs)
-\end{code}
+% This allows us to refine a specification by applying a |get| or |put|:
+% \begin{code}
+%   getStep : (Forall(a pre post)) (f : Nat -> M a) -> 
+%     wpSpec [[ preR getPost pre , postR getPost pre post ]] ⊑ wpM f ->
+%     wpSpec [[ pre , post ]] ⊑ wpM (get' >=> f)
+%   putStep : (Forall(a pre post)) (f : ⊤ -> M a) -> 
+%     wpSpec [[ preR putPost pre , postR putPost pre post ]] ⊑ wpM f ->
+%     wpSpec [[ pre , post ]] ⊑ wpM (put' >=> f)
+% \end{code}
+% %if style == newcode
+% \begin{code}
+%   getStep f H P x (fst , snd) = H (\ y z → P x z) (Pair.snd x , Pair.snd x) ((x , (fst , (refl , refl))) , \ z Hpost → snd z (Hpost x (fst , (refl , refl))))
+%   putStep f H P x (fst , snd) = H (\ y z → P x z) (tt , Pair.fst x) ((x , (fst , refl)) , \ z Hpost → snd z (Hpost x (fst , refl)))
+% \end{code}
+% %endif
 
-%if style == newcode
-\begin{code}
-  maxProof2 Nil P (i , .i) (refl , snd) = snd _ ((AllCons ≤-refl AllNil) , ∈Head)
-  maxProof2 (x :: xs) P (i , .i) (refl , snd) = refl , snd
+% %if style == newcode
+% \begin{code}
+%   open import Data.Nat
+%   open import Data.Nat.Properties
+%   open NaturalLemmas hiding (≤-refl ; ≤-trans)
 
-  maxI3 : Nat → List Nat → Nat → M Nat
-  maxPre3 : List Nat → Nat × Nat → Set
-  maxPost3 : List Nat → Nat × Nat → Nat × Nat → Set
-\end{code}
-%endif
+%   data All {a : Set} (P : a → Set) : List a → Set where
+%     AllNil : All P Nil
+%     AllCons : ∀ {x xs} → P x → All P xs → All P (x :: xs)
+%   unAllCons : ∀ {a P x} {xs : List a} →
+%     All P (x :: xs) → All P xs
+%   unAllCons (AllCons x₁ x₂) = x₂
+%   maxI0 : List Nat → M Nat
+% \end{code}
+% %endif
 
-Given the first element of the list, compare it with the current maximum and pass the largest of the two to the next stage.
-\begin{code}
-  maxI3 x xs i with i lt x
-  ... | yes _ = specF [[ maxPre3 xs , maxPost3 xs ]] x
-  ... | no _ = specF [[ maxPre3 xs , maxPost3 xs ]] i
-  maxPre3 xs (m , i) = i ≤ m
-  maxPost3 xs (m , i) (o , _) = All (o ≥_) (m :: xs) × (o ∈ (m :: xs))
-  maxProof3 : ∀ x xs → wpSpec [[ maxPre2 x xs , maxPost2 x xs ]] ⊑ wpM (maxI3 x xs)
-\end{code}
+% Now we have the ingredients to demonstrate incremental refinement.
+% We want to show how we can implement a |max| program that gives the maximum of a nonempty list.
+% \begin{code}
+%   maxPre : List Nat × Nat → Set
+%   maxPre (xs , i) = (i == 0) × (¬ (xs == Nil))
+%   maxPost : List Nat × Nat → Nat × Nat → Set
+%   maxPost (xs , i) (o , _) = All (o ≥_) xs × (o ∈ xs)
+% \end{code}
 
-%if style == newcode
-\begin{code}
-  maxProof3 x xs P (i , .i) (refl , snd) with i lt x
-  ... | yes p = <⇒≤ p , \ x₁ x₂ → snd x₁ (lemmaYes i x xs p (Pair.fst x₁) x₂)
-    where
-    lemmaYes : ∀ i x xs →
-      i < x →
-      ∀ w →
-      Pair (All (w ≥_) (x :: xs)) (w ∈ (x :: xs)) →
-      Pair (All (w ≥_) (i :: x :: xs)) (w ∈ (i :: x :: xs))
-    lemmaYes i x xs x₂ .x (fst , ∈Head) = (AllCons (<⇒≤ x₂) fst) , (∈Tail ∈Head)
-    lemmaYes i x xs x₂ w (AllCons x₄ fst , ∈Tail x₃) = (AllCons (≤-trans (<⇒≤ x₂) x₄) (AllCons x₄ fst)) , ∈Tail (∈Tail x₃)
-  ... | no ¬p = ≤-refl , \ x₁ x₂ → snd x₁ (lemmaNo i x xs ¬p (Pair.fst x₁) x₂)
-    where
-    lemmaNo : ∀ i x xs →
-      ¬ (i < x) →
-      ∀ w →
-      Pair (All (w ≥_) (i :: xs)) (w ∈ (i :: xs)) →
-      Pair (All (w ≥_) (i :: x :: xs)) (w ∈ (i :: x :: xs))
-    lemmaNo i x xs x₂ .i (AllCons x₃ fst , ∈Head) = AllCons x₃ (AllCons (≮⇒≥ x₂) fst) , ∈Head
-    lemmaNo i x xs x₂ w (AllCons x₃ fst , ∈Tail snd) = (AllCons x₃ (AllCons (≤-trans (≮⇒≥ x₂) x₃) fst)) , (∈Tail (∈Tail snd))
+% The first step is to modify the specification so it fits with the induction.
+% \begin{code}
+%   maxPost0 : List Nat × Nat → Nat × Nat → Set
+%   maxPost0 (xs , i) (o , _) = All (o ≥_) (i :: xs) × (o ∈ (i :: xs))
+%   maxI0 = specF [[ K ⊤  , maxPost0 ]]
+%   maxProof0 : wpSpec [[ maxPre , maxPost ]] ⊑ wpM maxI0
+% \end{code}
+% %if style == newcode
+% \begin{code}
+%   maxProof0 P (xs , .0) ((refl , Hnil) , snd) = tt , \ o H → snd o (unAllCons (Pair.fst H) , lemma xs Hnil (Pair.fst o) H)
+%     where
+%     lemma : ∀ xs → ¬ (xs == Nil) →
+%       ∀ w → Pair (All (\ n → n ≤ w) (0 :: xs)) (w ∈ (0 :: xs)) → w ∈ xs
+%     lemma Nil Hnil w H = magic (Hnil refl)
+%     lemma (.0 :: xs) _ .0 (AllCons x₂ (AllCons z≤n fst) , ∈Head) = ∈Head
+%     lemma (x :: xs) _ w (_ , ∈Tail snd) = snd
+% \end{code}
+% %endif
 
-  maxI4 : List Nat → Nat → M Nat
-\end{code}
-%endif
+% %if style == newcode
+% \begin{code}
+%   maxI1 : List Nat → M Nat
+%   maxPre1 : List Nat → Nat × Nat → Set
+%   maxPost1 : List Nat → Nat × Nat → Nat × Nat → Set
+% \end{code}
+% %endif
+% The first intermediate program |maxI1| looks like:
+% \begin{code}
+%   maxI1 xs = get' tt >>= specF [[ maxPre1 xs , maxPost1 xs ]]
+% \end{code}
+% The pre- and postcondition of the hole are:
+% \begin{code}
+%   maxPre1 xs (i , i') = i == i'
+%   maxPost1 xs (i , _) (o , _) = All (o ≥_) (i :: xs) × (o ∈ (i :: xs))
+% \end{code}
 
-Finally, we save the new value of the state and perform a recursive call on the tail of the list.
-\begin{code}
-  maxI4 xs m = put' m >>= \ _ → specF [[ K ⊤ , maxPost0 ]] xs
-  maxProof4 : ∀ xs → wpSpec [[ maxPre3 xs , maxPost3 xs ]] ⊑ wpM (maxI4 xs)
-\end{code}
+% We can prove this (at least partially) implements the specification:
+% \begin{code}
+%   maxProof1 : wpSpec [[ K ⊤ , maxPost0 ]] ⊑ wpM maxI1
+% \end{code}
+% %if style == newcode
+% \begin{code}
+%   maxProof1 P (xs , i) = getStep {pre = K ⊤} {post = \ xi → maxPost0 (xs , Pair.snd xi)} (specF [[ maxPre1 xs , maxPost1 xs ]]) lemma (\ xi → (P (xs , Pair.snd xi))) (tt , i)
+%     where
+%     lemma' : ∀ i' o →
+%       Pair (All (o ≥_) (i' :: xs)) (o ∈ (i' :: xs)) →
+%       ∀ (x : ⊤ × Nat) →
+%       Pair ⊤ (Pair (Pair.snd x ≡ i') (Pair.snd x ≡ i')) →
+%       Pair (All (o ≥_) (Pair.snd x :: xs))
+%       (o ∈ (Pair.snd x :: xs))
+%     lemma' i' o H (_ , .i') (_ , (refl , refl)) = H
 
-%if style == newcode
-\begin{code}
-  maxProof4 xs = putStep {pre = maxPre3 xs} {post = maxPost3 xs} (\ _ → specF [[ K ⊤ , maxPost0 ]] xs) \ P m H → tt , \ o Hpost → Pair.snd H o (lemma xs (Pair.snd m) (Pair.fst o) Hpost)
-    where
-    lemma : ∀ xs m w →
-      Pair (All (\ n → n ≤ w) (m :: xs)) (w ∈ (m :: xs)) →
-      ∀ x → Pair (Pair.snd x ≤ Pair.fst x) (Pair.fst x ≡ m) →
-      Pair (All (\ n → n ≤ w) (Pair.fst x :: xs))
-      (w ∈ (Pair.fst x :: xs))
-    lemma xs m w (wMax , wItem) (.m , snd) (fst₁ , refl) = wMax , wItem
-\end{code}
-%endif
+%     lemma : wpSpec [[
+%         preR getPost (K ⊤) ,
+%         postR getPost (K ⊤) (\ xi → (maxPost0 (xs , Pair.snd xi)))
+%       ]] ⊑ wpM (specF [[ maxPre1 xs , maxPost1 xs ]])
+%     lemma P (i' , .i') (((_ , .i') , (_ , (refl , refl))) , snd) = refl , \ o H → snd o (lemma' i' (Pair.fst o) H)
+
+%   maxI2 : List Nat → Nat → M Nat
+%   maxPre2 : Nat → List Nat → Nat × Nat → Set
+%   maxPost2 : Nat → List Nat → Nat × Nat → Nat × Nat → Set
+% \end{code}
+% %endif
+
+% After we get the maximum up to now, we look at the next element of the list.
+% \begin{code}
+%   maxI2 Nil = done
+%   maxI2 (x :: xs) = specF [[ maxPre2 x xs , maxPost2 x xs ]]
+%   maxPre2 x xs (i , i') = i == i'
+%   maxPost2 x xs (i , _) (o , _) = All (o ≥_) (i :: x :: xs) × (o ∈ (i :: x :: xs))
+%   maxProof2 : ∀ xs → wpSpec [[ maxPre1 xs , maxPost1 xs ]] ⊑ wpM (maxI2 xs)
+% \end{code}
+
+% %if style == newcode
+% \begin{code}
+%   maxProof2 Nil P (i , .i) (refl , snd) = snd _ ((AllCons ≤-refl AllNil) , ∈Head)
+%   maxProof2 (x :: xs) P (i , .i) (refl , snd) = refl , snd
+
+%   maxI3 : Nat → List Nat → Nat → M Nat
+%   maxPre3 : List Nat → Nat × Nat → Set
+%   maxPost3 : List Nat → Nat × Nat → Nat × Nat → Set
+% \end{code}
+% %endif
+
+% Given the first element of the list, compare it with the current maximum and pass the largest of the two to the next stage.
+% \begin{code}
+%   maxI3 x xs i with i lt x
+%   ... | yes _ = specF [[ maxPre3 xs , maxPost3 xs ]] x
+%   ... | no _ = specF [[ maxPre3 xs , maxPost3 xs ]] i
+%   maxPre3 xs (m , i) = i ≤ m
+%   maxPost3 xs (m , i) (o , _) = All (o ≥_) (m :: xs) × (o ∈ (m :: xs))
+%   maxProof3 : ∀ x xs → wpSpec [[ maxPre2 x xs , maxPost2 x xs ]] ⊑ wpM (maxI3 x xs)
+% \end{code}
+
+% %if style == newcode
+% \begin{code}
+%   maxProof3 x xs P (i , .i) (refl , snd) with i lt x
+%   ... | yes p = <⇒≤ p , \ x₁ x₂ → snd x₁ (lemmaYes i x xs p (Pair.fst x₁) x₂)
+%     where
+%     lemmaYes : ∀ i x xs →
+%       i < x →
+%       ∀ w →
+%       Pair (All (w ≥_) (x :: xs)) (w ∈ (x :: xs)) →
+%       Pair (All (w ≥_) (i :: x :: xs)) (w ∈ (i :: x :: xs))
+%     lemmaYes i x xs x₂ .x (fst , ∈Head) = (AllCons (<⇒≤ x₂) fst) , (∈Tail ∈Head)
+%     lemmaYes i x xs x₂ w (AllCons x₄ fst , ∈Tail x₃) = (AllCons (≤-trans (<⇒≤ x₂) x₄) (AllCons x₄ fst)) , ∈Tail (∈Tail x₃)
+%   ... | no ¬p = ≤-refl , \ x₁ x₂ → snd x₁ (lemmaNo i x xs ¬p (Pair.fst x₁) x₂)
+%     where
+%     lemmaNo : ∀ i x xs →
+%       ¬ (i < x) →
+%       ∀ w →
+%       Pair (All (w ≥_) (i :: xs)) (w ∈ (i :: xs)) →
+%       Pair (All (w ≥_) (i :: x :: xs)) (w ∈ (i :: x :: xs))
+%     lemmaNo i x xs x₂ .i (AllCons x₃ fst , ∈Head) = AllCons x₃ (AllCons (≮⇒≥ x₂) fst) , ∈Head
+%     lemmaNo i x xs x₂ w (AllCons x₃ fst , ∈Tail snd) = (AllCons x₃ (AllCons (≤-trans (≮⇒≥ x₂) x₃) fst)) , (∈Tail (∈Tail snd))
+
+%   maxI4 : List Nat → Nat → M Nat
+% \end{code}
+% %endif
+
+% Finally, we save the new value of the state and perform a recursive call on the tail of the list.
+% \begin{code}
+%   maxI4 xs m = put' m >>= \ _ → specF [[ K ⊤ , maxPost0 ]] xs
+%   maxProof4 : ∀ xs → wpSpec [[ maxPre3 xs , maxPost3 xs ]] ⊑ wpM (maxI4 xs)
+% \end{code}
+
+% %if style == newcode
+% \begin{code}
+%   maxProof4 xs = putStep {pre = maxPre3 xs} {post = maxPost3 xs} (\ _ → specF [[ K ⊤ , maxPost0 ]] xs) \ P m H → tt , \ o Hpost → Pair.snd H o (lemma xs (Pair.snd m) (Pair.fst o) Hpost)
+%     where
+%     lemma : ∀ xs m w →
+%       Pair (All (\ n → n ≤ w) (m :: xs)) (w ∈ (m :: xs)) →
+%       ∀ x → Pair (Pair.snd x ≤ Pair.fst x) (Pair.fst x ≡ m) →
+%       Pair (All (\ n → n ≤ w) (Pair.fst x :: xs))
+%       (w ∈ (Pair.fst x :: xs))
+%     lemma xs m w (wMax , wItem) (.m , snd) (fst₁ , refl) = wMax , wItem
+% \end{code}
+% %endif
 
 \section{Discussion}
 \label{sec:discussion}
@@ -2166,7 +2258,7 @@ to stateful computations. \citet{snapl} have recently proposed using
 the Coq proof assistants to derive correct programs from their
 specification. Their work
 on the Fiat framework is geared towards describing \emph{data refinement}
-and the synthesis of abstract data types, packaging methods and data.
+and the synthesis of abstract datatypes, packaging methods and data.
 
 
 
