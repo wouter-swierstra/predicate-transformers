@@ -2017,20 +2017,91 @@ We want to show how we can implement a |max| program that gives the maximum of a
   maxPost (xs , i) (o , _) = All (o ≥_) xs × (o ∈ xs)
 \end{code}
 
+%if style == newcode
+\begin{code}
+  maxPost' : List Nat × Nat → Nat × Nat → Set
+\end{code}
+%endif
 The first step is to modify the specification so it fits with the induction,
 giving us a new derivation goal |max'|:
 \begin{code}
-  maxPost' : List Nat × Nat → Nat × Nat → Set
   maxPost' (xs , i) (o , _) = All (o ≥_) (i :: xs) × (o ∈ (i :: xs))
+\end{code}
+%if style == newcode
+\begin{code}
+  maxProof : ∀ (xs : List Nat) ->
+    wpSpec (applySpec [[ maxPre , maxPost ]] xs) ⊑
+    wpSpec (applySpec [[ K ⊤ , maxPost' ]] xs)
+  maxProof xs P .0 ((refl , Hnil) , snd) = tt , \ o H → snd o (unAllCons (Pair.fst H) , lemma xs Hnil (Pair.fst o) H)
+    where
+    lemma : ∀ xs → ¬ (xs == Nil) →
+      ∀ w → Pair (All (\ n → n ≤ w) (0 :: xs)) (w ∈ (0 :: xs)) → w ∈ xs
+    lemma Nil Hnil w H = magic (Hnil refl)
+    lemma (.0 :: xs) _ .0 (AllCons x₂ (AllCons z≤n fst) , ∈Head) = ∈Head
+    lemma (x :: xs) _ w (_ , ∈Tail snd) = snd
+
+  max'ProofNil : ∀ i →
+    wpSpec (applySpec (step Get (applySpec [[ K ⊤ , maxPost' ]] Nil)) i) ⊑ ptM (done i)
+  max'ProofNil i P .i ((.i , (fst₁ , (refl , refl))) , snd) = snd (i , i) (lemma i)
+    where
+    lemma : ∀ i x →
+      Pair ⊤ (Pair (x ≡ i) (x ≡ i)) →
+      Pair (All (λ n → n ≤ i) (x :: Nil)) (i ∈ (x :: Nil))
+    lemma i .i (fst , (refl , refl)) = (AllCons ≤-refl AllNil) , ∈Head
+
+  max'Proof1 : ∀ x xs i →
+    Succ x ≤ i →
+    ∀ (P : Nat → Nat × Nat → Set) x₁ →
+    Pair (Sigma ℕ (λ x₂ → Pair ⊤ (Pair (x₂ ≡ i) (x₂ ≡ x₁))))
+    (∀ x₂ →
+    (∀ x₃ →
+    Pair ⊤ (Pair (x₃ ≡ i) (x₃ ≡ x₁)) →
+    Pair (All (λ n → n ≤ Pair.fst x₂) (x₃ :: x :: xs))
+    (Pair.fst x₂ ∈ (x₃ :: x :: xs))) →
+    P x₁ x₂) →
+    Pair ⊤
+    (∀ x₂ →
+    Pair (All (λ n → n ≤ Pair.fst x₂) (x₁ :: xs))
+    (Pair.fst x₂ ∈ (x₁ :: xs)) →
+    P x₁ x₂)
+  max'Proof1 x xs i x<i P .i ((.i , (_ , (refl , refl))) , snd) = tt , λ x₂ x₁ → snd x₂ (lemma x₂ x₁)
+    where
+    lemma : ∀ (x₂ : Nat × Nat) →
+      Pair (All (λ n → n ≤ Pair.fst x₂) (i :: xs))
+      (Pair.fst x₂ ∈ (i :: xs)) →
+      ∀ x₃ → Pair ⊤ (Pair (x₃ ≡ i) (x₃ ≡ i)) →
+      Pair (All (λ n → n ≤ Pair.fst x₂) (x₃ :: x :: xs))
+      (Pair.fst x₂ ∈ (x₃ :: x :: xs))
+    lemma x₂ (AllCons x₁ fst , ∈Head) .i (_ , (refl , refl)) = (AllCons x₁ (AllCons (<⇒≤ x<i) fst)) , ∈Head
+    lemma x₂ (AllCons x₁ fst , ∈Tail snd) _ (_ , (refl , refl)) = (AllCons x₁ (AllCons (≤-trans (<⇒≤ x<i) x₁) fst)) , ∈Tail (∈Tail snd)
+
+  max'Proof2 : ∀ i x xs → (Succ x ≤ i → ⊥) →
+    ∀ (P : Nat → Nat × Nat → Set) x₁ → Pair (Sigma ℕ (λ x₂ → Pair (Sigma ℕ (λ x₃
+    → Pair ⊤ (Pair (x₃ ≡ i) (x₃ ≡ x₂)))) (x ≡ x₁))) (∀ x₂ → (∀ x₃ → Pair (Sigma
+    ℕ (λ x₄ → Pair ⊤ (Pair (x₄ ≡ i) (x₄ ≡ x₃)))) (x ≡ x₁) → ∀ x₄ → Pair ⊤ (Pair
+    (x₄ ≡ i) (x₄ ≡ x₃)) → Pair (All (λ n → n ≤ Pair.fst x₂) (x₄ :: x :: xs))
+    (Pair.fst x₂ ∈ (x₄ :: x :: xs))) → P x₁ x₂) → Pair ⊤ (∀ x₂ → Pair (All (λ n
+    → n ≤ Pair.fst x₂) (x₁ :: xs)) (Pair.fst x₂ ∈ (x₁ :: xs)) → P x₁ x₂)
+  max'Proof2 i x xs x≥i P .x ((.i , ((.i , (fst₂ , (refl , refl))) , refl)) , snd) = tt , λ x₄ x₁ → snd x₄ (lemma x₄ x₁)
+    where
+    lemma : ∀ (x₄ : Pair Nat Nat) → Pair (All (λ n → n ≤ Pair.fst x₄) (x :: xs))
+      (Pair.fst x₄ ∈ (x :: xs)) → ∀ x₃ → Pair (Sigma ℕ (λ x₅ → Pair ⊤ (Pair (x₅
+      ≡ i) (x₅ ≡ x₃)))) (x ≡ x) → ∀ x₅ → Pair ⊤ (Pair (x₅ ≡ i) (x₅ ≡ x₃)) → Pair
+      (All (λ n → n ≤ Pair.fst x₄) (x₅ :: x :: xs)) (Pair.fst x₄ ∈ (x₅ :: x :: xs))
+    lemma (_ , _) (AllCons x fst , ∈Head) _ ((_ , (_ , (refl , refl))) , refl) _ (_ , (refl , refl)) = (AllCons (≮⇒≥ x≥i) (AllCons x fst)) , (∈Tail ∈Head)
+    lemma x₄ (AllCons x₁ fst , ∈Tail snd) _ ((_ , (_ , (refl , refl))) , refl) _ (_ , (refl , refl)) = (AllCons (≤-trans (≮⇒≥ x≥i) x₁) (AllCons x₁ fst)) , (∈Tail (∈Tail snd))
+\end{code}
+%endif
+\begin{code}
   max' : DerivationFun [[ K ⊤ , maxPost' ]]
   max : DerivationFun [[ maxPre , maxPost ]]
-  max xs = transDerivation ? (max' xs)
+  max xs = transDerivation (maxProof xs) (max' xs)
 \end{code}
 
 The definition of |max'| reads just like a normal definition in the |Free| monad, except for including correctness proofs at certain points:
 \begin{code}
-  max' Nil = Step Get λ i → Done i {!!}
-  max' (x :: xs) = Step Get λ i → if' x <? i then (λ x<i -> transDerivation {!!} (max' xs)) else (λ x≥i -> Step (Put x) (const (transDerivation {!!} (max' xs))))
+  max' Nil = Step Get λ i → Done i (max'ProofNil i)
+  max' (x :: xs) = Step Get λ i → if' x <? i then (λ x<i -> transDerivation (max'Proof1 x xs i x<i) (max' xs)) else (λ x≥i -> Step (Put x) (const (transDerivation (max'Proof2 i x xs x≥i) (max' xs))))
 
   -- na Step Get:
   --  0: Goal: (r : R Get) → Derivation (applySpec [[ preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] xs)) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] xs)) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] xs))]] r)
