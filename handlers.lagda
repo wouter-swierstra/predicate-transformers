@@ -1639,6 +1639,10 @@ soundness result regarding our |wpRec| semantics:
 This lemma guarantees that---under the assumption that 
 |wpRec| holds for all inputs---whenever the petrol-driven semantics manage
 to produce a result, this result is guaranteed to satisfy the predicate |P|.
+We could show similar soundness results for the other handlers that
+\citet{mcbride2015turing} proposes for general recursion; this soundness result,
+however, provides at least some evidence
+that the predicate transformer semantics for recursion, |wpRec|, is correct.
   
 %if style == newcode
 \begin{code}
@@ -1692,8 +1696,8 @@ To this end, we begin by defining the following shorthand for
 specifications on values, rather than the specifications on (Kleisli)
 arrows we have considered previously:
 \begin{code}
-   SpecVal : Set -> Set
-   SpecVal a = SpecK ⊤ a
+  SpecVal : Set -> Set
+  SpecVal a = SpecK ⊤ a
  \end{code}
 These specifications passed consist of a
 precondition of type |Set| and a predicate |a -> Set|.
@@ -1722,7 +1726,7 @@ partially finished programs:
 \end{code}
 The type |M a| then corresponds to computations that \emph{mix} code
 and specifications. A value of type |M a| consists of a number of
-operations, given by the |Step| constructor of the |Free| type; in
+operations, given by the |Step| constructor of the |Free C R| type constructor; in
 contrast to free monads we have seen so far, however, the leaves
 contain either values of type |a| or specifications, representing
 unfinished parts of the program's derivation.
@@ -1796,9 +1800,8 @@ executable.
   --       : step : C -> Spec -> Spec
   --       : stepCorrect lemma bewijzen
   --       : voorbeeld als derivatie opschrijven
-  SpecVal = SpecK ⊤
   applySpec : {a b : Set} -> SpecK a b -> a -> SpecVal b
-  applySpec [[ pre , post ]] x = [[ (\_ -> pre x) , (λ _ → post x) ]]
+  applySpec [[ pre , post ]] x = [[ (\_ -> pre x) , (\ _ → post x) ]]
   specV : {a : Set} -> SpecVal a -> M a
   specV spec = Pure (Hole spec)
   specF : {a b : Set} -> SpecK a b -> a -> M b
@@ -1810,7 +1813,7 @@ executable.
     stepMonotone : {a : Set} {spec spec' : SpecVal a} (c : C) ->
       wpSpec spec ⊑ wpSpec spec' -> wpSpec (stepFun c spec) ⊑ wpSpec (stepFun c spec')
     stepCorrect : {a : Set} -> (c : C) -> (spec : SpecVal a) ->
-      wpSpec spec ⊑ wpM (λ _ → Step c (specF (stepFun c spec)))
+      wpSpec spec ⊑ wpM (\ _ → Step c (specF (stepFun c spec)))
     monotone : (c : C) {P Q : R c -> Set} -> (P ⊆ Q) -> ptalgebra c P -> ptalgebra c Q
 
   stepVal : {a : Set} (c : C) -> SpecVal a -> R c -> SpecVal a
@@ -1825,7 +1828,7 @@ executable.
   transDerivation : {a : Set} {spec spec' : SpecVal a} -> wpSpec spec ⊑ wpSpec spec' ->
     Derivation spec' -> Derivation spec
   transDerivation H (Done x Hx) = Done x (⊑-trans H Hx)
-  transDerivation H (Step c d) = Step c λ r → transDerivation (λ P x x₁ → stepMonotone c H (λ _ → P x) r x₁) (d r)
+  transDerivation H (Step c d) = Step c \ r → transDerivation (\ P x x₁ → stepMonotone c H (\ _ → P x) r x₁) (d r)
 
   extract : {a : Set} (spec : SpecVal a) -> Derivation spec -> Free C R a
   extract _ (Done y _) = Pure y
@@ -1836,7 +1839,7 @@ executable.
   correct spec (Done x p) = p
   correct spec (Step c k) = ⊑-trans (stepCorrect c spec)
                             let ih = \r -> correct (stepVal c spec r) (k r)
-                            in λ P x → monotone c (λ x₂ x₃ → ih x₂ _ x x₃)
+                            in \ P x → monotone c (\ x₂ x₃ → ih x₂ _ x x₃)
 \end{code}
 %endif
 
@@ -1873,7 +1876,7 @@ module StateExample where
   (f >=> g) x = f x >>= g
 
   applySpec : {a b : Set} -> SpecK (a × Nat) (b × Nat) -> a -> SpecVal (b × Nat)
-  applySpec [[ pre , post ]] x = [[ (\ t -> pre (x , t)) , (λ t → post (x , t)) ]]
+  applySpec [[ pre , post ]] x = [[ (\ t -> pre (x , t)) , (\ t → post (x , t)) ]]
   specV : {a : Set} -> SpecVal (a × Nat) -> M a
   specV spec = Pure (Hole spec)
 \end{code}
@@ -1882,7 +1885,7 @@ module StateExample where
 
 Before calculating a program in this style, we will develop a handful
 of auxiliary definitions, specialized to the stateful computations
-described in Section~\ref{sec:state}, although it should be straightforward
+described in Section~\ref{sec:state}; we expect that it should be straightforward
 to adapt the definitions to work for other effects.
 In what should be a familiar pattern, we begin by defining a handful
 of smart constructors:
@@ -1906,9 +1909,7 @@ of smart constructors:
 
 Note that these smart constructors now produce computations in |M|, mixing
 effects and specifications, rather than the free monad, |State|, we saw previously.
-Here we choose to define |get| as a Kleisli morphism, taking a
-spurious argument of the unit type, as this makes the presentation of
-|get| and |put| uniform. We can define the following
+We can define the following
 postconditions characterising |get| and |put|:
 \begin{code}
   getPost : Nat -> Nat × Nat → Set
@@ -1921,8 +1922,8 @@ modify it; the |put| command overwrites the current state. We can
 prove that |get| and |put| commands satisfy these postconditions using
 our |wpM| semantics:
 \begin{code}
-  getCorrect  : forall pre ->  wpSpec [[ pre , (\ i o -> pre i ∧ getPost i o) ]]  ⊑ ptM get'
-  putCorrect  : forall pre x ->  wpSpec [[ pre , (\ i o -> pre i ∧ putPost x i o) ]]  ⊑ ptM (put' x)
+  getCorrect  : forall pre    ->  wpSpec [[ pre , (\ i o -> pre i ∧ getPost i o) ]]    ⊑ ptM get'
+  putCorrect  : forall pre x  ->  wpSpec [[ pre , (\ i o -> pre i ∧ putPost x i o) ]]  ⊑ ptM (put' x)
 \end{code}
 %if style == newcode
 \begin{code}
@@ -2001,7 +2002,7 @@ We can define the |Derivation| data type for this |step|:
   stepMonotone : {a : Set} (c : C) (r : R c) {spec spec' : SpecVal (a × Nat)} ->
     wpSpec spec ⊑ wpSpec spec' ->
     wpSpec (applySpec (step c spec) r) ⊑ wpSpec (applySpec (step c spec') r)
-  stepMonotone {a} Get r {spec} {spec'} H P .r ((.r , (fst₁ , (refl , refl))) , snd) = (r , (Pair.fst (H (λ _ _ → ⊤) r (fst₁ , (λ x _ → tt))) , (refl , refl))) , λ x x₁ → snd x (postLemma r x x₁)
+  stepMonotone {a} Get r {spec} {spec'} H P .r ((.r , (fst₁ , (refl , refl))) , snd) = (r , (Pair.fst (H (\ _ _ → ⊤) r (fst₁ , (\ x _ → tt))) , (refl , refl))) , \ x x₁ → snd x (postLemma r x x₁)
     where
     postLemma : ∀ r
       (x : Pair a Nat) →
@@ -2011,20 +2012,20 @@ We can define the |Derivation| data type for this |step|:
       ∀ x₁ →
       Pair (Spec.pre spec x₁) (Pair (x₁ ≡ r) (x₁ ≡ r)) →
       Spec.post spec x₁ x
-    postLemma r x x₂ .r (fst , (refl , refl)) = Pair.snd (H (Spec.post spec) r (fst , (λ x₃ z → z))) x (x₂ r ((Pair.fst (H (λ _ _ → ⊤) r (fst , (λ x₃ _ → tt)))) , (refl , refl)))
-  stepMonotone {a} (Put t) r {spec} {spec'} H P .t ((fst , (fst₁ , refl)) , snd) = (fst , (Pair.fst (H (λ _ _ → ⊤) fst (fst₁ , (λ x _ → tt))) , refl)) , λ x x₁ → snd x (postLemma t x x₁)
+    postLemma r x x₂ .r (fst , (refl , refl)) = Pair.snd (H (Spec.post spec) r (fst , (\ x₃ z → z))) x (x₂ r ((Pair.fst (H (\ _ _ → ⊤) r (fst , (\ x₃ _ → tt)))) , (refl , refl)))
+  stepMonotone {a} (Put t) r {spec} {spec'} H P .t ((fst , (fst₁ , refl)) , snd) = (fst , (Pair.fst (H (\ _ _ → ⊤) fst (fst₁ , (\ x _ → tt))) , refl)) , \ x x₁ → snd x (postLemma t x x₁)
     where
       postLemma : ∀ (t : Nat)
         (x : Pair a Nat) →
         (∀ x₁ → Pair (Spec.pre spec' x₁) (t ≡ t) → Spec.post spec' x₁ x) →
         ∀ x₁ →
         Pair (Spec.pre spec x₁) (t ≡ t) → Spec.post spec x₁ x
-      postLemma t x x₁ x₂ (fst , refl) = Pair.snd (H (Spec.post spec) x₂ (fst , (λ x₃ z → z))) x (x₁ x₂ ((Pair.fst (H (λ _ _ → ⊤) x₂ (fst , (λ x₃ _ → tt)))) , refl))
+      postLemma t x x₁ x₂ (fst , refl) = Pair.snd (H (Spec.post spec) x₂ (fst , (\ x₃ z → z))) x (x₁ x₂ ((Pair.fst (H (\ _ _ → ⊤) x₂ (fst , (\ x₃ _ → tt)))) , refl))
 
   transDerivation : {a : Set} {spec spec' : SpecVal (a × Nat)} -> wpSpec spec ⊑ wpSpec spec' ->
     Derivation spec' -> Derivation spec
   transDerivation H (Done x Hx) = Done x (⊑-trans H Hx)
-  transDerivation H (Step c d) = Step c λ r → transDerivation (stepMonotone c r H) (d r)
+  transDerivation H (Step c d) = Step c \ r → transDerivation (stepMonotone c r H) (d r)
 
   open import Data.Nat
   open import Data.Nat.Properties
@@ -2077,48 +2078,48 @@ giving us a new derivation goal |max'|:
     where
     lemma : ∀ i x →
       Pair ⊤ (Pair (x ≡ i) (x ≡ i)) →
-      Pair (All (λ n → n ≤ i) (x :: Nil)) (i ∈ (x :: Nil))
+      Pair (All (\ n → n ≤ i) (x :: Nil)) (i ∈ (x :: Nil))
     lemma i .i (fst , (refl , refl)) = (AllCons ≤-refl AllNil) , ∈Head
 
   max'Proof1 : ∀ x xs i →
     Succ x ≤ i →
     ∀ (P : Nat → Nat × Nat → Set) x₁ →
-    Pair (Sigma ℕ (λ x₂ → Pair ⊤ (Pair (x₂ ≡ i) (x₂ ≡ x₁))))
+    Pair (Sigma ℕ (\ x₂ → Pair ⊤ (Pair (x₂ ≡ i) (x₂ ≡ x₁))))
     (∀ x₂ →
     (∀ x₃ →
     Pair ⊤ (Pair (x₃ ≡ i) (x₃ ≡ x₁)) →
-    Pair (All (λ n → n ≤ Pair.fst x₂) (x₃ :: x :: xs))
+    Pair (All (\ n → n ≤ Pair.fst x₂) (x₃ :: x :: xs))
     (Pair.fst x₂ ∈ (x₃ :: x :: xs))) →
     P x₁ x₂) →
     Pair ⊤
     (∀ x₂ →
-    Pair (All (λ n → n ≤ Pair.fst x₂) (x₁ :: xs))
+    Pair (All (\ n → n ≤ Pair.fst x₂) (x₁ :: xs))
     (Pair.fst x₂ ∈ (x₁ :: xs)) →
     P x₁ x₂)
-  max'Proof1 x xs i x<i P .i ((.i , (_ , (refl , refl))) , snd) = tt , λ x₂ x₁ → snd x₂ (lemma x₂ x₁)
+  max'Proof1 x xs i x<i P .i ((.i , (_ , (refl , refl))) , snd) = tt , \ x₂ x₁ → snd x₂ (lemma x₂ x₁)
     where
     lemma : ∀ (x₂ : Nat × Nat) →
-      Pair (All (λ n → n ≤ Pair.fst x₂) (i :: xs))
+      Pair (All (\ n → n ≤ Pair.fst x₂) (i :: xs))
       (Pair.fst x₂ ∈ (i :: xs)) →
       ∀ x₃ → Pair ⊤ (Pair (x₃ ≡ i) (x₃ ≡ i)) →
-      Pair (All (λ n → n ≤ Pair.fst x₂) (x₃ :: x :: xs))
+      Pair (All (\ n → n ≤ Pair.fst x₂) (x₃ :: x :: xs))
       (Pair.fst x₂ ∈ (x₃ :: x :: xs))
     lemma x₂ (AllCons x₁ fst , ∈Head) .i (_ , (refl , refl)) = (AllCons x₁ (AllCons (<⇒≤ x<i) fst)) , ∈Head
     lemma x₂ (AllCons x₁ fst , ∈Tail snd) _ (_ , (refl , refl)) = (AllCons x₁ (AllCons (≤-trans (<⇒≤ x<i) x₁) fst)) , ∈Tail (∈Tail snd)
 
   max'Proof2 : ∀ i x xs → (Succ x ≤ i → ⊥) →
-    ∀ (P : Nat → Nat × Nat → Set) x₁ → Pair (Sigma ℕ (λ x₂ → Pair (Sigma ℕ (λ x₃
+    ∀ (P : Nat → Nat × Nat → Set) x₁ → Pair (Sigma ℕ (\ x₂ → Pair (Sigma ℕ (\ x₃
     → Pair ⊤ (Pair (x₃ ≡ i) (x₃ ≡ x₂)))) (x ≡ x₁))) (∀ x₂ → (∀ x₃ → Pair (Sigma
-    ℕ (λ x₄ → Pair ⊤ (Pair (x₄ ≡ i) (x₄ ≡ x₃)))) (x ≡ x₁) → ∀ x₄ → Pair ⊤ (Pair
-    (x₄ ≡ i) (x₄ ≡ x₃)) → Pair (All (λ n → n ≤ Pair.fst x₂) (x₄ :: x :: xs))
-    (Pair.fst x₂ ∈ (x₄ :: x :: xs))) → P x₁ x₂) → Pair ⊤ (∀ x₂ → Pair (All (λ n
+    ℕ (\ x₄ → Pair ⊤ (Pair (x₄ ≡ i) (x₄ ≡ x₃)))) (x ≡ x₁) → ∀ x₄ → Pair ⊤ (Pair
+    (x₄ ≡ i) (x₄ ≡ x₃)) → Pair (All (\ n → n ≤ Pair.fst x₂) (x₄ :: x :: xs))
+    (Pair.fst x₂ ∈ (x₄ :: x :: xs))) → P x₁ x₂) → Pair ⊤ (∀ x₂ → Pair (All (\ n
     → n ≤ Pair.fst x₂) (x₁ :: xs)) (Pair.fst x₂ ∈ (x₁ :: xs)) → P x₁ x₂)
-  max'Proof2 i x xs x≥i P .x ((.i , ((.i , (fst₂ , (refl , refl))) , refl)) , snd) = tt , λ x₄ x₁ → snd x₄ (lemma x₄ x₁)
+  max'Proof2 i x xs x≥i P .x ((.i , ((.i , (fst₂ , (refl , refl))) , refl)) , snd) = tt , \ x₄ x₁ → snd x₄ (lemma x₄ x₁)
     where
-    lemma : ∀ (x₄ : Pair Nat Nat) → Pair (All (λ n → n ≤ Pair.fst x₄) (x :: xs))
-      (Pair.fst x₄ ∈ (x :: xs)) → ∀ x₃ → Pair (Sigma ℕ (λ x₅ → Pair ⊤ (Pair (x₅
+    lemma : ∀ (x₄ : Pair Nat Nat) → Pair (All (\ n → n ≤ Pair.fst x₄) (x :: xs))
+      (Pair.fst x₄ ∈ (x :: xs)) → ∀ x₃ → Pair (Sigma ℕ (\ x₅ → Pair ⊤ (Pair (x₅
       ≡ i) (x₅ ≡ x₃)))) (x ≡ x) → ∀ x₅ → Pair ⊤ (Pair (x₅ ≡ i) (x₅ ≡ x₃)) → Pair
-      (All (λ n → n ≤ Pair.fst x₄) (x₅ :: x :: xs)) (Pair.fst x₄ ∈ (x₅ :: x :: xs))
+      (All (\ n → n ≤ Pair.fst x₄) (x₅ :: x :: xs)) (Pair.fst x₄ ∈ (x₅ :: x :: xs))
     lemma (_ , _) (AllCons x fst , ∈Head) _ ((_ , (_ , (refl , refl))) , refl) _ (_ , (refl , refl)) = (AllCons (≮⇒≥ x≥i) (AllCons x fst)) , (∈Tail ∈Head)
     lemma x₄ (AllCons x₁ fst , ∈Tail snd) _ ((_ , (_ , (refl , refl))) , refl) _ (_ , (refl , refl)) = (AllCons (≤-trans (≮⇒≥ x≥i) x₁) (AllCons x₁ fst)) , (∈Tail (∈Tail snd))
 \end{code}
@@ -2131,8 +2132,8 @@ giving us a new derivation goal |max'|:
 
 The definition of |max'| reads just like a normal definition in the |Free| monad, except for including correctness proofs at certain points:
 \begin{code}
-  max' Nil = Step Get λ i → Done i (max'ProofNil i)
-  max' (x :: xs) = Step Get λ i → if' x <? i then (λ x<i -> transDerivation (max'Proof1 x xs i x<i) (max' xs)) else (λ x≥i -> Step (Put x) (const (transDerivation (max'Proof2 i x xs x≥i) (max' xs))))
+  max' Nil = Step Get \ i → Done i (max'ProofNil i)
+  max' (x :: xs) = Step Get \ i → if' x <? i then (\ x<i -> transDerivation (max'Proof1 x xs i x<i) (max' xs)) else (\ x≥i -> Step (Put x) (const (transDerivation (max'Proof2 i x xs x≥i) (max' xs))))
 
   -- na Step Get:
   --  0: Goal: (r : R Get) → Derivation (applySpec [[ preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] xs)) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] xs)) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] xs))]] r)
@@ -2168,16 +2169,9 @@ It is no coincidence that the structure of our derivations mimics that
 of the computations described by our |Free| datatype.  One advantage
 of giving a manifest representation of such derivations is that we
 can easily extract executable code from a given derivation:
-\begin{code}
-  extract : (Forall(b)) (spec : SpecVal b) -> Derivation spec -> Free C R b
-  extract _     (Done y _)  = Pure y
-  extract spec  (Step c k)  = Step c (\ r -> extract (step c spec r) (k r))
-\end{code}
+\todo{extract}
 Furthermore, we can show that the extracted code satisfies its specification:
-\begin{spec}
-  correctness : (Forall(a))(spec : SpecVal a) -> (d : Derivation spec) ->
-    wpSpec spec ⊑ wpCR ((hiddenConst(extract spec d)))
-\end{spec}
+\todo{correctness}
 The proof proceeds by induction on the derivation and relies on the
 monotonicity of the predicate transformer semantics in play.
 
@@ -2198,15 +2192,7 @@ develop some of the machinery to describe verified program calculations.
 
 We can give the following specification of the maximum function we
 wish to derive:
-\begin{code}
-  maxSpec : SpecK (List Nat × Nat) (Nat × Nat)
-  maxSpec = [[ maxPre , maxPost ]]
-    where
-    maxPre : List Nat × Nat → Set
-    maxPre (xs , i) = (i == 0) ∧ (¬ (xs == Nil))
-    maxPost : List Nat × Nat → Nat × Nat → Set
-    maxPost (xs , i) (o , _) = All (o ≥_) xs ∧ (o ∈ xs)
-\end{code}
+
 Given a non-empty list and initial state |0|, the result of the
 computation should be a natural number |o| that is both occurs in the input list |xs|
 and is greater than or equal to all the elements of |xs|.
