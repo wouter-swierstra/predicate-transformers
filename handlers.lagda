@@ -1673,7 +1673,6 @@ module Mix (C : Set) (R : C -> Set) (ptalgebra : (c : C) -> (R c -> Set) -> Set)
 \end{code}
 %endif
 
-
 In the examples we have seen so far, we have related a \emph{complete}
 program to its specification. Most work on the refinement calculus,
 however, allows programs and specifications to mix freely, thereby
@@ -1689,16 +1688,24 @@ ending in a value of type |a| in the leaves. By varying this
 information stored in the leaves of the free monad, we can mix
 unfinished specifications and program fragments.
 
-To this end, we define the data type |I a|, corresponding to either a
+To this end, we begin by defining the following shorthand for
+specifications on values, rather than the specifications on (Kleisli)
+arrows we have considered previously:
+\begin{code}
+   SpecVal : Set -> Set
+   SpecVal a = SpecK ⊤ a
+ \end{code}
+These specifications passed consist of a
+precondition of type |Set| and a predicate |a -> Set|.
+Next, we can define the datatype |I a|, corresponding to either a
 specification on |a| or a value of type |a|.
 \begin{code}
   data I (a : Set) : Set where
     Done  : a -> I a
-    Hole  : SpecK ⊤ a -> I a
+    Hole  : SpecVal a -> I a
 \end{code}
-The specifications passed to the |Hole| constructor consist of a
-precondition of type |Set| and a predicate |a -> Set|; these
-specifications correspond to some unfinished part of the program being
+Here we use the |Hole| constructor to store
+a specification, corresponding to some unfinished part of the program being
 calculated. We can assign a predicate transformer semantics to values
 of type |I a| easily enough, reusing our previous |wpSpec| function:
 \begin{code}
@@ -1707,7 +1714,7 @@ of type |I a| easily enough, reusing our previous |wpSpec| function:
   ptI (Hole spec)  P  = wpSpec spec (hiddenConst(P)) tt
 \end{code}
 Furthermore, given the commands |C| and responses |R| determining the
-operations of a free monad, we can define the following data type for
+operations of a free monad, we can define the following datatype for
 partially finished programs:
 \begin{code}  
   M : Set -> Set
@@ -1720,9 +1727,7 @@ contrast to free monads we have seen so far, however, the leaves
 contain either values of type |a| or specifications, representing
 unfinished parts of the program's derivation.
 
-\todo{Bind? Arguably not necessary for examples?}
-
-The refinement literature is careful to distinguish \emph{executable
+In what follows, we will be careful to distinguish \emph{executable
   code}---that is programs without specification fragments---from
 programs, that may still contain specifications. The following
 predicate characterises the executable fragment of |M a|:
@@ -1732,11 +1737,6 @@ predicate characterises the executable fragment of |M a|:
   isExecutable (Pure (Hole _))  = ⊥
   isExecutable (Step c k)       = ∀ r -> isExecutable (k r)
 \end{code}
-Every executable program can be coerced to a computation free of
-unfinished specifications, as you would expect:
-\begin{spec}
-  finish : (m : M a) -> isExecutable m -> Free C R a
-\end{spec}
 
 Although we have defined the syntactic structure of our mixed
 computations, |M a|, we have not yet given their semantics. We can use
@@ -1751,7 +1751,6 @@ Kleisli morphisms.
   pt (Step c x) P = ptalgebra c (\r -> pt (x r) P)
 \end{code}
 %endif
-
 \begin{code}
   wpCR : (Forall(a)) (implicit(b : a -> Set)) ((x : a) -> Free C R (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
 \end{code}
@@ -1769,8 +1768,10 @@ for specific choices of |C| and |R|. We can now assign semantics to
 \end{code}
 The crucial step here is to transform the argument predicate |P| to
 work on specifications or values of type |I a|, using the |ptI|
-function we defined previously.
+function defined above.
 
+\subsection*{Defining derivations}
+\label{case-study}
 The |wpM| function assigns a predicate transformer semantics to
 unfinished programs, where the leaves of a free monad may consist of
 values or specifications. We can use this semantics to derive a
@@ -1783,10 +1784,8 @@ from some initial specification:
 \end{spec}
 \end{center}
 Here the intermediate steps (|i1|, |i2|, and so forth) may mix
-specifications and effectful computations; the final program, |c|, is
-executable. In the next section, we will present an example of such a
-derivation.
-
+specifications and effectful computations; the final program, |c|, must be
+executable.
 %if style == newcode
 \begin{code}
   -- Tim: hier begint de opzet van expliciete derivaties
@@ -1840,11 +1839,9 @@ derivation.
                             in λ P x → monotone c (λ x₂ x₃ → ih x₂ _ x x₃)
 \end{code}
 %endif
-\subsection*{Case study: maximum}
-\label{case-study}
 
 
-\todo{Clean up this section} 
+
 %if style == newcode
 \begin{code}
 module StateExample where
@@ -1882,6 +1879,11 @@ module StateExample where
 \end{code}
 %endif
 
+
+Before calculating a program in this style, we will develop a handful
+of auxiliary definitions, specialized to the stateful computations
+described in Section~\ref{sec:state}, although it should be straightforward
+to adapt the definitions to work for other effects.
 In what should be a familiar pattern, we begin by defining a handful
 of smart constructors:
 %if style == poly
@@ -1893,21 +1895,21 @@ of smart constructors:
   done   : (Forall (a)) a -> M a
   get'   : M Nat
   put'   : Nat -> M ⊤
-  specF  : (Forall(a b)) SpecK (a × Nat) (b × Nat) → a → M b
 \end{code}
 %if style == newcode
 \begin{code}
   done x = Pure (Done x)
   get' = Step Get done
   put' t = Step (Put t) done
-  specF [[ pre , post ]] x = Pure (Hole [[
-      (\ i → pre (x , i)) ,
-      (\ i → post (x , i))
-    ]])
 \end{code}
 %endif
-We can define the following
-specifications for |get| and |put|:
+
+Note that these smart constructors now produce computations in |M|, mixing
+effects and specifications, rather than the free monad, |State|, we saw previously.
+Here we choose to define |get| as a Kleisli morphism, taking a
+spurious argument of the unit type, as this makes the presentation of
+|get| and |put| uniform. We can define the following
+posconditions for |get| and |put|:
 \begin{code}
   getPost : Nat -> Nat × Nat → Set
   getPost t (x , t') = (t == x) ∧ (t == t')
@@ -1929,8 +1931,31 @@ our |wpM| semantics:
 \end{code}
 %endif
 While we will not use these properties in the remainder of our
-calculation, they form an important sanity check to guaranteeing that
-the specifications we have chose for |get| and |put| are correct.
+calculation directly, they form an important check, guaranteeing that
+the specifications we have chosen for |get| and |put| are correct.
+
+To derive a program from its specification, we will perform a series
+of refinement steps. While we could use the transitivity of refinement
+to chain together various intermediate programs, we take a slightly
+more restricted approach.
+Each refinement step may introduce a single new command |C|, thereby
+changing the remaining refinement problem. We can try to make this manifest
+in the following (incomplete) datatype.
+\begin{spec}
+  data Derivation (Forall(b)) (spec : SpecVal b) : Set where
+    Done  : (x : b) -> wpSpec spec ⊑ wpM (done x) -> Derivation spec
+    Step  : (c : C) -> (∀ (r : R c) -> Derivation ...) -> Derivation spec
+\end{spec}
+A value of type |Derivation spec| describes a series of refinement
+steps, yielding a program satisfying the specification |spec|. In the
+base case, the derivation is done and returns a value |x : b| that
+satisfies the desired specification; otherwise, we refine the program
+by performing the command |c|---but how does this change the remaining
+specification problem? To answer this question, we need to make
+explicit what the effect of each command is on the current
+goal. Fortunately, the specifications of |get| and |put| defined
+previously allow us to do just that.
+
 
 To refine a specification into code, we will prove two lemmas
 explaining how |get|
@@ -1962,8 +1987,13 @@ We can define the |Derivation| data type for this |step|:
     Step : (c : C) -> (∀ (r : R c) -> Derivation (applySpec (step c spec) r)) -> Derivation spec
 \end{code}
 
+
+\begin{spec}
+  step : (Forall(b)) (c : C) (spec : SpecVal (b × Nat)) -> SpecK (R c × Nat) (b × Nat)
+\end{spec}
 %if style == newcode
 \begin{code}
+
   DerivationFun : {a b : Set} (spec : SpecK (a × Nat) (b × Nat)) -> Set
   DerivationFun {a} {b} spec = (x : a) -> Derivation (applySpec spec x)
 
@@ -2124,6 +2154,71 @@ The definition of |max'| reads just like a normal definition in the |Free| monad
   --   2: Goal: wpSpec (applySpec [[preR (putPost x) (Spec.pre (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)) , postR (putPost x) (Spec.pre (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)) (Spec.post (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i))]] tt) ⊑ wpSpec (applySpec [[ K ⊤ , maxPost' ]] xs)
 \end{code}
 
+
+Using this `specification transformer' we can complete the definition
+of derivations:
+\begin{spec}
+  data Derivation (Forall(b)) (spec : SpecVal b) : Set where
+    Done  : (x : b) -> wpSpec spec ⊑ ptM (done x) -> Derivation spec
+    Step  : (c : C) -> (∀ (r : R c) -> Derivation (step c spec)) -> Derivation spec
+\end{spec}
+
+It is no coincidence that the structure of our derivations mimics that
+of the computations described by our |Free| datatype.  One advantage
+of giving a manifest representation of such derivations is that we
+can easily extract executable code from a given derivation:
+\begin{code}
+  extract : (Forall(b)) (spec : SpecVal b) -> Derivation spec -> Free C R b
+  extract _     (Done y _)  = Pure y
+  extract spec  (Step c k)  = Step c (\ r -> extract (step c spec r) (k r))
+\end{code}
+Furthermore, we can show that the extracted code satisfies its specification:
+\begin{spec}
+  correctness : (Forall(a))(spec : SpecVal a) -> (d : Derivation spec) ->
+    wpSpec spec ⊑ wpCR ((hiddenConst(extract spec d)))
+\end{spec}
+The proof proceeds by induction on the derivation and relies on the
+monotonicity of the predicate transformer semantics in play.
+
+% Finally, we can repeatedly apply the transitivity of refinement to show:
+% \begin{spec}
+%   refineDerivation : (Forall(a : Set)) (implicit(spec spec' : SpecVal (a × Nat)) wpSpec spec ⊑ wpSpec spec' -> Derivation spec' -> Derivation spec
+% \end{spec}
+
+\subsection*{Case study: calculating the maximum}
+\label{sec:maximum}
+
+In this section, we will derive a simple program that searches for the
+greatest element of a list. Although there is a simple, purely
+functional implementation, we choose to derive a stateful version that
+stores the greatest element encountered so far. Along the way, we will
+develop some of the machinery to describe verified program calculations.
+
+
+We can give the following specification of the maximum function we
+wish to derive:
+\begin{code}
+  maxSpec : SpecK (List Nat) Nat
+  maxSpec = [[ maxPre , maxPost ]]
+    where
+    maxPre : List Nat × Nat → Set
+    maxPre (xs , i) = (i == 0) ∧ (¬ (xs == Nil))
+    maxPost : List Nat × Nat → Nat × Nat → Set
+    maxPost (xs , i) (o , _) = All (o ≥_) xs ∧ (o ∈ xs)
+\end{code}
+Given a non-empty list and initial state |0|, the result of the
+computation should be a natural number |o| that is both occurs in the input list |xs|
+and is greater than or equal to all the elements of |xs|.
+
+Next, we can sketch the process of program calculation. The final
+derivation itself is quite large and `discovered' interactively
+together with the proof assistant; rather than present it in its
+entirety, we shall outline the steps involved.
+
+
+
+ 
+
 \section{Discussion}
 \label{sec:discussion}
 
@@ -2179,10 +2274,14 @@ prover HOL. This was later extended to the \emph{Refinement
 HOL. ~\citet{dongol} have extended these ideas even further in HOL,
 adding a separation logic and its associated algebraic
 structure. \citet{boulme} has given a direct embedding of the
-refinement calculus in Coq. Finally,
+refinement calculus in Coq.
 \citeauthor{alpuim2}~\citeyearpar{alpuim2,alpuim1} have given an
 similar development to the one presented here, tailored specifically
-to stateful computations.
+to stateful computations. \citet{snapl} have recently proposed using
+the Coq proof assistants to derive correct programs from their
+specification. Their work
+on the Fiat framework is geared towards describing \emph{data refinement}
+and the synthesis of abstract datatypes, packaging methods and data.
 
 
 
