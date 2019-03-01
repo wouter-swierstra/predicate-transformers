@@ -41,6 +41,13 @@
 %format elem = "\in"
 %format wpEval = wp "_{" eval "}"
 %format wpCR = wp
+%format _tril_ = "\_\triangleleft\_"
+%format tril = "\triangleleft"
+%format _trir_ = "\_\triangleright\_"
+%format trir = "\triangleright"
+%format maxPost' = maxPost
+%format maxSpec' = maxSpec
+%format if' = if
 %format ^^ = "\;"
 %format Set1 = Set
 %format forall = "\forall"
@@ -75,5 +82,9 @@
 %format N = "Nat"
 %format top = "⊤"
 %format ^^ = " "
+%format _tril_ = _▹_
+%format tril = ▹
+%format _trir_ = _◃_
+%format trir = ◃
 %endif
 
