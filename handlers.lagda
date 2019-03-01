@@ -1966,10 +1966,34 @@ We can define the |Derivation| data type for this |step|:
 \begin{code}
   DerivationFun : {a b : Set} (spec : SpecK (a × Nat) (b × Nat)) -> Set
   DerivationFun {a} {b} spec = (x : a) -> Derivation (applySpec spec x)
+
+  stepMonotone : {a : Set} (c : C) (r : R c) {spec spec' : SpecVal (a × Nat)} ->
+    wpSpec spec ⊑ wpSpec spec' ->
+    wpSpec (applySpec (step c spec) r) ⊑ wpSpec (applySpec (step c spec') r)
+  stepMonotone {a} Get r {spec} {spec'} H P .r ((.r , (fst₁ , (refl , refl))) , snd) = (r , (Pair.fst (H (λ _ _ → ⊤) r (fst₁ , (λ x _ → tt))) , (refl , refl))) , λ x x₁ → snd x (postLemma r x x₁)
+    where
+    postLemma : ∀ r
+      (x : Pair a Nat) →
+      (∀ x₁ →
+      Pair (Spec.pre spec' x₁) (Pair (x₁ ≡ r) (x₁ ≡ r)) →
+      Spec.post spec' x₁ x) →
+      ∀ x₁ →
+      Pair (Spec.pre spec x₁) (Pair (x₁ ≡ r) (x₁ ≡ r)) →
+      Spec.post spec x₁ x
+    postLemma r x x₂ .r (fst , (refl , refl)) = Pair.snd (H (Spec.post spec) r (fst , (λ x₃ z → z))) x (x₂ r ((Pair.fst (H (λ _ _ → ⊤) r (fst , (λ x₃ _ → tt)))) , (refl , refl)))
+  stepMonotone {a} (Put t) r {spec} {spec'} H P .t ((fst , (fst₁ , refl)) , snd) = (fst , (Pair.fst (H (λ _ _ → ⊤) fst (fst₁ , (λ x _ → tt))) , refl)) , λ x x₁ → snd x (postLemma t x x₁)
+    where
+      postLemma : ∀ (t : Nat)
+        (x : Pair a Nat) →
+        (∀ x₁ → Pair (Spec.pre spec' x₁) (t ≡ t) → Spec.post spec' x₁ x) →
+        ∀ x₁ →
+        Pair (Spec.pre spec x₁) (t ≡ t) → Spec.post spec x₁ x
+      postLemma t x x₁ x₂ (fst , refl) = Pair.snd (H (Spec.post spec) x₂ (fst , (λ x₃ z → z))) x (x₁ x₂ ((Pair.fst (H (λ _ _ → ⊤) x₂ (fst , (λ x₃ _ → tt)))) , refl))
+
   transDerivation : {a : Set} {spec spec' : SpecVal (a × Nat)} -> wpSpec spec ⊑ wpSpec spec' ->
     Derivation spec' -> Derivation spec
   transDerivation H (Done x Hx) = Done x (⊑-trans H Hx)
-  transDerivation H (Step c d) = Step c λ r → transDerivation {!!} (d r)
+  transDerivation H (Step c d) = Step c λ r → transDerivation (stepMonotone c r H) (d r)
 
   open import Data.Nat
   open import Data.Nat.Properties
