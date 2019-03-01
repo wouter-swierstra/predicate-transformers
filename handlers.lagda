@@ -1882,7 +1882,7 @@ effects and specifications, rather than the free monad, |State|, we saw previous
 Here we choose to define |get| as a Kleisli morphism, taking a
 spurious argument of the unit type, as this makes the presentation of
 |get| and |put| uniform. We can define the following
-posconditions for |get| and |put|:
+postconditions characterising |get| and |put|:
 \begin{code}
   getPost : ⊤ × Nat -> Nat × Nat → Set
   getPost (_ , t) (x , t') = (t == x) ∧ (t == t')
@@ -1909,11 +1909,11 @@ the specifications we have chosen for |get| and |put| are correct.
 
 To derive a program from its specification, we will perform a series
 of refinement steps. While we could use the transitivity of refinement
-to chain together various intermediate programs, we take a slightly
-more restricted approach.
-Each refinement step may introduce a single new command |C|, thereby
+to chain together various intermediate programs explicitly, we take a slightly
+different approach.
+Each refinement step may introduce a single new command of type |C|, thereby
 changing the remaining refinement problem. We can try to make this manifest
-in the following (incomplete) datatype.
+in the following (incomplete) datatype:
 \begin{spec}
   data Derivation (Forall(b)) (spec : SpecVal b) : Set where
     Done  : (x : b) -> wpSpec spec ⊑ wpM (done x) -> Derivation spec
@@ -1929,7 +1929,7 @@ explicit what the effect of each command is on the current
 goal. Fortunately, the specifications of |get| and |put| defined
 previously allow us to do just that.
 
-
+\todo{explain this}
 \begin{spec}
   step : (Forall(b)) (c : C) (spec : SpecVal (b × Nat)) -> SpecK (R c × Nat) (b × Nat)
 \end{spec}
@@ -1944,7 +1944,7 @@ Using this `specification transformer' we can complete the definition
 of derivations:
 \begin{spec}
   data Derivation (Forall(b)) (spec : SpecVal b) : Set where
-    Done  : (x : b) -> wpSpec spec ⊑ ptM (done x) -> Derivation spec
+    Done  : (x : b) -> wpSpec spec ⊑ wpM (done x) -> Derivation spec
     Step  : (c : C) -> (∀ (r : R c) -> Derivation (step c spec)) -> Derivation spec
 \end{spec}
 
@@ -1983,7 +1983,7 @@ develop some of the machinery to describe verified program calculations.
 We can give the following specification of the maximum function we
 wish to derive:
 \begin{code}
-  maxSpec : SpecK (List Nat) Nat
+  maxSpec : SpecK (List Nat × Nat) (Nat × Nat)
   maxSpec = [[ maxPre , maxPost ]]
     where
     maxPre : List Nat × Nat → Set
@@ -1998,10 +1998,23 @@ and is greater than or equal to all the elements of |xs|.
 Next, we can sketch the process of program calculation. The final
 derivation itself is quite large and `discovered' interactively
 together with the proof assistant; rather than present it in its
-entirety, we shall outline the steps involved.
+entirety, we shall outline the steps involved. The aim of our
+derivation is to find an inhabitant of |Derivation maxSpec|.
 
-
-
+To begin with, we would like to pattern match on the list
+argument---but given that we must construct a derivation, there
+appears to be no way to do so. Fortunately, we can apply the following
+lemma, named after the corresponding tactic in Coq:
+\begin{spec}
+  intros : (Forall(a b s)) SpecK (a × s) (b × s) → a → SpecK s (b × s)
+\end{spec}
+%if style == newcode  
+\begin{spec}
+    intros [[ pre , post ]] x = [[ (\ s → pre (x , s)) , (\ s → post (x , s)) ]]
+\end{spec}
+%endif  
+This gives us access to the argument list, which we can pattern match
+on directly. If the list is empty, we can use our 
   
 % Here is how to combine the specification on the right side of a bind,
 % given the specification of the left side and of the whole.  The
