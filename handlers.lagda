@@ -1747,7 +1747,7 @@ computations, |M a|, we have not yet given their semantics. We can use
 the notion of weakest precondition on |I| to define a notion of
 weakest precondition for the computations in |M|. To do so, however,
 we need to assume that we have some weakest precondition semantics for
-Kleisli morphisms.
+Kleisli morphisms:
 %if style == newcode
 \begin{code}
   pt : (Forall(a)) Free C R a -> (a -> Set) -> Set
@@ -1776,6 +1776,14 @@ function defined above.
 
 \subsection*{Defining derivations}
 \label{case-study}
+%if style == newcode
+\begin{code}
+module StateExample where
+  open Free hiding (_>>=_)
+  open Maybe using (Spec; SpecK; [[_,_]]; wpSpec)
+  open State Nat
+\end{code}
+%endif
 The |wpM| function assigns a predicate transformer semantics to
 unfinished programs, where the leaves of a free monad may consist of
 values or specifications. We can use this semantics to derive a
@@ -1790,68 +1798,11 @@ from some initial specification:
 Here the intermediate steps (|i1|, |i2|, and so forth) may mix
 specifications and effectful computations; the final program, |c|, must be
 executable.
-%if style == newcode
-\begin{code}
-  -- Tim: hier begint de opzet van expliciete derivaties
-
-  -- TODOS : Voorbeeld (en in het algemeen)
-  --       : smart constructors + specificatie v.d. operaties
-  --       : getSpec \sqsubseteq get (etc.)
-  --       : step : C -> Spec -> Spec
-  --       : stepCorrect lemma bewijzen
-  --       : voorbeeld als derivatie opschrijven
-  applySpec : {a b : Set} -> SpecK a b -> a -> SpecVal b
-  applySpec [[ pre , post ]] x = [[ (\_ -> pre x) , (\ _ → post x) ]]
-  specV : {a : Set} -> SpecVal a -> M a
-  specV spec = Pure (Hole spec)
-  specF : {a b : Set} -> SpecK a b -> a -> M b
-  specF spec x = specV (applySpec spec x)
-
-  postulate
-    stepFun : {a : Set} -> (c : C) -> SpecVal a -> SpecK (R c) a
-    -- TODO: can we prove this (or use a weaker assumption?)
-    stepMonotone : {a : Set} {spec spec' : SpecVal a} (c : C) ->
-      wpSpec spec ⊑ wpSpec spec' -> wpSpec (stepFun c spec) ⊑ wpSpec (stepFun c spec')
-    stepCorrect : {a : Set} -> (c : C) -> (spec : SpecVal a) ->
-      wpSpec spec ⊑ wpM (\ _ → Step c (specF (stepFun c spec)))
-    monotone : (c : C) {P Q : R c -> Set} -> (P ⊆ Q) -> ptalgebra c P -> ptalgebra c Q
-
-  stepVal : {a : Set} (c : C) -> SpecVal a -> R c -> SpecVal a
-  stepVal c spec r = applySpec (stepFun c spec) r
-
-  data Derivation {a : Set} (spec : SpecVal a) : Set where
-    Done : (x : a) -> wpSpec spec ⊑ wpM (const (Pure (Done x))) -> Derivation spec
-    Step : (c : C) -> (∀ (r : R c) -> Derivation (stepVal c spec r)) -> Derivation spec
-  DerivationFun : {a b : Set} (spec : SpecK a b) -> Set
-  DerivationFun {a} {b} spec = (x : a) -> Derivation (applySpec spec x)
-
-  transDerivation : {a : Set} {spec spec' : SpecVal a} -> wpSpec spec ⊑ wpSpec spec' ->
-    Derivation spec' -> Derivation spec
-  transDerivation H (Done x Hx) = Done x (⊑-trans H Hx)
-  transDerivation H (Step c d) = Step c \ r → transDerivation (\ P x x₁ → stepMonotone c H (\ _ → P x) r x₁) (d r)
-
-  extract : {a : Set} (spec : SpecVal a) -> Derivation spec -> Free C R a
-  extract _ (Done y _) = Pure y
-  extract spec (Step c k) = Step c \r -> extract (stepVal c spec r) (k r)
-
-  correct : {a : Set} (spec : SpecVal a) -> (d : Derivation spec) ->
-    wpSpec spec ⊑ wpCR (\_ -> extract spec d)
-  correct spec (Done x p) = p
-  correct spec (Step c k) = ⊑-trans (stepCorrect c spec)
-                            let ih = \r -> correct (stepVal c spec r) (k r)
-                            in \ P x → monotone c (\ x₂ x₃ → ih x₂ _ x x₃)
-\end{code}
-%endif
 
 
 
 %if style == newcode
 \begin{code}
-module StateExample where
-  open Free hiding (_>>=_)
-  open Maybe using (Spec; SpecK; [[_,_]]; wpSpec)
-  open State Nat
-
   -- We have to redo the Mix section since our specifications incorporate the state
   SpecVal = SpecK Nat
   data I (a : Set) : Set where
@@ -1875,8 +1826,8 @@ module StateExample where
   _>=>_ : forall {a b c} -> (a -> M b) -> (b -> M c) -> a -> M c
   (f >=> g) x = f x >>= g
 
-  applySpec : {a b : Set} -> SpecK (a × Nat) (b × Nat) -> a -> SpecVal (b × Nat)
-  applySpec [[ pre , post ]] x = [[ (\ t -> pre (x , t)) , (\ t → post (x , t)) ]]
+  intros : {a b : Set} -> SpecK (a × Nat) (b × Nat) -> a -> SpecVal (b × Nat)
+  intros [[ pre , post ]] x = [[ (\ t -> pre (x , t)) , (\ t → post (x , t)) ]]
   specV : {a : Set} -> SpecVal (a × Nat) -> M a
   specV spec = Pure (Hole spec)
 \end{code}
@@ -1907,9 +1858,9 @@ of smart constructors:
 \end{code}
 %endif
 
-Note that these smart constructors now produce computations in |M|, mixing
-effects and specifications, rather than the free monad, |State|, we saw previously.
-We can define the following
+Note that these smart constructors now produce computations in |M|,
+mixing effects and specifications, rather than the free monad,
+|State|, we saw previously.  We can define the following
 postconditions characterising |get| and |put|:
 \begin{code}
   getPost : Nat -> Nat × Nat → Set
@@ -1917,50 +1868,54 @@ postconditions characterising |get| and |put|:
   putPost : Nat -> Nat → ⊤ × Nat → Set
   putPost t _ (_ , t') = t == t'
 \end{code}
-As you would expect, |get| returns the current state but does not
+As you would expect, these postconditions state that |get| returns the current state but does not
 modify it; the |put| command overwrites the current state. We can
 prove that |get| and |put| commands satisfy these postconditions using
 our |wpM| semantics:
-\begin{code}
-  getCorrect  : forall pre    ->  wpSpec [[ pre , (\ i o -> pre i ∧ getPost i o) ]]    ⊑ ptM get'
-  putCorrect  : forall pre x  ->  wpSpec [[ pre , (\ i o -> pre i ∧ putPost x i o) ]]  ⊑ ptM (put' x)
-\end{code}
+\begin{spec}
+  getCorrect  : forall pre    ->  wpSpec [[ pre , (\ i o -> pre i ∧ getPost i o) ]]    ⊑ wpM get'
+  putCorrect  : forall pre    ->  wpSpec [[ pre , (\ i o -> pre i ∧ putPost x i o) ]]  ⊑ wpM put'
+\end{spec}
+%%In the spec above, this should really be ptM...
 %if style == newcode
-\begin{code}
-  getCorrect _ P t (fst , snd) = snd (t , t) (fst , (refl , refl))
-  putCorrect _ t P _ (fst , snd) = snd (tt , t) (fst , refl)
-\end{code}
+% \begin{code}
+%   getCorrect _ P t (fst , snd) = snd (t , t) (fst , (refl , refl))
+%   putCorrect _ t P _ (fst , snd) = snd (tt , t) (fst , refl)
+% \end{code}
 %endif
 While we will not use these properties in the remainder of our
 calculation directly, they form an important check, guaranteeing that
 the specifications we have chosen for |get| and |put| are correct.
 
 To derive a program from its specification, we will perform a series
-of refinement steps. While we could use the transitivity of refinement
+of refinement steps. While we could use the transitivity of the refinement relation
 to chain together various intermediate programs explicitly, we take a slightly
 different approach.
-Each refinement step may introduce a single new command of type |C|, thereby
+Each refinement is allowed to introduce a single new command of type |C|, thereby
 changing the remaining refinement problem. We can try to make this manifest
 in the following (incomplete) datatype:
 \begin{spec}
-  data Derivation (Forall(b)) (spec : SpecVal b) : Set where
-    Done  : (x : b) -> wpSpec spec ⊑ wpM (done x) -> Derivation spec
-    Step  : (c : C) -> (∀ (r : R c) -> Derivation ...) -> Derivation spec
+  data Derivation (hidden(b : Set)) (spec : SpecVal b) : Set where
+    Done  : (x : b) ->  wpSpec spec ⊑ wpM (done x)       -> Derivation spec
+    Step  : (c : C) ->  (∀ (r : R c) -> Derivation ...)  -> Derivation spec
 \end{spec}
 A value of type |Derivation spec| describes a series of refinement
-steps, yielding a program satisfying the specification |spec|. In the
+steps, yielding a value satisfying the desired specification. In the
 base case, the derivation is done and returns a value |x : b| that
-satisfies the desired specification; otherwise, we refine the program
-by performing the command |c|---but how does this change the remaining
+satisfies the desired specification; otherwise, we perform the command |c|;
+but how does this change the remaining
 specification problem? To answer this question, we need to make
 explicit what the effect of each command is on the current
-goal. Fortunately, the specifications of |get| and |put| defined
-previously allow us to do just that.
+specification goal. Fortunately, the specifications of |get| and |put| defined
+previously will allow us to do just that.
+
+We would like to define a function that, given a new command we wish
+to use in the next refinement step, computes the remaining specification:
+\begin{spec}
+  step : (Forall(b)) (c : C) (spec : SpecVal (b × Nat)) -> SpecK (R c × Nat) (b × Nat)  
+\end{spec}
 
 \todo{explain this}
-
-To refine a specification into code, we will prove two lemmas
-explaining how |get|
 
 Here is how to combine the specification on the right side of a bind,
 given the specification of the left side and of the whole.  The
@@ -1969,39 +1924,44 @@ argument |x| to the left hand side.  The postcondition says that for
 all such |x| that could lead to this |y|, the right hand side could
 lead to the given |z|.
 \begin{code}
-  preR : ∀ {a b} (postL : a → b → Set) (preLR : a → Set) → b → Set
-  preR {a} postL preLR y = Sigma a \ x → preLR x ∧ postL x y
+  preR : (Forall (a b)) (postL : a → b → Set) (preLR : a → Set) → b → Set
+  preR (hidden(a)) postL preLR y = Sigma a \ x → preLR x ∧ postL x y
   postR : (Forall (a b c)) (postL : a → b → Set) (preLR : a → Set) (postLR : a → c → Set) → b → c → Set
   postR postL preLR postLR y z = ∀ x → preLR x ∧ postL x y → postLR x z
 \end{code}
-
-This allows us to refine a specification by applying a |get| or |put|:
+These definitions allow us to complete the definition of the |step| function:
 \begin{code}
-  step : {b : Set} (c : C) (spec : SpecVal (b × Nat)) -> SpecK (R c × Nat) (b × Nat)
-  step Get [[ pre , post ]] = [[ preR getPost pre , postR getPost pre post ]]
-  step (Put x) [[ pre , post ]] = [[ preR (putPost x) pre , postR (putPost x) pre post ]]
+  step : (Forall(b)) (c : C) (spec : SpecVal (b × Nat)) -> SpecK (R c × Nat) (b × Nat)  
+  step Get      [[ pre , post ]] = [[ preR getPost pre , postR getPost pre post ]]
+  step (Put x)  [[ pre , post ]] = [[ preR (putPost x) pre , postR (putPost x) pre post ]]
 \end{code}
-
-We can define the |Derivation| data type for this |step|:
+We can subsequently use the |step| function to complete the definition of derivations:
 \begin{code}
-  data Derivation {b : Set} (spec : SpecVal (b × Nat)) : Set where
+  data Derivation (hidden(b)) (spec : SpecVal (b × Nat)) : Set where
     Done : (x : b) -> wpSpec spec ⊑ ptM (done x) -> Derivation spec
-    Step : (c : C) -> (∀ (r : R c) -> Derivation (applySpec (step c spec) r)) -> Derivation spec
+    Step : (c : C) -> (∀ (r : R c) -> Derivation (intros (step c spec) r)) -> Derivation spec
 \end{code}
+It is no coincidence that the structure of our derivations mimics that
+of the computations described by our |Free| datatype.  One advantage
+of giving a manifest representation of such derivations is that we
+can easily extract executable code from a given derivation:
+\begin{code}
+  extract : (Forall(b)) (spec : SpecVal (b × Nat)) -> Derivation spec -> State b
+  extract _ (Done x _)  = Pure x
+  extract _ (Step c k)  = Step c (\ r -> extract _ (k r))
+\end{code}
+Furthermore, we can prove that the extracted program does indeed satisfy the
+intended specification.
 
-
-\begin{spec}
-  step : (Forall(b)) (c : C) (spec : SpecVal (b × Nat)) -> SpecK (R c × Nat) (b × Nat)
-\end{spec}
 %if style == newcode
 \begin{code}
 
   DerivationFun : {a b : Set} (spec : SpecK (a × Nat) (b × Nat)) -> Set
-  DerivationFun {a} {b} spec = (x : a) -> Derivation (applySpec spec x)
+  DerivationFun {a} {b} spec = (x : a) -> Derivation (intros spec x)
 
   stepMonotone : {a : Set} (c : C) (r : R c) {spec spec' : SpecVal (a × Nat)} ->
     wpSpec spec ⊑ wpSpec spec' ->
-    wpSpec (applySpec (step c spec) r) ⊑ wpSpec (applySpec (step c spec') r)
+    wpSpec (intros (step c spec) r) ⊑ wpSpec (intros (step c spec') r)
   stepMonotone {a} Get r {spec} {spec'} H P .r ((.r , (fst₁ , (refl , refl))) , snd) = (r , (Pair.fst (H (\ _ _ → ⊤) r (fst₁ , (\ x _ → tt))) , (refl , refl))) , \ x x₁ → snd x (postLemma r x x₁)
     where
     postLemma : ∀ r
@@ -2040,6 +2000,47 @@ We can define the |Derivation| data type for this |step|:
 \end{code}
 %endif
 
+\subsection*{Case study: calculating the maximum}
+\label{sec:maximum}
+
+In this section, we will derive a simple program that searches for the
+greatest element of a list. Although there is a simple, purely
+functional implementation, we choose to derive a stateful version that
+stores the greatest element encountered so far. Along the way, we will
+develop some of the machinery to describe verified program
+calculations. Once again, we stress that our aim is \emph{not} to
+perform complex program calculations, but rather to illustrate the
+definitions we have presented can be used.
+
+
+We can give the following specification of the maximum function we
+wish to derive:
+
+Given a non-empty list and initial state |0|, the result of the
+computation should be a natural number |o| that is both occurs in the input list |xs|
+and is greater than or equal to all the elements of |xs|.
+
+Next, we can sketch the process of program calculation. The final
+derivation itself is quite large and `discovered' interactively
+together with the proof assistant; rather than present it in its
+entirety, we shall outline the steps involved. The aim of our
+derivation is to find an inhabitant of |Derivation maxSpec|.
+
+To begin with, we would like to pattern match on the list
+argument---but given that we must construct a derivation, there
+appears to be no way to do so. Fortunately, we can apply the following
+lemma, named after the corresponding tactic in Coq:
+\begin{spec}
+  intros : (Forall(a b s)) SpecK (a × s) (b × s) → a → SpecK s (b × s)
+\end{spec}
+%if style == newcode  
+\begin{spec}
+    intros [[ pre , post ]] x = [[ (\ s → pre (x , s)) , (\ s → post (x , s)) ]]
+\end{spec}
+%endif  
+This gives us access to the argument list, which we can pattern match
+on directly. If the list is empty, we can use our 
+
 Now we have the ingredients to demonstrate incremental refinement.
 We want to show how we can implement a |max| program that gives the maximum of a nonempty list.
 \begin{code}
@@ -2062,8 +2063,8 @@ giving us a new derivation goal |max'|:
 %if style == newcode
 \begin{code}
   maxProof : ∀ (xs : List Nat) ->
-    wpSpec (applySpec [[ maxPre , maxPost ]] xs) ⊑
-    wpSpec (applySpec [[ K ⊤ , maxPost' ]] xs)
+    wpSpec (intros [[ maxPre , maxPost ]] xs) ⊑
+    wpSpec (intros [[ K ⊤ , maxPost' ]] xs)
   maxProof xs P .0 ((refl , Hnil) , snd) = tt , \ o H → snd o (unAllCons (Pair.fst H) , lemma xs Hnil (Pair.fst o) H)
     where
     lemma : ∀ xs → ¬ (xs == Nil) →
@@ -2073,7 +2074,7 @@ giving us a new derivation goal |max'|:
     lemma (x :: xs) _ w (_ , ∈Tail snd) = snd
 
   max'ProofNil : ∀ i →
-    wpSpec (applySpec (step Get (applySpec [[ K ⊤ , maxPost' ]] Nil)) i) ⊑ ptM (done i)
+    wpSpec (intros (step Get (intros [[ K ⊤ , maxPost' ]] Nil)) i) ⊑ ptM (done i)
   max'ProofNil i P .i ((.i , (fst₁ , (refl , refl))) , snd) = snd (i , i) (lemma i)
     where
     lemma : ∀ i x →
@@ -2130,93 +2131,45 @@ giving us a new derivation goal |max'|:
   max xs = transDerivation (maxProof xs) (max' xs)
 \end{code}
 
-The definition of |max'| reads just like a normal definition in the |Free| monad, except for including correctness proofs at certain points:
+The definition of |max'| reads just like a normal definition in the
+|Free| monad, except for including correctness proofs at certain
+points:
 \begin{code}
-  max' Nil = Step Get \ i → Done i (max'ProofNil i)
-  max' (x :: xs) = Step Get \ i → if' x <? i then (\ x<i -> transDerivation (max'Proof1 x xs i x<i) (max' xs)) else (\ x≥i -> Step (Put x) (const (transDerivation (max'Proof2 i x xs x≥i) (max' xs))))
+  max' Nil        =  Step Get \ i →
+                     Done i (ldotsHere((max'ProofNil i)))
+  max' (x :: xs)  =
+    Step Get \ i →
+    if' x <? i
+      then (\ x<i -> (ldotsHere(transDerivation (max'Proof1 x xs i x<i))) (max' xs))
+      else (\ x≥i -> Step (Put x) (hiddenConst((ldotsHere(transDerivation (max'Proof2 i x xs x≥i)) (max' xs)))))
+
+\end{code}
+%if style == newcode
+\begin{spec}
 
   -- na Step Get:
-  --  0: Goal: (r : R Get) → Derivation (applySpec [[ preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] xs)) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] xs)) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] xs))]] r)
+  --  0: Goal: (r : R Get) → Derivation (intros [[ preR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] xs)) , postR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] xs)) (Spec.post (intros [[ K ⊤ , maxPost' ]] xs))]] r)
   -- na case split op xs:
-  --  0: Goal: Derivation (applySpec [[ preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] Nil)) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] Nil)) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] Nil))]] i)
-  --  1: Goal: Derivation (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)
+  --  0: Goal: Derivation (intros [[ preR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] Nil)) , postR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] Nil)) (Spec.post (intros [[ K ⊤ , maxPost' ]] Nil))]] i)
+  --  1: Goal: Derivation (intros [[preR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (intros [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)
   -- na Done i in 0:
-  --  0: Goal: wpSpec (applySpec [[ preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] Nil)) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] Nil)) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] Nil))]] i) ⊑ ptM (done i)
+  --  0: Goal: wpSpec (intros [[ preR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] Nil)) , postR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] Nil)) (Spec.post (intros [[ K ⊤ , maxPost' ]] Nil))]] i) ⊑ ptM (done i)
   -- na if' x <? i then ? else ?
-  --  1: Goal: x < i → Derivation (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)
-  --  2: Goal: ¬ x < i → Derivation (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)
+  --  1: Goal: x < i → Derivation (intros [[preR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (intros [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)
+  --  2: Goal: ¬ x < i → Derivation (intros [[preR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (intros [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)
 
   -- na transDerivation ? (max' xs) in 1:
-  --  1: Goal: wpSpec (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i) ⊑ wpSpec (applySpec [[ K ⊤ , maxPost' ]] xs)
+  --  1: Goal: wpSpec (intros [[preR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (intros [[ K ⊤ , maxPost' ]] (x :: xs)))]] i) ⊑ wpSpec (intros [[ K ⊤ , maxPost' ]] xs)
 
   -- na Step (Put x) in 2:
-  --   2: Goal: (r : R (Put x)) → Derivation (applySpec [[preR (putPost x) (Spec.pre (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)) , postR (putPost x) (Spec.pre (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)) (Spec.post (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i))]] r)
+  --   2: Goal: (r : R (Put x)) → Derivation (intros [[preR (putPost x) (Spec.pre (intros [[preR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (intros [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)) , postR (putPost x) (Spec.pre (intros [[preR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (intros [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)) (Spec.post (intros [[preR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (intros [[ K ⊤ , maxPost' ]] (x :: xs)))]] i))]] r)
 
   -- na transDerviation ? (max' xs) in 2:
-  --   2: Goal: wpSpec (applySpec [[preR (putPost x) (Spec.pre (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)) , postR (putPost x) (Spec.pre (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)) (Spec.post (applySpec [[preR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (applySpec [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (applySpec [[ K ⊤ , maxPost' ]] (x :: xs)))]] i))]] tt) ⊑ wpSpec (applySpec [[ K ⊤ , maxPost' ]] xs)
-\end{code}
-
-
-Using this `specification transformer' we can complete the definition
-of derivations:
-\begin{spec}
-  data Derivation (Forall(b)) (spec : SpecVal b) : Set where
-    Done  : (x : b) -> wpSpec spec ⊑ wpM (done x) -> Derivation spec
-    Step  : (c : C) -> (∀ (r : R c) -> Derivation (step c spec)) -> Derivation spec
+  --   2: Goal: wpSpec (intros [[preR (putPost x) (Spec.pre (intros [[preR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (intros [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)) , postR (putPost x) (Spec.pre (intros [[preR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (intros [[ K ⊤ , maxPost' ]] (x :: xs)))]] i)) (Spec.post (intros [[preR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) , postR getPost (Spec.pre (intros [[ K ⊤ , maxPost' ]] (x :: xs))) (Spec.post (intros [[ K ⊤ , maxPost' ]] (x :: xs)))]] i))]] tt) ⊑ wpSpec (intros [[ K ⊤ , maxPost' ]] xs)
 \end{spec}
-
-It is no coincidence that the structure of our derivations mimics that
-of the computations described by our |Free| datatype.  One advantage
-of giving a manifest representation of such derivations is that we
-can easily extract executable code from a given derivation:
-\todo{extract}
-Furthermore, we can show that the extracted code satisfies its specification:
-\todo{correctness}
-The proof proceeds by induction on the derivation and relies on the
-monotonicity of the predicate transformer semantics in play.
-
-% Finally, we can repeatedly apply the transitivity of refinement to show:
-% \begin{spec}
-%   refineDerivation : (Forall(a : Set)) (implicit(spec spec' : SpecVal (a × Nat)) wpSpec spec ⊑ wpSpec spec' -> Derivation spec' -> Derivation spec
-% \end{spec}
-
-\subsection*{Case study: calculating the maximum}
-\label{sec:maximum}
-
-In this section, we will derive a simple program that searches for the
-greatest element of a list. Although there is a simple, purely
-functional implementation, we choose to derive a stateful version that
-stores the greatest element encountered so far. Along the way, we will
-develop some of the machinery to describe verified program calculations.
+%endif
 
 
-We can give the following specification of the maximum function we
-wish to derive:
-
-Given a non-empty list and initial state |0|, the result of the
-computation should be a natural number |o| that is both occurs in the input list |xs|
-and is greater than or equal to all the elements of |xs|.
-
-Next, we can sketch the process of program calculation. The final
-derivation itself is quite large and `discovered' interactively
-together with the proof assistant; rather than present it in its
-entirety, we shall outline the steps involved. The aim of our
-derivation is to find an inhabitant of |Derivation maxSpec|.
-
-To begin with, we would like to pattern match on the list
-argument---but given that we must construct a derivation, there
-appears to be no way to do so. Fortunately, we can apply the following
-lemma, named after the corresponding tactic in Coq:
-\begin{spec}
-  intros : (Forall(a b s)) SpecK (a × s) (b × s) → a → SpecK s (b × s)
-\end{spec}
-%if style == newcode  
-\begin{spec}
-    intros [[ pre , post ]] x = [[ (\ s → pre (x , s)) , (\ s → post (x , s)) ]]
-\end{spec}
-%endif  
-This gives us access to the argument list, which we can pattern match
-on directly. If the list is empty, we can use our 
   
 
 \section{Discussion}

@@ -3,6 +3,7 @@
 %format (Forall (a)) = "\!"
 %format (implicit(a)) = "\!"
 %format (hidden(a)) = "\!"
+%format (ldotsHere(a)) = "\ldots"
 %format (hiddenConst (a)) = a
 %format N = "\mathbb{N}"
 %format e1 = e "_1"
@@ -70,6 +71,7 @@
 %format (hidden(a)) = "{" a "}"
 %format (instantiate (a)) = "(" a " {a})"
 %format (hiddenConst (a)) = "(const " a ")"
+%format (ldotsHere(a)) = a
 %format N = "Nat"
 %format top = "⊤"
 %format ^^ = " "
