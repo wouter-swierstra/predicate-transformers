@@ -1,9 +1,6 @@
 
 open import Level
 
-postulate
-  undefined : ∀ {a : Set} -> a
-
 const : {l : Level} {a b : Set l} -> a -> b -> a
 const x _ = x
 
