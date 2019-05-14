@@ -1329,15 +1329,50 @@ We can extend this relation to define a `subset' relation on
 non-deterministic computations:
 \begin{code}    
   _⊆_ : (Forall(a)) ND a -> ND a -> Set
-  nd1 ⊆ nd2 = ∀ x -> Elem x nd2 -> Elem x nd1
+  nd1 ⊆ nd2 = ∀ x -> Elem x nd1 -> Elem x nd2
 \end{code}
 With these relations in place, we can give the following
 characterisation of the refinement relation induced by both the
 |wpAll| and |wpAny| predicate transformers:
-\begin{spec}
-  refineAll  : (f g : a -> ND b) -> wpAll f  ⊑ wpAll g  <-> ((x : a) -> f x  ⊆ g x)
-  refineAny  : (f g : a -> ND b) -> wpAny f  ⊑ wpAny g  <-> ((x : a) -> g x  ⊆ f x)
-\end{spec}
+%if style == newcode
+\begin{code}
+  _<->_ : {l l' : Level} (a : Set l) (b : Set l') → Set (l ⊔ l')
+  a <-> b = Pair (a -> b) (b -> a)
+\end{code}
+%endif
+\begin{code}
+  refineAll  : (hidden(a b : Set)) (hidden(x : a)) (f g : a -> ND b) -> (wpAll f  ⊑ wpAll g)  <-> ((x : a) -> g x  ⊆ f x)
+  refineAny  : (hidden(a b : Set)) (hidden(x : a)) (f g : a -> ND b) -> (wpAny f  ⊑ wpAny g)  <-> ((x : a) -> f x  ⊆ g x)
+\end{code}
+%if style == newcode
+\begin{code}
+  allP : ∀ {a b : Set} {x : a} P (S : ND b) -> allPT P x S <-> (∀ y → Elem y S → P x y)
+  Pair.fst (allP P (Pure y)) H y Here = H
+  Pair.fst (allP P (Step Choice k)) (H , _) y (Left i) = Pair.fst (allP P (k True)) H y i
+  Pair.fst (allP P (Step Choice k)) (_ , H) y (Right i) = Pair.fst (allP P (k False)) H y i
+  Pair.snd (allP P (Pure y)) H = H y Here
+  Pair.snd (allP P (Step Fail k)) H = tt
+  Pair.snd (allP P (Step Choice k)) H = (Pair.snd (allP P (k True)) λ y i → H y (Left i)) , (Pair.snd (allP P (k False)) λ y i → H y (Right i))
+
+  anyP : ∀ {a b : Set} {x : a} P (S : ND b) -> anyPT P x S <-> Sigma b λ y → Elem y S ∧ P x y
+  Pair.fst (anyP P (Pure y)) H = y , (Here , H)
+  Pair.fst (anyP P (Step Fail k)) ()
+  Pair.fst (anyP P (Step Choice k)) (Inl H) with Pair.fst (anyP P (k True)) H
+  Pair.fst (anyP P (Step Choice k)) (Inl H) | y , (i , IH) = y , (Left i , IH)
+  Pair.fst (anyP P (Step Choice k)) (Inr H) with Pair.fst (anyP P (k False)) H
+  Pair.fst (anyP P (Step Choice k)) (Inr H) | y , (i , IH) = y , (Right i , IH)
+  Pair.snd (anyP P (Pure y)) (.y , (Here , H)) = H
+  Pair.snd (anyP P (Step .Choice k)) (y , (Left i , H)) = Inl (Pair.snd (anyP P (k True)) (y , (i , H)))
+  Pair.snd (anyP P (Step .Choice k)) (y , (Right i , H)) = Inr (Pair.snd (anyP P (k False)) (y , (i , H)))
+
+  Pair.fst (refineAll f g) H x y i = Pair.fst (allP (λ _ y' → Elem y' (f x)) (g x)) (H _ x (Pair.snd (allP _ (f x)) (λ _ → id))) y i
+  Pair.snd (refineAll f g) r P x H = Pair.snd (allP P (g x)) λ y i -> Pair.fst (allP P (f x)) H y (r x y i)
+  Pair.fst (refineAny f g) H x y i with Pair.fst (anyP (λ _ y' → y' == y) (g x)) (H _ x (Pair.snd (anyP _ (f x)) (y , (i , refl))))
+  Pair.fst (refineAny f g) H x y i | .y , (i' , refl) = i'
+  Pair.snd (refineAny f g) r P x H with Pair.fst (anyP P (f x)) H
+  Pair.snd (refineAny f g) r P x H | y , (i , IH) = Pair.snd (anyP P (g x)) (y , ((r x y i) , IH))
+\end{code}
+%endif
 Interestingly, the case for the |wpAny| predicate flips the subset
 relation.  Intuitively, if you know that a predicate |P| holds for
 \emph{some} element returned by a non-deterministic computation, it is
