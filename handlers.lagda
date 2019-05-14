@@ -1322,8 +1322,8 @@ characterise these elements using the following relation:
 \begin{code}
   data Elem (hidden(a : Set)) (x : a) : ND a -> Set where
       Here   : Elem x (Pure x)
-      Left   : (Forall(k))  Elem x (k True) -> Elem x (Step Choice k)
-      Right  : (Forall(k))  Elem x (k False) -> Elem x (Step Choice k)
+      Left   : (Forall(k))  Elem x (k True)   -> Elem x (Step Choice k)
+      Right  : (Forall(k))  Elem x (k False)  -> Elem x (Step Choice k)
 \end{code}
 We can extend this relation to define a `subset' relation on
 non-deterministic computations:
@@ -1426,7 +1426,16 @@ Verifying the correctness of this functions amounts to proving the following lem
 \end{code}
 %if style == newcode
 \begin{code}
-  removeCorrect = undefined
+  removeCorrect P Nil (tt , snd) = tt
+  removeCorrect P (x :: xs) (tt , snd) =
+    snd (x , xs) (∈Head , refl) ,
+    mapPT P (x :: xs) xs (remove xs) _
+      (removeCorrect _ xs (tt , (λ {(x' , xs') (i , H) → snd (x' , (x :: xs')) (∈Tail i , cong (x ::_) H)})))
+    where
+    mapPT : ∀ {a b c : Set} P (x x' : a) (S : ND b) (f : b → c) → allPT (λ _ y → P x (f y)) x' S → allPT P x (map f S)
+    mapPT P x x' (Pure y) f H = H
+    mapPT P x x' (Step Fail k) f H = H
+    mapPT P x x' (Step Choice k) f (fst , snd) = mapPT P x x' (k True) f fst , mapPT P x x' (k False) f snd
 \end{code}
 %endif
 Note that correctness property merely states that all the pairs
@@ -1453,8 +1462,13 @@ We can address this by proving an additional lemma, stating that the
 \end{code}
 %if style == newcode
 \begin{code}
-  completeness y .(y :: _) ys (∈Head , refl) = Left Here
-  completeness y .(_ :: _) ys (∈Tail fst , snd) = Right undefined
+  completeness y (y :: _) ys (∈Head , refl) = Left Here
+  completeness y (x :: xs) .(x :: delete xs fst) (∈Tail fst , refl) = Right (inMap _ (remove xs) _ (completeness y _ _ (fst , refl)))
+    where
+    inMap : ∀ {a b : Set} (x : a) S (f : a → b) → Elem x S → Elem (f x) (map f S)
+    inMap x (Pure x) f Here = Here
+    inMap x (Step Choice k) f (Left i) = Left (inMap x (k True) f i)
+    inMap x (Step Choice k) f (Right i) = Right (inMap x (k False) f i)
 \end{code}
 %endif
 The proof proceeds by induction on the first component of the
