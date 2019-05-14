@@ -1,4 +1,4 @@
-\documentclass[acmsmall, anonymous, review]{acmart}
+\documentclass[acmsmall,review]{acmart}
 \settopmatter{printfolios=true,printccs=false,printacmref=false}
 
 %include agda.fmt
@@ -2055,7 +2055,7 @@ elements of |xs| and also occurs in |xs|.
 To calculate a suitable implementation amounts to proving that
 |Derivation maxSpec| is inhabited. A direct proof quickly fails, as
 the statement is not general enough to reuse our induction
-hypothesis. Fortunately, we define the following lemma, that allows us
+hypothesis. We can prove, however, the following lemma that allows us
 to modify the target of our derivation:
 \begin{code}
   refineDerivation : (Forall(a : Set)) (implicit(spec spec' : SpecVal (a × Nat))) wpSpec spec ⊑ wpSpec spec' -> Derivation spec' -> Derivation spec
@@ -2068,7 +2068,7 @@ to modify the target of our derivation:
 %endif
 The proof recurses over the derivation and relies on the monotonicity of our predicate transformers.
 In particular, we can use this lemma, together with the |weakenPre|
-and |strengthenPost| lemmas from Section~\ref{sec:state} to generalise
+and |strengthenPost| lemmas from Section~\ref{sec:state}, to generalise
 our specification and perform the bookkeeping necessary on the
 intermediate specifications we encounter during derivation.
 
@@ -2175,7 +2175,7 @@ lemma and prove that the result of the call is strong enough to
 fulfil the current proof goal. In the base case, we can give a direct
 proof that the current state |i| satisfies the desired specification.
 
-One result of formulating the |step| in terms of the predicate
+One result of formulating the |step| function in terms of the predicate
 transformers |tril| and |trir| is that the new goals after issuing a
 particular command can quickly become cluttered. We could avoid this
 by defining custom transformations on our specifications for |put| and
