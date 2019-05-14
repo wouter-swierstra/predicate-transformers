@@ -105,8 +105,6 @@ our development are available online.\footnote{The sources for this
 \label{sec:background}
 %if style == newcode
 \begin{code}
-{-# OPTIONS --type-in-type #-}
-
 module Check where
 
 open import Prelude hiding (map; all)
@@ -122,7 +120,7 @@ module Free where
 We begin by defining a datatype for free monads in the style
 of \citet{hancock-setzer-I, hancock-setzer-II}:
 \begin{code}
-  data Free (C : Set) (R : C -> Set) (a : Set) : Set where
+  data Free (hidden(l : Level)) (C : Set) (R : C -> Set) (a : (SetL(l))) : (SetL(l)) where
     Pure : a -> Free C R a
     Step : (c : C) -> (R c -> Free C R a) -> Free C R a
 \end{code}
@@ -134,21 +132,21 @@ constructor corresponds to the continuation, describing how to proceed
 after receiving a response of type |R c|. It is straightforward to
 show that the |Free| datatype is indeed a monad:
 \begin{code}
-  map : (Forall (C R a b)) (a -> b) -> Free C R a -> Free C R b
+  map : (Forall (l l' C R)) (implicit(a : Set l)) (implicit(b : Set l')) (a -> b) -> Free C R a -> Free C R b
   map f (Pure x)    = Pure (f x)
   map f (Step c k)  = Step c (\ r -> map f (k r)) 
 
-  return : (Forall (C R a)) a -> Free C R a
+  return : (Forall (l C R)) (implicit(a : Set l)) a -> Free C R a
   return = Pure
 
-  _>>=_ : (Forall (C R a b)) Free C R a -> (a -> Free C R b) -> Free C R b
+  _>>=_ : (Forall (l l' C R)) (implicit(a : Set l)) (implicit(b : Set l')) Free C R a -> (a -> Free C R b) -> Free C R b
   Pure x    >>= f  = f x
   Step c x  >>= f  = Step c (\ r -> x r >>= f)
 \end{code}
 %if style == newcode
 \begin{code}
   infixr 20 _>>=_
-  _>>_ : forall {a b C R} -> Free C R a -> Free C R b -> Free C R b
+  _>>_ : forall {l l' C R} {a : Set l} {b : Set l'} -> Free C R a -> Free C R b -> Free C R b
   c1 >> c2 = c1 >>= \_ -> c2
 
 \end{code}
@@ -196,7 +194,7 @@ is related in a particular way to the input. This can be addressed
 easily enough by allowing the function |f| to be \emph{dependent},
 yielding the following definition for weakest preconditions:
 \begin{code}
-  wp : (Forall(a : Set)) (implicit(b : a -> Set)) (f : (x : a) -> b x) -> ((x : a) -> b x -> Set) -> (a -> Set)
+  wp : (Forall(l l' l'')) (implicit(a : Set l)) (implicit(b : a -> Set l')) (f : (x : a) -> b x) -> ((x : a) -> b x -> (SetL(l''))) -> (a -> (SetL(l'')))
   wp f P = \ x -> P x (f x)
 \end{code}
 Although this type is a bit more complicated, |wp f| still maps a
@@ -206,13 +204,13 @@ transformer semantics for the function |f|.
 When working with predicates and predicate transformers, we will
 sometimes use the following shorthand notation:
 \begin{code}
-  _⊆_ : (implicit(a : Set)) (a -> Set) -> (a -> Set) -> Set
+  _⊆_ : (Forall (l')) (implicit(a : Set)) (a -> (SetL(l'))) -> (a -> (SetL(l'))) -> (SetL(l'))
   P ⊆ Q = ∀ x -> P x -> Q x  
 \end{code}
 Predicate transformer semantics give rise to a notion of
 \emph{refinement}~\cite{back2012refinement,morgan1994programming}:
 \begin{code}
-  _⊑_ : (implicit(a : Set)) (implicit (b : a -> Set)) (pt1 pt2 : ((x : a) -> b x -> Set) -> (a -> Set)) -> Set
+  _⊑_ : (implicit(a : Set)) (implicit (b : a -> Set)) (pt1 pt2 : ((x : a) -> b x -> Set) -> (a -> Set)) -> (SetOne)
   pt1 ⊑ pt2 = forall P -> pt1 P ⊆ pt2 P
 \end{code}
 This refinement relation is defined between \emph{predicate
@@ -529,18 +527,18 @@ postcondition. In general, the specification of a function of type |(x
 relating inputs that satisfy this precondition and the corresponding outputs:
 
 \begin{code}
-  record Spec (a : Set) (b : a -> Set) : Set where
+  record Spec (hidden(l : Level)) (a : Set) (b : a -> Set) : (SetL(suc l)) where
     constructor [[_,_]]
     field
-      pre : a -> Set
-      post : (x : a) -> b x -> Set
+      pre : a -> (SetL(l))
+      post : (x : a) -> b x -> (SetL(l))
 \end{code}
 As is common in the refinement calculus literature, we will write |[[
 P , Q ]]| for the specification consisting of the precondition |P| and
 postcondition |Q|. In many of our examples, the type |b| does not
 depend on |x : a|, motivating the following type synonym:
 \begin{code}
-  SpecK : Set -> Set -> Set
+  SpecK : (implicit(l : Level)) Set -> Set -> (SetL(suc l))
   SpecK a b = Spec a (K b)
 \end{code}
 This definition uses the combinator K to discard the unused argument
@@ -567,7 +565,7 @@ semantics to functions---but we do not yet have a corresponding
 predicate transform \emph{semantics} for our specifications. The
 |wpSpec| function does precisely this:
 \begin{code}
-  wpSpec : (Forall(a)) (implicit(b : a -> Set)) Spec a b -> (P : (x : a) -> b x -> Set) -> (a -> Set)
+  wpSpec : (Forall(l a)) (implicit(b : a -> Set)) Spec (hidden(l)) a b -> (P : (x : a) -> b x -> (SetL(l))) -> (a -> (SetL(l)))
   wpSpec [[ pre , post ]] P = \ x -> (pre x) ∧ (post x ⊆ P x)
 \end{code}
 Given a specification, |Spec a b|, the |wpSpec| function computes the
@@ -731,7 +729,7 @@ desired free monad in terms of commands |C| and responses |R|:
   R Get      = s
   R (Put _)  = ⊤
 
-  State : Set -> Set
+  State : (Forall(l)) (SetL(l)) -> (SetL(l))
   State = Free C R
 \end{code}
 To facilitate writing stateful computations, we can define a pair of
@@ -746,7 +744,7 @@ smart constructors:
 The usual handler for stateful computations maps our free monad,
 |State s|, to the state monad:
 \begin{code}
-  run : (Forall(a)) State a -> s -> a × s
+  run : (implicit(a : Set)) State a -> s -> a × s
   run (Pure x)           s = (x , s)
   run (Step Get k)       s = run (k s) s
   run (Step (Put s) k)   _ = run (k tt) s
@@ -756,7 +754,7 @@ predicate transformer that for every stateful computation of type
 |State b|, maps a postcondition on |b × s| to the required
 precondition on |s|:
 \begin{code}
-  statePT : (Forall(b)) State b -> (b × s -> Set) -> s -> Set
+  statePT : (Forall(l l')) (implicit(b : Set l)) State b -> (b × s -> (SetL(l'))) -> s -> (SetL(l'))
   statePT (Pure x) P s          = P (x , s)
   statePT (Step Get k) P s      = statePT (k s) P s
   statePT (Step (Put s) k) P _  = statePT (k tt) P s
@@ -773,7 +771,7 @@ initial state:
 %format statePTR = statePT'
 %endif
 \begin{code}
-  statePTR : (Forall(b : Set)) State b -> (s -> b × s -> Set) -> s -> Set
+  statePTR : (Forall(l l')) (implicit(b : Set l)) State b -> (s -> b × s -> (SetL(l'))) -> s -> (SetL(l'))
   statePTR c P i = statePT c (P i) i
 \end{code}
 In the remainder of this section, we will overload the variable name
@@ -784,7 +782,7 @@ Finally, we can define a weakest precondition semantics for Kleisli
 morphisms of the form |a -> State b|:
 %}
 \begin{code}
-  wpState : (Forall(a b))  (a -> State b) -> (P : a × s -> b × s -> Set) -> (a × s -> Set)
+  wpState : (Forall(l l' l'')) (implicit(a : Set l)) (implicit(b : Set l'))  (a -> State b) -> (P : a × s -> b × s -> (SetL(l''))) -> (a × s -> (SetL(l'')))
   wpState f P (x , i) = wp f ((hiddenConst (\ c -> statePT' c (\ i -> P (x , i)) i))) x
 \end{code}
 Given any predicate |P| relating the input, initial state, final state
@@ -964,7 +962,7 @@ obligations.
     --  specialized to the effects of State and Spec.
     prove-bind : ∀ {a b} (mx : State a) (f : a → State b) P i →
       statePT mx (wpState f \ _ → P) i → statePT (mx >>= f) P i
-    prove-bind mx f P i x = coerce (sym (compositionality mx f i P)) x
+    prove-bind mx f P i x = coerce {zero} (sym (compositionality mx f i P)) x
     prove-bind-spec : ∀ {a b} (mx : State a) (f : a → State b) spec →
       ∀ P i → (∀ Q → Spec.pre spec i × (Spec.post spec i ⊆ Q) → statePT mx Q i) →
       Spec.pre spec i × (Spec.post spec i ⊆ wpState f (\ _ → P)) →
@@ -972,7 +970,7 @@ obligations.
     prove-bind-spec mx f spec P i Hmx Hf = prove-bind mx f P i (Hmx (wpState f (\ _ → P)) Hf)
 
     --  Partially apply a specification.
-    applySpec : ∀ {a b s} → SpecK (a × s) (b × s) → a → SpecK s (b × s)
+    applySpec : ∀ {a b s} → SpecK {zero} (a × s) (b × s) → a → SpecK s (b × s)
     applySpec [[ pre , post ]] x = [[ (\ s → pre (x , s)) , (\ s → post (x , s)) ]]
 
     --  Ingredients for proving the postcondition holds.
@@ -1016,11 +1014,11 @@ module Compositionality
   where
   open Free
   open Maybe using (wpSpec; [[_,_]])
-  
+
   postulate
-    ext : {a b : Set} -> {f g : a -> b} ->
+    ext : {l l' : Level} {a : Set l} {b : Set l'} -> {f g : a -> b} ->
       ((x : a) -> f x ≡ g x) -> f ≡ g
-      
+
   pt : {a : Set} -> Free C R a -> (a -> Set) -> Set
   pt (Pure x) P = P x
   pt (Step c x) P = ptalgebra c (\r -> pt (x r) P)
@@ -1047,7 +1045,7 @@ properties even more succinctly.
 %endif  
 First, we can define the usual composition of Kleisli morphisms as follows:
 \begin{code}
-  _>=>_ : (Forall(a b c C R)) (a → Free C R b) -> (b → Free C R c) -> a → Free C R c
+  _>=>_ : (Forall(l l' l'')) (implicit(a : Set l)) (implicit(b : Set l')) (implicit(c : Set l'')) (Forall(C R)) (a → Free C R b) -> (b → Free C R c) -> a → Free C R c
   f >=> g = \ x → f x >>= g
 \end{code}
 Using this composition operator, we can show that for \emph{any}
@@ -1156,14 +1154,14 @@ weakest precondition semantics presented here?
 Firstly, we can define the following equivalence relation between
 stateful computations:
 \begin{code}
-  _≃_ : (Forall(b : Set)) State b  -> State b -> Set
+  _≃_ : (Forall(b : Set)) State b  -> State b -> SetOne
   t1 ≃ t2 = (wpState' t1 ⊑ wpState' t2) ∧ (wpState' t2 ⊑ wpState' t1)
     where
     wpState' : (Forall(b)) State b -> (P : s -> b × s -> Set) -> (s -> Set)
 \end{code}
 %if style == newcode  
 \begin{code}
-    wpState' {b} t P s = wpState {⊤} {b} (\ _ -> t) (\ { (tt , s') y → P s' y}) (tt , s)
+    wpState' {b} t P s = wpState {a = ⊤} {b} (\ _ -> t) (\ { (tt , s') y → P s' y}) (tt , s)
 \end{code}
 %endif
 Here we define a degenerate instance of the previous |wpState| function
@@ -1422,7 +1420,7 @@ that draws an element from its input list non-deterministically.
 \end{code}
 Verifying the correctness of this functions amounts to proving the following lemma:
 \begin{code}  
-  removeCorrect : (Forall(a)) wpSpec (hidden(List a)) (hidden(const (a × List a))) removeSpec ⊑ wpAll remove
+  removeCorrect : (Forall(a)) wpSpec (hidden(a = List a)) (hidden(const (a × List a))) removeSpec ⊑ wpAll remove
 \end{code}
 %if style == newcode
 \begin{code}
@@ -1444,7 +1442,7 @@ require that all possible decompositions of the input list also occur
 as possible results of the |remove| function. There is a trivial proof
 that the |fail| computation also satisfies this specification:
 \begin{code}
-  trivialCorrect : (Forall(a)) wpSpec (hidden(List a)) (hidden(const (a × List a))) removeSpec ⊑ wpAll (const fail)  
+  trivialCorrect : (Forall(a)) wpSpec (hidden(a = List a)) (hidden(const (a × List a))) removeSpec ⊑ wpAll (const fail)  
 \end{code}
 %if style == newcode
 \begin{code}
@@ -1745,7 +1743,7 @@ To this end, we begin by defining the following shorthand for
 specifications on values, rather than the specifications on (Kleisli)
 arrows we have considered previously:
 \begin{code}
-  SpecVal : Set -> Set
+  SpecVal : Set -> SetOne
   SpecVal a = SpecK ⊤ a
  \end{code}
 These specifications passed consist of a
@@ -1753,7 +1751,7 @@ precondition of type |Set| and a predicate |a -> Set|.
 Next, we can define the datatype |I a|, corresponding to either a
 specification on |a| or a value of type |a|.
 \begin{code}
-  data I (a : Set) : Set where
+  data I (a : Set) : SetOne where
     Done  : a -> I a
     Hole  : SpecVal a -> I a
 \end{code}
@@ -1770,7 +1768,7 @@ Furthermore, given the commands |C| and responses |R| that determine the
 operations of a free monad, we can define the following datatype for
 partially finished programs:
 \begin{code}  
-  M : Set -> Set
+  M : Set -> SetOne
   M a = Free C R (I a)
 \end{code}
 The type |M a| describes computations that \emph{mix} code
@@ -1799,13 +1797,13 @@ we need to assume that we have some weakest precondition semantics for
 Kleisli morphisms:
 %if style == newcode
 \begin{code}
-  pt : (Forall(a)) Free C R a -> (a -> Set) -> Set
+  pt : (Forall(l)) (implicit(a : Set l)) Free C R a -> (a -> Set) -> Set
   pt (Pure x) P   = P x
   pt (Step c x) P = ptalgebra c (\r -> pt (x r) P)
 \end{code}
 %endif
 \begin{code}
-  wpCR : (Forall(a)) (implicit(b : a -> Set)) ((x : a) -> Free C R (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
+  wpCR : (Forall(l l')) (implicit(a : Set l)) (implicit(b : a -> Set l')) ((x : a) -> Free C R (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
 \end{code}
 %if style == newcode
 \begin{code}
@@ -1816,7 +1814,7 @@ We have seen many examples of such semantics in the previous sections
 for specific choices of |C| and |R|. We can now assign semantics to
 `unfinished' programs as follows:
 \begin{code}
-  wpM : (Forall(a)) (implicit(b : a -> Set)) ((x : a) -> M (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
+  wpM : (implicit(a : Set)) (implicit(b : a -> Set)) ((x : a) -> M (b x)) -> ((x : a) -> b x -> Set) -> (a -> Set)
   wpM f P x = wpCR f (\ x ix -> ptI ix (P x)) x
 \end{code}
 The crucial step here is to transform the argument predicate |P| to
@@ -1852,30 +1850,36 @@ executable.
 
 %if style == newcode
 \begin{code}
-  -- We have to redo the Mix section since our specifications incorporate the state
+  --  We have to redo the Mix section since our specifications incorporate the state
+  SpecVal : ∀ {l} → Set → Set (suc l)
   SpecVal = SpecK Nat
-  data I (a : Set) : Set where
+  data I {l : Level} (a : Set) : Set (suc l) where
     Done  : a -> I a
-    Hole  : SpecVal (a × Nat) -> I a
-  M : Set -> Set
+    Hole  : SpecVal {l} (a × Nat) -> I a
+  M : {l : Level} -> Set -> Set (suc l)
   M a = State (I a)
-  ptI : forall { a } ->  I a -> (a × Nat -> Set) -> Nat -> Set
+  ptI : forall {l a } ->  I a -> (a × Nat -> Set l) -> Nat -> Set l
   ptI (Done x)     P t  = P (x , t)
-  ptI (Hole spec)  P t  = wpSpec spec (const P) t
-  wpM : forall { a b } -> (a -> M b) -> (a × Nat -> b × Nat -> Set) -> (a × Nat -> Set)
+  ptI (Hole spec)  P t  = wpSpec spec (\_ -> P) t
+  wpM : forall {l l'} { a : Set l} {b : Set } -> (a -> M b) -> (a × Nat -> b × Nat -> Set l') -> (a × Nat -> Set l')
   wpM f P = wpState f (\ i o -> ptI (Pair.fst o) (P i) (Pair.snd o))
   ptM : {a : Set} -> M a -> (Nat -> a × Nat -> Set) -> (Nat -> Set)
-  ptM S post t = wpM (const S) (const (post t)) (⊤ , t)
-  _>>=_ : forall { a b } ->  (M a) -> (a -> M b) -> M b
-  Pure (Done x) >>= f     = f x
+  ptM S post t = wpM (λ _ → S) (λ _ → (post t)) (⊤ , t)
+  liftM : ∀ {l : Level} {a} → M {l} a → M {suc l} a
+  liftM (Pure (Done x)) = Pure (Done x)
+  liftM (Pure (Hole [[ pre , post ]])) = Pure (Hole [[ (λ x → Lift _ (pre x)) , (λ i o → Lift _ (post i o)) ]])
+  liftM (Step c k) = Step c λ x → liftM (k x)
+  _>>=_ : forall {l a b } ->  (M {l} a) -> (a -> M {l} b) -> M {suc l} b
+  Pure (Done x) >>= f     = liftM (f x) 
   Pure (Hole [[ pre , post ]]) >>= f  =
-    Pure (Hole [[ pre ,
-      (\i ynat ->  ∀ x -> post i (x , i) -> ∀ P -> wpM f P (x , i) -> P (x , i) ynat) ]])
+    Pure (Hole [[ (λ n -> Lift _ (pre n)) ,
+      (\i ynat -> ∀ x -> post i (x , i) → ∀ P -> wpM f P (x , i) -> P (x , i) ynat
+      ) ]] )
   (Step c k) >>= f        = Step c (\ r →  k r >>= f)
-  _>=>_ : forall {a b c} -> (a -> M b) -> (b -> M c) -> a -> M c
+  _>=>_ : forall {l : Level} {a b c : Set} -> (a -> M {l} b) -> (b -> M {l} c) -> a -> M {suc l} c
   (f >=> g) x = f x >>= g
 
-  specV : {a : Set} -> SpecVal (a × Nat) -> M a
+  specV : {a : Set} -> SpecVal {zero} (a × Nat) -> M a
   specV spec = Pure (Hole spec)
 \end{code}
 %endif
@@ -1893,7 +1897,7 @@ of smart constructors:
 %format specF = spec
 %endif
 \begin{code}
-  done   : (Forall (a)) a -> M a
+  done   : (Forall (a)) a -> M (hidden(zero)) a
   get'   : M Nat
   put'   : Nat -> M ⊤
 \end{code}
@@ -1943,7 +1947,7 @@ Each refinement step is allowed to introduce a single new command of type |C|, t
 changing the remaining refinement problem. We can try to make this manifest
 in the following (incomplete) datatype:
 \begin{spec}
-  data Derivation (hidden(b : Set)) (spec : SpecVal b) : Set where
+  data Derivation (hidden(b : Set)) (spec : SpecVal b) : SetOne where
     Done  : (x : b) ->  wpSpec spec ⊑ wpM (done x)       -> Derivation spec
     Step  : (c : C) ->  (∀ (r : R c) -> Derivation ...)  -> Derivation spec
 \end{spec}
@@ -1969,7 +1973,7 @@ current specification. The first such transformer computes a new
 precondition of type |b -> Set|, given the current specification's
 precondition |P : a -> Set|.
 \begin{code}
-  _tril_ : (Forall(a b)) (Q : a → b → Set) (P : a → Set) → b → Set
+  _tril_ : (implicit(a b : Set)) (Q : a → b → Set) (P : a → Set) → b → Set
   _tril_ (hidden(a)) Q P = \ y -> Sigma a (\ x → P x ∧ Q x y)
 \end{code}
 This limited form of relational composition requires an intermediate
@@ -1977,7 +1981,7 @@ result, |x : a|, and proofs that |x| satisfies both |P| and |Q|.  Our
 second transformer computes a new postcondition of the remaining
 specification:
 \begin{code}
-  _trir_ : (Forall(a b c)) (Q : a → b → Set) -> (SpecK a c) → b → c → Set
+  _trir_ : (implicit(a b c : Set)) (Q : a → b → Set) -> (SpecK a c) → b → c → Set
   _trir_ Q [[ pre , post ]] = \ y z -> ∀ x → pre x ∧ Q x y → post x z
 \end{code}
 The new postcondition requires that the original postcondition |post|
@@ -1987,7 +1991,7 @@ command we are introducing---and initial precondition |pre| hold.
 Using these definitions, we can complete the definition of the
 |step| function:
 \begin{code}
-  step : (Forall(b)) (c : C) (spec : SpecVal (b × Nat)) -> SpecK (R c × Nat) (b × Nat)
+  step : (Forall(b)) (c : C) (spec : SpecVal (hidden(zero)) (b × Nat)) -> SpecK (hidden(zero)) (R c × Nat) (b × Nat)
   step Get      [[ pre , post ]] = [[ getPost tril pre , getPost trir [[ pre , post ]] ]]
   step (Put x)  [[ pre , post ]] = [[ (putPost x) tril pre , (putPost x) trir [[ pre , post ]] ]]
 \end{code}
@@ -2002,7 +2006,7 @@ command. Our derivations, however, only contain specifications of
 \emph{values}---represented by |SpecVal|---rather than the specification of a
 function, represented by |Spec|. Fortunately, we can easily convert between the two:
 \begin{code}
-  intros : (Forall(a b)) SpecK (a × Nat) (b × Nat) -> a -> SpecVal (b × Nat)
+  intros : (Forall(a b)) SpecK (hidden(zero)) (a × Nat) (b × Nat) -> a -> SpecVal (b × Nat)
 \end{code}
 The |intros| function (partially) applies the precondition and
 postcondition to the argument of type |a|; the name is suggestive of
@@ -2015,7 +2019,7 @@ the corresponding Coq tactic.
 Finally, we can complete the definition of derivations using the
 |step| and |intros| functions.
 \begin{code}
-  data Derivation (hidden(b)) (spec : SpecVal (b × Nat)) : Set where
+  data Derivation (hidden(b)) (spec : SpecVal (b × Nat)) : SetOne where
     Done : (x : b) -> wpSpec spec ⊑ ptM (done x) -> Derivation spec
     Step : (c : C) -> (∀ (r : R c) -> Derivation (intros (step c spec) r)) -> Derivation spec
 \end{code}
@@ -2038,7 +2042,7 @@ intended specification.
 %if style == newcode
 \begin{code}
 
-  DerivationFun : {a b : Set} (spec : SpecK (a × Nat) (b × Nat)) -> Set
+  DerivationFun : {a b : Set} (spec : SpecK (a × Nat) (b × Nat)) -> SetOne
   DerivationFun {a} {b} spec = (x : a) -> Derivation (intros spec x)
 
   stepMonotone : {a : Set} (c : C) (r : R c) {spec spec' : SpecVal (a × Nat)} ->

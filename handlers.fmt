@@ -72,6 +72,8 @@
 %format relabelSpec2 = relabelSpec "_2"
 %format ~~> = "\looparrowright"
 %format _~~>_ = "\_\looparrowright\_"
+%format (SetOne) = "\Conid{Set}"
+%format (SetL(l)) = "\Conid{Set}"
 %else
 %format (Forall (a)) = "forall { " a " } -> "
 %format (implicit(a)) = "{" a "} ->"
@@ -86,5 +88,7 @@
 %format tril = ▹
 %format _trir_ = _◃_
 %format trir = ◃
+%format (SetOne) = "(Set₁)"
+%format (SetL(l)) = "(Set (" l "))"
 %endif
 
