@@ -1,7 +1,8 @@
 
 open import Level
 
-const : {l : Level} {a b : Set l} -> a -> b -> a
+
+const : {l₁ l₂ : Level} {a : Set l₁} {b : Set l₂} -> a -> b -> a
 const x _ = x
 
 id : {l : Level} {a : Set l} -> a -> a
@@ -17,10 +18,13 @@ _∘_ : ∀ {l l' l''} {a : Set l} {b : Set l'} {c : Set l''} ->
 f ∘ g = λ x → f (g x)
 
 open import Relation.Binary.PropositionalEquality public
-  hiding (preorder)
+  hiding (preorder; cong)
   renaming ([_] to [[[_]]])
 infix 1 _==_
 _==_ = _≡_
+
+cong : ∀ {l₁ l₂} {a : Set l₁} {b : Set l₂} → (f : a → b) → ∀ {x y} → x == y → f x == f y
+cong f refl = refl
 
 cong2 : {a b c : Set} {x y : a} {z w : b} (f : a -> b -> c) -> x == y -> z == w -> f x z == f y w
 cong2 f refl refl = refl
@@ -103,8 +107,9 @@ data Either {l : Level} (a b : Set l) : Set l where
 _∨_ : {l : Level} -> Set l -> Set l -> Set l
 p ∨ q = Either p q
 
-record ⊤ : Set where
+record ⊤' (l : Level) : Set l where
   constructor tt
+⊤ = ⊤' Level.zero
 
 open import Data.Empty public
 
