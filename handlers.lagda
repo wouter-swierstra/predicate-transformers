@@ -1320,22 +1320,57 @@ characterise these elements using the following relation:
 \begin{code}
   data Elem (hidden(a : Set)) (x : a) : ND a -> Set where
       Here   : Elem x (Pure x)
-      Left   : (Forall(l r))  Elem x l -> Elem x (choice l r)
-      Right  : (Forall(l r))  Elem x r -> Elem x (choice l r)
+      Left   : (Forall(k))  Elem x (k True)   -> Elem x (Step Choice k)
+      Right  : (Forall(k))  Elem x (k False)  -> Elem x (Step Choice k)
 \end{code}
 We can extend this relation to define a `subset' relation on
 non-deterministic computations:
 \begin{code}    
   _⊆_ : (Forall(a)) ND a -> ND a -> Set
-  nd1 ⊆ nd2 = ∀ x -> Elem x nd2 -> Elem x nd1
+  nd1 ⊆ nd2 = ∀ x -> Elem x nd1 -> Elem x nd2
 \end{code}
 With these relations in place, we can give the following
 characterisation of the refinement relation induced by both the
 |wpAll| and |wpAny| predicate transformers:
-\begin{spec}
-  refineAll  : (f g : a -> ND b) -> wpAll f  ⊑ wpAll g  <-> ((x : a) -> f x  ⊆ g x)
-  refineAny  : (f g : a -> ND b) -> wpAny f  ⊑ wpAny g  <-> ((x : a) -> g x  ⊆ f x)
-\end{spec}
+%if style == newcode
+\begin{code}
+  _<->_ : {l l' : Level} (a : Set l) (b : Set l') → Set (l ⊔ l')
+  a <-> b = Pair (a -> b) (b -> a)
+\end{code}
+%endif
+\begin{code}
+  refineAll  : (hidden(a b : Set)) (hidden(x : a)) (f g : a -> ND b) -> (wpAll f  ⊑ wpAll g)  <-> ((x : a) -> g x  ⊆ f x)
+  refineAny  : (hidden(a b : Set)) (hidden(x : a)) (f g : a -> ND b) -> (wpAny f  ⊑ wpAny g)  <-> ((x : a) -> f x  ⊆ g x)
+\end{code}
+%if style == newcode
+\begin{code}
+  allP : ∀ {a b : Set} {x : a} P (S : ND b) -> allPT P x S <-> (∀ y → Elem y S → P x y)
+  Pair.fst (allP P (Pure y)) H y Here = H
+  Pair.fst (allP P (Step Choice k)) (H , _) y (Left i) = Pair.fst (allP P (k True)) H y i
+  Pair.fst (allP P (Step Choice k)) (_ , H) y (Right i) = Pair.fst (allP P (k False)) H y i
+  Pair.snd (allP P (Pure y)) H = H y Here
+  Pair.snd (allP P (Step Fail k)) H = tt
+  Pair.snd (allP P (Step Choice k)) H = (Pair.snd (allP P (k True)) λ y i → H y (Left i)) , (Pair.snd (allP P (k False)) λ y i → H y (Right i))
+
+  anyP : ∀ {a b : Set} {x : a} P (S : ND b) -> anyPT P x S <-> Sigma b λ y → Elem y S ∧ P x y
+  Pair.fst (anyP P (Pure y)) H = y , (Here , H)
+  Pair.fst (anyP P (Step Fail k)) ()
+  Pair.fst (anyP P (Step Choice k)) (Inl H) with Pair.fst (anyP P (k True)) H
+  Pair.fst (anyP P (Step Choice k)) (Inl H) | y , (i , IH) = y , (Left i , IH)
+  Pair.fst (anyP P (Step Choice k)) (Inr H) with Pair.fst (anyP P (k False)) H
+  Pair.fst (anyP P (Step Choice k)) (Inr H) | y , (i , IH) = y , (Right i , IH)
+  Pair.snd (anyP P (Pure y)) (.y , (Here , H)) = H
+  Pair.snd (anyP P (Step .Choice k)) (y , (Left i , H)) = Inl (Pair.snd (anyP P (k True)) (y , (i , H)))
+  Pair.snd (anyP P (Step .Choice k)) (y , (Right i , H)) = Inr (Pair.snd (anyP P (k False)) (y , (i , H)))
+
+  Pair.fst (refineAll f g) H x y i = Pair.fst (allP (λ _ y' → Elem y' (f x)) (g x)) (H _ x (Pair.snd (allP _ (f x)) (λ _ → id))) y i
+  Pair.snd (refineAll f g) r P x H = Pair.snd (allP P (g x)) λ y i -> Pair.fst (allP P (f x)) H y (r x y i)
+  Pair.fst (refineAny f g) H x y i with Pair.fst (anyP (λ _ y' → y' == y) (g x)) (H _ x (Pair.snd (anyP _ (f x)) (y , (i , refl))))
+  Pair.fst (refineAny f g) H x y i | .y , (i' , refl) = i'
+  Pair.snd (refineAny f g) r P x H with Pair.fst (anyP P (f x)) H
+  Pair.snd (refineAny f g) r P x H | y , (i , IH) = Pair.snd (anyP P (g x)) (y , ((r x y i) , IH))
+\end{code}
+%endif
 Interestingly, the case for the |wpAny| predicate flips the subset
 relation.  Intuitively, if you know that a predicate |P| holds for
 \emph{some} element returned by a non-deterministic computation, it is
@@ -1389,7 +1424,16 @@ Verifying the correctness of this functions amounts to proving the following lem
 \end{code}
 %if style == newcode
 \begin{code}
-  removeCorrect = ?
+  removeCorrect P Nil (tt , snd) = tt
+  removeCorrect P (x :: xs) (tt , snd) =
+    snd (x , xs) (∈Head , refl) ,
+    mapPT P (x :: xs) xs (remove xs) _
+      (removeCorrect _ xs (tt , (λ {(x' , xs') (i , H) → snd (x' , (x :: xs')) (∈Tail i , cong (x ::_) H)})))
+    where
+    mapPT : ∀ {a b c : Set} P (x x' : a) (S : ND b) (f : b → c) → allPT (λ _ y → P x (f y)) x' S → allPT P x (map f S)
+    mapPT P x x' (Pure y) f H = H
+    mapPT P x x' (Step Fail k) f H = H
+    mapPT P x x' (Step Choice k) f (fst , snd) = mapPT P x x' (k True) f fst , mapPT P x x' (k False) f snd
 \end{code}
 %endif
 Note that correctness property merely states that all the pairs
@@ -1416,8 +1460,13 @@ We can address this by proving an additional lemma, stating that the
 \end{code}
 %if style == newcode
 \begin{code}
-  completeness y .(y :: _) ys (∈Head , refl) = Left Here
-  completeness y .(_ :: _) ys (∈Tail fst , snd) = Right undefined
+  completeness y (y :: _) ys (∈Head , refl) = Left Here
+  completeness y (x :: xs) .(x :: delete xs fst) (∈Tail fst , refl) = Right (inMap _ (remove xs) _ (completeness y _ _ (fst , refl)))
+    where
+    inMap : ∀ {a b : Set} (x : a) S (f : a → b) → Elem x S → Elem (f x) (map f S)
+    inMap x (Pure x) f Here = Here
+    inMap x (Step Choice k) f (Left i) = Left (inMap x (k True) f i)
+    inMap x (Step Choice k) f (Right i) = Right (inMap x (k False) f i)
 \end{code}
 %endif
 The proof proceeds by induction on the first component of the
