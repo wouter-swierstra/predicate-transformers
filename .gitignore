@@ -6,4 +6,8 @@ handlers.ptb
 handlers.tex
 handlers.bbl
 handlers.blg
+handlers.fls
+handlers.flb_latexmk
 *.agdai
+src/
+detritus
