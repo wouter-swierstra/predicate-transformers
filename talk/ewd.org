@@ -1,0 +1,27 @@
+
+* relate handler predicate transformers to usual equations
+
+* state example: relabelling trees
+
+* n-queens?
+
+* combinations of state/maybe + order of handlers/predicate transformers
+* EWD
+
+The day was closed by P. Martin-Löf on "Constructive mathematics and
+computer programming". I quote from his abstract ".... it no longer
+seems possible to distinguish the discipline of programming from
+constructive mathematics. [...] the intuitionistic theory of types
+[...], which was originally developed as a symbolism for the precise
+codification of constructive mathematics, may equally well be viewed
+as a programming language. [...] the inference rules of the theory of
+types, which are again completely formal, appear as rules for correct
+program synthesis. Thus the correctness of a program written in the
+theory of types is proved formally at the same time as it is being
+synthesized." But the 50 minutes were not enough to introduce an
+ignorant audience to intuitionistic type theory to the extent that it
+could follow a comparison with Scottery. He was a very sympathetic
+speaker and convinced at least me that something (possibly even of
+great conceptual elegance) was going on. He spoke with an endearing
+care.
+
