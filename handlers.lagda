@@ -2348,9 +2348,9 @@ account of effects that is worth exploring further.
 % \item wp (s,q) or wp (s,p) implies wp(s,q or p) -- but not the other
 %   way around. The implication in the other direction only holds when
 %   the program is deterministic.
-\begin{acks}
-  Acknowledgements have been omitted for the sake of anonymity.
-\end{acks}
+% \begin{acks}
+%   Acknowledgements have been omitted for the sake of anonymity.
+% \end{acks}
 
 \DeclareRobustCommand{\tussenvoegsel}[2]{#2}
 \bibliography{handlers}
