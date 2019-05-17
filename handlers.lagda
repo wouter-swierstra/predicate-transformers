@@ -1,5 +1,4 @@
-\documentclass[acmsmall,review]{acmart}
-\settopmatter{printfolios=true,printccs=false,printacmref=false}
+\documentclass[acmsmall,review]{acmart}\settopmatter{printfolios=true}
 
 %include agda.fmt
 %include handlers.fmt
@@ -7,7 +6,7 @@
 %include preamble.tex
 
 \begin{document}
-\title{A predicate transformer semantics for effects}
+\title[A predicate transformer semantics for effects]{A predicate transformer semantics for effects\\(Functional Pearl)}
 
 \author{Wouter Swierstra}
 \email{w.s.swierstra@@uu.nl}
