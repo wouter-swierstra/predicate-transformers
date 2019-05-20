@@ -58,7 +58,7 @@ may be processed in any given order using a series of handlers.
 
 This paper defines a predicate transformer semantics
 for effectful programs, culminating in a constructive framework for
-deriving verified effectful programs their specifications, inspired by
+deriving verified effectful programs from their specifications, inspired by
 existing work on program calculation in the refinement
 calculus~\cite{back2012refinement,morgan1994programming}. We will
 briefly sketch the key techniques, before illustrating them with
@@ -86,14 +86,14 @@ including exceptions (Section~\ref{sec:maybe}), state
 numerous examples, each selected for their portrayal of proof
 principles rather than being formidable feats of
 formalisation. Besides relating effectful programs to their
-specification, we show how to programs and specifications may be mixed
+specification, we show how programs and specifications may be mixed
 freely, allowing verified programs to be calculated from their
 specification one step at a time (Section~\ref{sec:stepwise-refinement}).
 
 
 The definitions, examples, theorems and proofs presented in this paper
 have all been formally verified in the dependently typed programming
-language Agda~\cite{agda}, but they techniques translate readily to
+language Agda~\cite{agda}, but the techniques translate readily to
 other proof assistants based on dependent types such as
 Idris~\cite{brady} or Coq~\cite{coq}. The sources associated with our
 our development are available online.\footnote{The sources for this
@@ -310,8 +310,9 @@ responses |R| in our |Free| datatype:
   Partial = Free C R
 \end{code}
 There is a single command, |Abort|; there is no continuation after
-issuing this command, hence the type of valid responses is empty. It is
-sometimes convenient to define a smart constructor for failure:
+issuing this command, hence there are no valid responses, as denoted
+by |⊥|, the empty type. It is sometimes convenient to define a smart
+constructor for failure:
 \begin{code}
   abort  : (Forall(a)) Partial a
   abort  = Step Abort (\ ())
@@ -561,7 +562,7 @@ ways to formulate the desired property.
 How can we relate this specification to an implementation? We have
 seen how the |wpPartial| function assigns predicate transformer
 semantics to functions---but we do not yet have a corresponding
-predicate transform \emph{semantics} for our specifications. The
+predicate transformer \emph{semantics} for our specifications. The
 |wpSpec| function does precisely this:
 \begin{code}
   wpSpec : (Forall(l a)) (implicit(b : a -> Set)) Spec (hidden(l)) a b -> (P : (x : a) -> b x -> (SetL(l))) -> (a -> (SetL(l)))
@@ -572,7 +573,7 @@ weakest precondition necessary to satisfy an arbitrary postcondition
 |P|: namely, the specification's precondition should hold and its
 postcondition must imply |P|.
 
-Using this definition we can precisely formulate our the problem at
+Using this definition we can precisely formulate the problem at
 hand: can we find a program |add : List a -> Partial (a × List
 a)| that refines the specification given by |addSpec|:
 \begin{spec}
@@ -782,7 +783,7 @@ morphisms of the form |a -> State b|:
 %}
 \begin{code}
   wpState : (Forall(l l' l'')) (implicit(a : Set l)) (implicit(b : Set l'))  (a -> State b) -> (P : a × s -> b × s -> (SetL(l''))) -> (a × s -> (SetL(l'')))
-  wpState f P (x , i) = wp f ((hiddenConst (\ c -> statePT' c (\ i -> P (x , i)) i))) x
+  wpState f P (x , i) = wp f ((hiddenConst (\ c -> statePT' c (\ j -> P (x , j)) i))) x
 \end{code}
 Given any predicate |P| relating the input, initial state, final state
 and result of the computation, the |wpState| function computes the
@@ -905,8 +906,9 @@ function and formulate the desired correctness property:
 The proof is interesting. Initially, it proceeds by induction on the
 input tree. The base case for the |Leaf| constructor is easy enough to
 discharge; the inductive case, however, poses a greater challenge. In
-particular, the goal we wish to prove in the case for the |Node|
-constructor amounts to proving the following statement.
+particular, assuming that the specification holds for some predicate
+|P|, the goal we wish to prove in the case for the |Node| constructor
+amounts to proving the following statement:
 \begin{center}
 \begin{spec}
   statePT (relabel l >>= (\ l' → relabel r >>= (\ r' → Pure (Node l' r')))) (P (Node l r , i)) i
@@ -1269,7 +1271,7 @@ These two predicate transformers are dual: |allPT P| holds for a
 non-deterministic computation precisely when \emph{all} possible
 results satisfy |P|; |anyPt P| holds for a non-deterministic
 computation precisely when \emph{some} possible result satisfies |P|.
-Once again, can relate both these predicates to the usual `list
+Once again, we can relate both these predicates to the usual `list
 handler' for non-determinism.
 \begin{code}
   run : (Forall(a)) ND a -> List a
@@ -1417,7 +1419,7 @@ that draws an element from its input list non-deterministically.
       add : (Forall(a)) a -> a × List a -> a × List a
       add x (y , ys) = (y , (x :: ys))
 \end{code}
-Verifying the correctness of this functions amounts to proving the following lemma:
+Verifying the correctness of this function amounts to proving the following lemma:
 \begin{code}  
   removeCorrect : (Forall(a)) wpSpec (hidden(a = List a)) (hidden(const (a × List a))) removeSpec ⊑ wpAll remove
 \end{code}
@@ -1565,7 +1567,7 @@ following specification:
 \end{code}
 
 Although we cannot directly run `recursive' functions defined in this
-style, such the |f91| function, we can reason about their
+style, such as the |f91| function, we can reason about their
 correctness. To do so, we would like to show that a Kleisli arrow |I
 ~~> O| satisfies some specification of type |Spec I O|. To achieve
 this, we begin by defining an auxiliary function, |invariant|, that
@@ -2263,13 +2265,11 @@ alternative exists---when the added generality was unnecessary for our
 examples.
 
 Throughout this paper, we have not concerned ourselves with issues of
-size. Our Agda implementation relies on the unsound axiom that |Set :
-Set|. Yet we are confident these constructions can be stratified easily
-enough, either by moving certain definitions to higher universes or
-explicitly parametrising parts of our development by a universe |U :
-Set|. We have no reason to believe that there are
-fundamental size issues; we have made a pragmatic choice for the sake
-of presentation and ease of development.
+size. Yet some of our definitions, such as those for specifications
+and derivations, are too large to live in |Set|. In the accompanying
+Agda development, we show how a suitable choice of universe level can
+be used to stratify these definitions; for the sake of presentation,
+however, we have ommitted these annotations in the code in this paper.
 
 
 \subsection*{Related work}
