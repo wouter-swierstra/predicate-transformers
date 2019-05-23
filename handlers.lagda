@@ -39,7 +39,9 @@ referential transparency---the ability to freely substitute equals for
 equals---enables us to employ equational reasoning to prove two
 expressions equal~\cite{wadler-critique}. This has resulted in a rich
 field of program calculation in the Bird-Meertens
-style~\citep*{algebra-of-programming, pearls}.
+style~\citep*{algebra-of-programming, pearls}, transforming an
+inefficient executable specification to an efficient alternative
+implementation.
 
 Many programs, however, are \emph{not} pure, but instead rely on a
 variety of effects, such as mutable state, exceptions,
@@ -99,7 +101,7 @@ Idris~\cite{brady} or Coq~\cite{coq}. The sources associated with our
 our development are available online.\footnote{The sources for this
   version have been anonymized and submitted as supplementary material.}
 
- \todo{Finalize: abstract, intro and title}
+ \todo{Finalize: clarify semantics must be an algebra and monotonicity (reviewer 2)}
 \section{Background}
 \label{sec:background}
 %if style == newcode
@@ -253,6 +255,10 @@ equality between functions. The following lemma follows from the
   ... | _ | _ | refl = H
 \end{code}
 %endif
+In the impure setting, however, we will use different notions of
+weakest precondition, which in turn lead to different notions of
+refinement.
+
 In the remainder of this paper, we will define predicate transformer
 semantics for \emph{Kleisli arrows} of the form |a -> Free C R
 b|. While we could use the |wp| function to assign semantics to these
@@ -321,7 +327,9 @@ A computation of type |Partial a| will either return a value of type
 |a| or fail, issuing the |abort| command. Note that the responses to
 the |Abort| command are empty; the smart constructor |abort| uses this
 to discharge the continuation in the second argument of the |Step|
-constructor. With the syntax in place, we can turn our attention to
+constructor. Such smart constructors are sometimes referred to as
+\emph{generic effects} in the algebraic effects literature~\cite{plotkin-power-2003}
+With the syntax in place, we can turn our attention to
 verifying programs using a suitable predicate transformer semantics.
 
 
@@ -391,7 +399,12 @@ computation |c| of type |Partial b| successfully returns a value of
 type |b| that satisfies |P|. The predicate transformer semantics we
 wish to assign to partial computations is determined by how we define
 |mustPT|. In this case, we wish to rule out failure entirely; hence
-the case for the |Abort| constructor returns the empty type.
+the case for the |Abort| constructor returns the empty
+type. Alternatively, we could consider a different semantics for
+partiality, such as requiring that computations fail or return a
+result satisfying some desired property. As we shall see in the rest
+of this paper, there is often some freedom to choose different
+semantics for a single effect.
 
 Now that we have a predicate transformer semantics for Kleisli arrows
 in general, we can study the semantics of our monadic interpreter. To
@@ -556,8 +569,7 @@ our addition function:
 That is, provided we are given a list with at least two elements, we
 should replace the top two elements with their sum. Here we describe
 the desired postcondition by introducing a new datatype, |Add|,
-relating the input and output stacks, but there are many equivalent
-ways to formulate the desired property.
+relating the input and output stacks.
 
 How can we relate this specification to an implementation? We have
 seen how the |wpPartial| function assigns predicate transformer
@@ -574,8 +586,8 @@ weakest precondition necessary to satisfy an arbitrary postcondition
 postcondition must imply |P|.
 
 Using this definition we can precisely formulate the problem at
-hand: can we find a program |add : List a -> Partial (a × List
-a)| that refines the specification given by |addSpec|:
+hand: can we find a program |add : List Nat -> Partial (List
+Nat)| that refines the specification given by |addSpec|:
 \begin{spec}
   correctnessAdd : wpSpec addSpec ⊑ wpPartial add
 \end{spec}
@@ -697,8 +709,8 @@ Now we can finally use our refinement relation to relate the
 
 This example shows how to prove soundness of our predicate transformer
 semantics with respect to a given handler. The predicate transformers, such as
-|wpDefault| and |wpPartial|, return \emph{some} predicate; it is only
-by proving such soundness results that we can ensure that the
+|wpDefault| and |wpPartial|, return \emph{some} predicate; by proving such soundness
+results, we can ensure that the
 semantics is meaningful. Furthermore, this example shows how different
 choices of handler may exist for the \emph{same} effect---a point we shall
 return to when discussing non-determinism (Section~\ref{sec:non-det}).
@@ -874,7 +886,8 @@ conjunction of two auxiliary statements: first, flattening the
 resulting tree |t'| produces the sequence of numbers from |s| to |s +
 size t|, where |t| is the initial input tree; furthermore, the output
 state |s'| should be precisely |size t| larger than the input state
-|s|.
+|s|. Note that our |size| function only counts the number of leaves,
+as these are only of interest for relabelling.
 
 We can now define the obvious relabelling function as follows:
 %if style == newcode
@@ -1271,7 +1284,7 @@ These two predicate transformers are dual: |allPT P| holds for a
 non-deterministic computation precisely when \emph{all} possible
 results satisfy |P|; |anyPt P| holds for a non-deterministic
 computation precisely when \emph{some} possible result satisfies |P|.
-Once again, we can relate both these predicates to the usual `list
+As we saw for other effects, we can relate both these predicates to the usual `list
 handler' for non-determinism.
 \begin{code}
   run : (Forall(a)) ND a -> List a
@@ -1507,7 +1520,7 @@ in turn assign predicate transformer semantics.
 Suppose we wish to define a recursive function of type |(i : I) -> O
 i|, for some input type |I : Set| and output type |O : I -> Set|. If
 the recursion is structural, we typically do so by induction on
-|I|. If it is not, we may still want to describe the intended function
+the argument of type |I|. If it is not, we may still want to describe the intended function
 and its behaviour---deferring any proof of termination for the
 moment. We can describe such functions as follows:
 \begin{code}
@@ -2037,7 +2050,7 @@ can easily extract executable code from a given derivation:
   extract _ (Done x _)  = Pure x
   extract _ (Step c k)  = Step c (\ r -> extract _ (k r))
 \end{code}
-Furthermore, we can prove that the extracted program does indeed satisfy the
+Furthermore, we can prove that any extracted program does indeed satisfy its
 intended specification.
 
 %if style == newcode
@@ -2229,14 +2242,16 @@ lemma and prove that the result of the call is strong enough to
 fulfil the current proof goal. In the base case, we can give a direct
 proof that the current state |i| satisfies the desired specification.
 
-One result of formulating the |step| function in terms of the predicate
-transformers |tril| and |trir| is that the new goals after issuing a
-particular command can quickly become cluttered. We could avoid this
-by defining custom transformations on our specifications for |put| and
-|get| directly, at the expense of losing some generality. Nonetheless,
-it is encouraging to see that we can calculate a program
-\emph{together with} our proof assistant, rather than verify a program
-post-hoc.
+One result of formulating the |step| function in terms of the
+predicate transformers |tril| and |trir| is that the new goals after
+issuing a particular command are computed automatically from these
+definitions, but may be more verbose than what a programmer might
+write by hand, for example, by containing superfluous equalities
+between intermediate states. We could avoid this by defining custom
+transformations on our specifications for |put| and |get| directly, at
+the expense of losing some generality. Nonetheless, it is encouraging
+to see that we can calculate a program \emph{together with} our proof
+assistant, rather than verify a program post-hoc.
 %if style == newcode
 \begin{code}
   max : DerivationFun [[ maxPre , maxPost ]]
