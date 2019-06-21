@@ -1,4 +1,4 @@
-\documentclass[acmsmall,review]{acmart}\settopmatter{printfolios=true}
+\documentclass[acmsmall,screen]{acmart}\settopmatter{printfolios=true}
 
 %include agda.fmt
 %include handlers.fmt
@@ -6,16 +6,18 @@
 %include preamble.tex
 
 \begin{document}
-\title[A predicate transformer semantics for effects]{A predicate transformer semantics for effects\\(Functional Pearl)}
+\title[A predicate transformer semantics for effects]{A Predicate Transformer Semantics for Effects\\(Functional Pearl)}
 
 \author{Wouter Swierstra}
 \email{w.s.swierstra@@uu.nl}
 \author{Tim Baanen}
 \email{t.baanen@@uu.nl}
 \affiliation{
-\institution{Universiteit Utrecht}
+  \institution{Universiteit Utrecht}
+  \country{The Netherlands}
 }
-
+\authorsaddresses{Authors' address: Wouter Swierstra, w.s.swierstra@@uu.nl; Tim Baanen, t.baanen@@uu.nl}
+\acmBadgeR{artifacts_evaluated_functional.jpg}
 \begin{abstract}
   Reasoning about programs that use effects can be much harder than
   reasoning about their pure counterparts. This paper presents a
@@ -25,6 +27,10 @@
   that can be used to relate a program to its specification, or even
   calculate effectful programs that are correct by construction.
 \end{abstract}
+
+\keywords{predicate transformers, effects, refinement, program
+  calculation, weakest precondition semantics, programming with
+  dependent types, free monads, Agda}
 
 %include ccs.tex
 
@@ -64,7 +70,7 @@ deriving verified effectful programs from their specifications, inspired by
 existing work on program calculation in the refinement
 calculus~\cite{back2012refinement,morgan1994programming}. We will
 briefly sketch the key techniques, before illustrating them with
-numerous examples throughout the remainder of the paper:
+numerous examples throughout the remainder of the paper.
 
 \begin{itemize}
 \item The syntax of effectful computations may be represented
@@ -105,9 +111,7 @@ The definitions, examples, theorems and proofs presented in this paper
 have all been formally verified in the dependently typed programming
 language Agda~\cite{agda}, but the techniques translate readily to
 other proof assistants based on dependent types such as
-Idris~\cite{brady} or Coq~\cite{coq}. The sources associated with our
-our development are available online.\footnote{The sources for this
-  version have been anonymized and submitted as supplementary material.}
+Idris~\cite{brady} or Coq~\cite{coq}. 
 
 \section{Background}
 \label{sec:background}
@@ -337,7 +341,7 @@ A computation of type |Partial a| will either return a value of type
 the |Abort| command are empty; the smart constructor |abort| uses this
 to discharge the continuation in the second argument of the |Step|
 constructor. Such smart constructors are sometimes referred to as
-\emph{generic effects} in the algebraic effects literature~\cite{plotkin-power-2003}
+\emph{generic effects} in the algebraic effects literature~\cite{plotkin-power-2003}.
 With the syntax in place, we can turn our attention to
 verifying programs using a suitable predicate transformer semantics.
 
@@ -539,7 +543,7 @@ shortly.
 
 Suppose we are writing an interpreter for a simple stack machine. To
 interpret the |ADD| instruction, we replace the top two elements of
-the stack with their sum. Of course, this may fail if the stack has
+the stack with their sum; this may fail if the stack has
 too few elements. This section shows how to prove that the obvious
 definition meets its specification.
 
@@ -640,7 +644,7 @@ may use the |Abort| command to `short-circuit' a computation and
 handle the corresponding exception. This section explores how to adapt
 our definitions accordingly.
 
-Suppose have a function that computes the product of the numbers
+Suppose we have a function that computes the product of the numbers
 stored in a list:
 \begin{code}
   product : List Nat -> Nat
@@ -797,7 +801,7 @@ initial state:
 \end{code}
 In the remainder of this section, we will overload the variable name
 |statePT| to refer to both variations of the same function; the
-context and source code can be used to determine the version being used.
+context should disambiguate the version being used.
 
 Finally, we can define a weakest precondition semantics for Kleisli
 morphisms of the form |a -> State b|:
@@ -856,9 +860,7 @@ relabel this tree so that each leaf has a unique number associated
 with it. A typical solution uses the state monad to keep track of the
 next unused label. The challenge that \citeauthor{hutton2008reasoning}
 pose is to reason about the program, without expanding the definition
-of the monadic operations. As we do so, we will show how several
-familiar properties of the refinement relation that can be used to
-reason about \emph{arbitrary} effects.
+of the monadic operations.
 
 We begin by defining the type of binary trees:
 \begin{code}
@@ -1261,7 +1263,7 @@ chooses between them. To model this, the response used in the
 continuation of the free monad, |R Choice|, is a |Bool|, indicating
 which argument to choose. We can make this more clear by defining the
 following shorthands for non-deterministic computations, |ND|, and
-its constructors:
+its constructors.
 \begin{code}
   ND : Set -> Set
   ND = Free C R
@@ -1274,7 +1276,7 @@ its constructors:
 \end{code}
 Next, we turn our attention to defining a suitable predicate
 transformer semantics on Kleisli arrows of the form |(x : a) -> ND (b
-x)|. There are two canonical ways to do so, following a familiar pattern:
+x)|. There are two canonical ways to do so:
 \begin{code}
   allPT : (Forall (a : Set)) (implicit(b : a -> Set)) (P : (x : a) -> b x -> Set) -> (x : a) -> ND (b x) -> Set
   allPT P _ (Pure x)         = P _ x
@@ -1335,14 +1337,14 @@ example, this boils down to showing:
   wpAllSoundness nd P x H = allSoundness P x (nd x) H
   \end{code}
 %endif
-  Here, the predicate |All P xs| holds precisely when the predicate |P|
+  The predicate |All P xs| holds whenever the predicate |P|
   holds for all the elements of the list |xs|.
 \subsection*{Refinement}  
 
 These two predicate transformer semantics give rise to two different
-refinement relations. We can characterise both in terms of the
-elements that the non-deterministic computations may return. We can
-characterise these elements using the following relation:
+refinement relations. To characterise both these refinement relations,
+we begin by defining the |Elem| relation below, that states that a
+given value may be returned by a non-deterministic computation:
 \begin{code}
   data Elem (hidden(a : Set)) (x : a) : ND a -> Set where
       Here   : Elem x (Pure x)
@@ -1462,7 +1464,7 @@ Verifying the correctness of this function amounts to proving the following lemm
     mapPT P x x' (Step Choice k) f (fst , snd) = mapPT P x x' (k True) f fst , mapPT P x x' (k False) f snd
 \end{code}
 %endif
-Note that correctness property merely states that all the pairs
+Note that this correctness property merely states that all the pairs
 returned by |remove| satisfy the desired postcondition. It does not
 require that all possible decompositions of the input list also occur
 as possible results of the |remove| function. There is a trivial proof
@@ -1772,7 +1774,7 @@ arrows we have considered previously:
   SpecVal : Set -> SetOne
   SpecVal a = SpecK ⊤ a
  \end{code}
-These specifications passed consist of a
+These specifications consist of a
 precondition of type |Set| and a predicate |a -> Set|.
 Next, we can define the datatype |I a|, corresponding to either a
 specification on |a| or a value of type |a|.
@@ -2310,25 +2312,22 @@ these techniques to the kinds of effectful programs we have presented in
 this paper~\cite{gibbons, gibbons-hinze, hutton2008reasoning}.
 
 There is a great deal of work studying how to reason about effects in
-type theory~\cite{beauty, swierstra-phd, nanevski1, nanevski2,
-  nanevski3, brady-effects}. F$\star$ has introduced the notion of
+type theory~\cite{nanevski1, nanevski2,
+  nanevski3, beauty, swierstra-phd, hoare-wouter, brady-effects}.
+F$\star$ has introduced the notion of
 Dijkstra monads~\cite{fstar, dijkstra-monad} to collect the
 verification conditions arising from a program using a weakest
 precondition semantics. The |wpSpec| function corresponds to the
 predicate transformer semantics that F$\star$ associates with
 specifications~\cite{dijkstra-free,multi-monadic}. The
 compositionality results presented here correspond to subtyping of the
-sequential composition in F$\star$. Where F$\star$ uses an SMT solver
+sequential composition in F$\star$. Where F$\star$ typically uses an SMT solver
 to resolve verification conditions, the use of an interactive theorem
 prover and higher-order logic may facilitate the verification of
 properties that are difficult to encode in the SMT solver's
 logic. More recently, \citet{maillard} have investigated the predicate
 transformer and specification semantics of effectful programs, similar
 to the effects presented here.
-
-
-% [4] K. Maillard et al: Dijkstra Monads for All, arXiv:1903.01237, 2019.
-
 
 There is also a great deal of existing work on using interactive
 theorem provers to perform program calculation. \citet{old-hol} have
@@ -2353,8 +2352,8 @@ and the synthesis of abstract datatypes, packaging methods and data.
 
 This paper does not yet consider \emph{combinations} of different
 effects.  In principle, however, we believe it should be possible to
-take the coproduct of our free monads in the style of
-~\citet{swierstra2008} to combine the different effects
+take the coproduct of our free monads in the style of \citet{swierstra2008}
+to combine the different effects
 syntactically. We hope that the composition of predicate transformers
 can be used to assign semantics to programs using a variety of
 different effects---much as we defined a semantics of mixed programs
@@ -2388,9 +2387,12 @@ account of effects that is worth exploring further.
 % \item wp (s,q) or wp (s,p) implies wp(s,q or p) -- but not the other
 %   way around. The implication in the other direction only holds when
 %   the program is deterministic.
-% \begin{acks}
-%   Acknowledgements have been omitted for the sake of anonymity.
-% \end{acks}
+\begin{acks}
+  We would like to thank the members of Utrecht University's Software
+  Technology Reading Group and the members of IFIP WG 2.1 for feedback
+  on this work. Furthermore, the ICFP reviewers provided us with
+  insightful and detailed feedback for which we are most grateful.
+\end{acks}
 
 \DeclareRobustCommand{\tussenvoegsel}[2]{#2}
 \bibliography{handlers}
