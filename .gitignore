@@ -11,3 +11,4 @@ handlers.flb_latexmk
 *.agdai
 src/
 detritus
+comment.cut
