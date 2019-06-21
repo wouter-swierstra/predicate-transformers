@@ -1,5 +1,4 @@
-\documentclass[acmsmall,review]{acmart}
-\settopmatter{printfolios=true,printccs=false,printacmref=false}
+\documentclass[acmsmall,review]{acmart}\settopmatter{printfolios=true}
 
 %include agda.fmt
 %include handlers.fmt
@@ -7,7 +6,7 @@
 %include preamble.tex
 
 \begin{document}
-\title{A predicate transformer semantics for effects}
+\title[A predicate transformer semantics for effects]{A predicate transformer semantics for effects\\(Functional Pearl)}
 
 \author{Wouter Swierstra}
 \email{w.s.swierstra@@uu.nl}
@@ -40,7 +39,9 @@ referential transparency---the ability to freely substitute equals for
 equals---enables us to employ equational reasoning to prove two
 expressions equal~\cite{wadler-critique}. This has resulted in a rich
 field of program calculation in the Bird-Meertens
-style~\citep*{algebra-of-programming, pearls}.
+style~\citep*{algebra-of-programming, pearls}, transforming an
+inefficient executable specification to an efficient alternative
+implementation.
 
 Many programs, however, are \emph{not} pure, but instead rely on a
 variety of effects, such as mutable state, exceptions,
@@ -59,7 +60,7 @@ may be processed in any given order using a series of handlers.
 
 This paper defines a predicate transformer semantics
 for effectful programs, culminating in a constructive framework for
-deriving verified effectful programs their specifications, inspired by
+deriving verified effectful programs from their specifications, inspired by
 existing work on program calculation in the refinement
 calculus~\cite{back2012refinement,morgan1994programming}. We will
 briefly sketch the key techniques, before illustrating them with
@@ -69,15 +70,23 @@ numerous examples throughout the remainder of the paper:
 \item The syntax of effectful computations may be represented
   by a free monad in type theory. Assigning meaning to such
   free monads amounts to assigning meaning to the syntactic operations
-  each effect provides. 
+  each effect provides.
 \item In this paper, we show how to assign \emph{predicate transformer
     semantics} to computations arising from the Kleisli arrows on
   these free monads. This enables us to compute the weakest
-  precondition associated with a given postcondition.
+  precondition associated with a given postcondition. By defining
+  these semantics as a \emph{fold} over the free monad, we can
+  establish \emph{compositionality} results, allowing us to decompose
+  the verification of a large program into smaller parts. These
+  results hold for \emph{any} semantics defined as a fold, provided
+  the predicate transformers are \emph{monotone}.
 \item Using these weakest precondition semantics, we can define a
   notion of \emph{refinement} on computations. We show how to use this
   refinement relation to show a program satisfies its specification,
-  or indeed, \emph{calculate} a program from its specification.
+  or indeed, \emph{calculate} a program from its specification. By
+  allowing specifications to appear in the leaves of our free monad,
+  we can mix operations and specifications, enabling the step by step
+  refinement of a specification to a complete program.
 \end{itemize}
 These principles are applicable to a range of different effects,
 including exceptions (Section~\ref{sec:maybe}), state
@@ -87,20 +96,19 @@ including exceptions (Section~\ref{sec:maybe}), state
 numerous examples, each selected for their portrayal of proof
 principles rather than being formidable feats of
 formalisation. Besides relating effectful programs to their
-specification, we show how to programs and specifications may be mixed
+specification, we show how programs and specifications may be mixed
 freely, allowing verified programs to be calculated from their
 specification one step at a time (Section~\ref{sec:stepwise-refinement}).
 
 
 The definitions, examples, theorems and proofs presented in this paper
 have all been formally verified in the dependently typed programming
-language Agda~\cite{agda}, but they techniques translate readily to
+language Agda~\cite{agda}, but the techniques translate readily to
 other proof assistants based on dependent types such as
 Idris~\cite{brady} or Coq~\cite{coq}. The sources associated with our
 our development are available online.\footnote{The sources for this
   version have been anonymized and submitted as supplementary material.}
 
- \todo{Finalize: abstract, intro and title}
 \section{Background}
 \label{sec:background}
 %if style == newcode
@@ -130,7 +138,7 @@ result of type |a| or issues a command |c : C|. For each |c : C|,
 there is a set of responses |R c|. The second argument of the |Step|
 constructor corresponds to the continuation, describing how to proceed
 after receiving a response of type |R c|. It is straightforward to
-show that the |Free| datatype is indeed a monad:
+show that the |Free C R| datatype is indeed a monad:
 \begin{code}
   map : (Forall (l l' C R)) (implicit(a : Set l)) (implicit(b : Set l')) (a -> b) -> Free C R a -> Free C R b
   map f (Pure x)    = Pure (f x)
@@ -154,7 +162,9 @@ show that the |Free| datatype is indeed a monad:
 The examples of effects studied in this paper will be phrased in terms
 of such free monads; each effect, described in a separate section,
 chooses |C| and |R| differently, depending on its corresponding
-operations.
+operations. This choice of operations---as is usually the case for
+algebraic effects---determines a syntax to which we must still assign
+semantics~\cite{tensor}.
 
 
 \subsection*{Weakest precondition semantics}
@@ -254,6 +264,10 @@ equality between functions. The following lemma follows from the
   ... | _ | _ | refl = H
 \end{code}
 %endif
+In the impure setting, however, we will use different notions of
+weakest precondition, which in turn lead to different notions of
+refinement.
+
 In the remainder of this paper, we will define predicate transformer
 semantics for \emph{Kleisli arrows} of the form |a -> Free C R
 b|. While we could use the |wp| function to assign semantics to these
@@ -264,7 +278,7 @@ transformer semantics for effects we need to define a function of the
 following form:
 \begin{center}
 \begin{spec}
-  pt : (a -> Set) -> Free C R a -> Set
+  pt : (a -> Set) -> (Free C R a -> Set)
 \end{spec}
 \end{center}
 These functions show how to lift a predicate on the type |a| over an
@@ -311,8 +325,9 @@ responses |R| in our |Free| datatype:
   Partial = Free C R
 \end{code}
 There is a single command, |Abort|; there is no continuation after
-issuing this command, hence the type of valid responses is empty. It is
-sometimes convenient to define a smart constructor for failure:
+issuing this command, hence there are no valid responses, as denoted
+by |⊥|, the empty type. It is sometimes convenient to define a smart
+constructor for failure:
 \begin{code}
   abort  : (Forall(a)) Partial a
   abort  = Step Abort (\ ())
@@ -321,7 +336,9 @@ A computation of type |Partial a| will either return a value of type
 |a| or fail, issuing the |abort| command. Note that the responses to
 the |Abort| command are empty; the smart constructor |abort| uses this
 to discharge the continuation in the second argument of the |Step|
-constructor. With the syntax in place, we can turn our attention to
+constructor. Such smart constructors are sometimes referred to as
+\emph{generic effects} in the algebraic effects literature~\cite{plotkin-power-2003}
+With the syntax in place, we can turn our attention to
 verifying programs using a suitable predicate transformer semantics.
 
 
@@ -391,7 +408,12 @@ computation |c| of type |Partial b| successfully returns a value of
 type |b| that satisfies |P|. The predicate transformer semantics we
 wish to assign to partial computations is determined by how we define
 |mustPT|. In this case, we wish to rule out failure entirely; hence
-the case for the |Abort| constructor returns the empty type.
+the case for the |Abort| constructor returns the empty
+type. Alternatively, we could consider a different semantics for
+partiality, such as requiring that computations fail or return a
+result satisfying some desired property. As we shall see in the rest
+of this paper, there is often some freedom to choose different
+semantics for a single effect.
 
 Now that we have a predicate transformer semantics for Kleisli arrows
 in general, we can study the semantics of our monadic interpreter. To
@@ -505,8 +527,8 @@ above give rise to a refinement relation on Kleisli arrows of the
 form |a -> Partial b|. We can characterise this relation by proving
 the following lemma:
 \begin{spec}
-  refinement : (f g : a -> Maybe b) ->
-    (wpPartial f ^^ ⊑ ^^ wpPartial g) ^^ ↔ ^^  (forall x -> (f x == g x) ∨ (f x == Nothing))
+  refinement : (f g : a -> Partial b) ->
+    (wpPartial f ^^ ⊑ ^^ wpPartial g) ^^ ↔ ^^  (forall x -> (f x == g x) ∨ (f x == abort))
 \end{spec}
 Why care about this refinement relation? Not only can we use it to
 relate Kleisli morphisms, but it can also relate a program to a
@@ -556,13 +578,12 @@ our addition function:
 That is, provided we are given a list with at least two elements, we
 should replace the top two elements with their sum. Here we describe
 the desired postcondition by introducing a new datatype, |Add|,
-relating the input and output stacks, but there are many equivalent
-ways to formulate the desired property.
+relating the input and output stacks.
 
 How can we relate this specification to an implementation? We have
 seen how the |wpPartial| function assigns predicate transformer
 semantics to functions---but we do not yet have a corresponding
-predicate transform \emph{semantics} for our specifications. The
+predicate transformer \emph{semantics} for our specifications. The
 |wpSpec| function does precisely this:
 \begin{code}
   wpSpec : (Forall(l a)) (implicit(b : a -> Set)) Spec (hidden(l)) a b -> (P : (x : a) -> b x -> (SetL(l))) -> (a -> (SetL(l)))
@@ -573,9 +594,9 @@ weakest precondition necessary to satisfy an arbitrary postcondition
 |P|: namely, the specification's precondition should hold and its
 postcondition must imply |P|.
 
-Using this definition we can precisely formulate our the problem at
-hand: can we find a program |add : List a -> Partial (a × List
-a)| that refines the specification given by |addSpec|:
+Using this definition we can precisely formulate the problem at
+hand: can we find a program |add : List Nat -> Partial (List
+Nat)| that refines the specification given by |addSpec|:
 \begin{spec}
   correctnessAdd : wpSpec addSpec ⊑ wpPartial add
 \end{spec}
@@ -697,8 +718,8 @@ Now we can finally use our refinement relation to relate the
 
 This example shows how to prove soundness of our predicate transformer
 semantics with respect to a given handler. The predicate transformers, such as
-|wpDefault| and |wpPartial|, return \emph{some} predicate; it is only
-by proving such soundness results that we can ensure that the
+|wpDefault| and |wpPartial|, return \emph{some} predicate; by proving such soundness
+results, we can ensure that the
 semantics is meaningful. Furthermore, this example shows how different
 choices of handler may exist for the \emph{same} effect---a point we shall
 return to when discussing non-determinism (Section~\ref{sec:non-det}).
@@ -783,7 +804,7 @@ morphisms of the form |a -> State b|:
 %}
 \begin{code}
   wpState : (Forall(l l' l'')) (implicit(a : Set l)) (implicit(b : Set l'))  (a -> State b) -> (P : a × s -> b × s -> (SetL(l''))) -> (a × s -> (SetL(l'')))
-  wpState f P (x , i) = wp f ((hiddenConst (\ c -> statePT' c (\ i -> P (x , i)) i))) x
+  wpState f P (x , i) = wp f ((hiddenConst (\ c -> statePT' c (\ j -> P (x , j)) i))) x
 \end{code}
 Given any predicate |P| relating the input, initial state, final state
 and result of the computation, the |wpState| function computes the
@@ -874,7 +895,8 @@ conjunction of two auxiliary statements: first, flattening the
 resulting tree |t'| produces the sequence of numbers from |s| to |s +
 size t|, where |t| is the initial input tree; furthermore, the output
 state |s'| should be precisely |size t| larger than the input state
-|s|.
+|s|. Note that our |size| function only counts the number of leaves,
+as these are only of interest for relabelling.
 
 We can now define the obvious relabelling function as follows:
 %if style == newcode
@@ -906,16 +928,18 @@ function and formulate the desired correctness property:
 The proof is interesting. Initially, it proceeds by induction on the
 input tree. The base case for the |Leaf| constructor is easy enough to
 discharge; the inductive case, however, poses a greater challenge. In
-particular, the goal we wish to prove in the case for the |Node|
-constructor amounts to proving the following statement.
+particular, we assume that the |wpSpec relabelSpec P| holds for some
+arbitrary predicate |P|; the goal we wish to prove in the case for the
+|Node| constructor amounts to proving the following statement:
 \begin{center}
 \begin{spec}
   statePT (relabel l >>= (\ l' → relabel r >>= (\ r' → Pure (Node l' r')))) (P (Node l r , i)) i
 \end{spec}
 \end{center}
-At first glance, it is not at all obvious how to apply our induction
-hypothesis! Our induction hypothesis roughly states that |P| holds for
-|l| and |r|---but how can we use this information to prove the above goal?
+At first glance, it is not at all obvious how to use our induction
+hypothesis! Although we can use our induction hypothesis to show |P|
+holds for |l| and |r|---it is not clear how to use this information to
+prove the above goal, without knowing anything further about |P|.
 
 \subsection*{Compositionality}
 \label{sec:compositionality}
@@ -1066,7 +1090,9 @@ property holds:
 %endif
 This is a central result of our development---it shows how the
 compositionality of any weakest precondition semantics is respected
-when considering refinement proofs. Just as referential transparency
+when considering refinement proofs. These results establish that these predicate
+transformers form an \emph{ordered monad}~\cite{ordered}.
+Just as referential transparency
 guarantees that \emph{pure} expressions may be substituted freely
 during equational reasoning, this lemma guarantees that predicate
 transformers may be substituted freely during refinement proofs. It is worth
@@ -1270,7 +1296,7 @@ These two predicate transformers are dual: |allPT P| holds for a
 non-deterministic computation precisely when \emph{all} possible
 results satisfy |P|; |anyPt P| holds for a non-deterministic
 computation precisely when \emph{some} possible result satisfies |P|.
-Once again, can relate both these predicates to the usual `list
+As we saw for other effects, we can relate both these predicates to the usual `list
 handler' for non-determinism.
 \begin{code}
   run : (Forall(a)) ND a -> List a
@@ -1413,12 +1439,12 @@ that draws an element from its input list non-deterministically.
 \begin{code}  
   remove : (Forall(a)) List a -> ND (a × List a)
   remove Nil        = fail
-  remove (x :: xs)  = choice  (return (x , xs)) (map (add x) (remove xs))
+  remove (x :: xs)  = choice  (return (x , xs)) (map (retain x) (remove xs))
       where
-      add : (Forall(a)) a -> a × List a -> a × List a
-      add x (y , ys) = (y , (x :: ys))
+      retain : (Forall(a)) a -> a × List a -> a × List a
+      retain x (y , ys) = (y , (x :: ys))
 \end{code}
-Verifying the correctness of this functions amounts to proving the following lemma:
+Verifying the correctness of this function amounts to proving the following lemma:
 \begin{code}  
   removeCorrect : (Forall(a)) wpSpec (hidden(a = List a)) (hidden(const (a × List a))) removeSpec ⊑ wpAll remove
 \end{code}
@@ -1506,7 +1532,7 @@ in turn assign predicate transformer semantics.
 Suppose we wish to define a recursive function of type |(i : I) -> O
 i|, for some input type |I : Set| and output type |O : I -> Set|. If
 the recursion is structural, we typically do so by induction on
-|I|. If it is not, we may still want to describe the intended function
+the argument of type |I|. If it is not, we may still want to describe the intended function
 and its behaviour---deferring any proof of termination for the
 moment. We can describe such functions as follows:
 \begin{code}
@@ -1566,7 +1592,7 @@ following specification:
 \end{code}
 
 Although we cannot directly run `recursive' functions defined in this
-style, such the |f91| function, we can reason about their
+style, such as the |f91| function, we can reason about their
 correctness. To do so, we would like to show that a Kleisli arrow |I
 ~~> O| satisfies some specification of type |Spec I O|. To achieve
 this, we begin by defining an auxiliary function, |invariant|, that
@@ -1925,8 +1951,8 @@ modify it; the |put| command overwrites the current state. We can
 prove that |get| and |put| commands satisfy these postconditions using
 our |wpM| semantics:
 \begin{spec}
-  getCorrect  : forall pre    ->  wpSpec [[ pre , (\ i o -> pre i ∧ getPost i o) ]]    ⊑ wpM get'
-  putCorrect  : forall pre    ->  wpSpec [[ pre , (\ i o -> pre i ∧ putPost x i o) ]]  ⊑ wpM put'
+  getCorrect  : forall pre     ->  wpSpec [[ pre , (\ i o -> pre i ∧ getPost i o) ]]    ⊑ ptM get'
+  putCorrect  : forall pre x   ->  wpSpec [[ pre , (\ i o -> pre i ∧ putPost x i o) ]]  ⊑ ptM (put' x)
 \end{spec}
 %%In the spec above, this should really be ptM...
 %if style == newcode
@@ -1948,7 +1974,7 @@ changing the remaining refinement problem. We can try to make this manifest
 in the following (incomplete) datatype:
 \begin{spec}
   data Derivation (hidden(b : Set)) (spec : SpecVal b) : SetOne where
-    Done  : (x : b) ->  wpSpec spec ⊑ wpM (done x)       -> Derivation spec
+    Done  : (x : b) ->  wpSpec spec ⊑ ptM (done x)       -> Derivation spec
     Step  : (c : C) ->  (∀ (r : R c) -> Derivation ...)  -> Derivation spec
 \end{spec}
 A value of type |Derivation spec| describes a series of refinement
@@ -2025,7 +2051,9 @@ Finally, we can complete the definition of derivations using the
 \end{code}
 The interesting case is in the continuation of the |Step|
 constructor. For each possible response |r : R c|, we need to provide
-a derivation of the remaining specification.
+a derivation of the remaining specification. Note that we have
+specialized this type to work over stateful computations by requiring a
+specification on the result and output state.
   
 It is no coincidence that the structure of our derivations mimics that
 of the computations described by our |Free| datatype.  One advantage
@@ -2036,7 +2064,7 @@ can easily extract executable code from a given derivation:
   extract _ (Done x _)  = Pure x
   extract _ (Step c k)  = Step c (\ r -> extract _ (k r))
 \end{code}
-Furthermore, we can prove that the extracted program does indeed satisfy the
+Furthermore, we can prove that any extracted program does indeed satisfy its
 intended specification.
 
 %if style == newcode
@@ -2228,14 +2256,16 @@ lemma and prove that the result of the call is strong enough to
 fulfil the current proof goal. In the base case, we can give a direct
 proof that the current state |i| satisfies the desired specification.
 
-One result of formulating the |step| function in terms of the predicate
-transformers |tril| and |trir| is that the new goals after issuing a
-particular command can quickly become cluttered. We could avoid this
-by defining custom transformations on our specifications for |put| and
-|get| directly, at the expense of losing some generality. Nonetheless,
-it is encouraging to see that we can calculate a program
-\emph{together with} our proof assistant, rather than verify a program
-post-hoc.
+One result of formulating the |step| function in terms of the
+predicate transformers |tril| and |trir| is that the new goals after
+issuing a particular command are computed automatically from these
+definitions, but may be more verbose than what a programmer might
+write by hand, for example, by containing superfluous equalities
+between intermediate states. We could avoid this by defining custom
+transformations on our specifications for |put| and |get| directly, at
+the expense of losing some generality. Nonetheless, it is encouraging
+to see that we can calculate a program \emph{together with} our proof
+assistant, rather than verify a program post-hoc.
 %if style == newcode
 \begin{code}
   max : DerivationFun [[ maxPre , maxPost ]]
@@ -2264,13 +2294,11 @@ alternative exists---when the added generality was unnecessary for our
 examples.
 
 Throughout this paper, we have not concerned ourselves with issues of
-size. Our Agda implementation relies on the unsound axiom that |Set :
-Set|. Yet we are confident these constructions can be stratified easily
-enough, either by moving certain definitions to higher universes or
-explicitly parametrising parts of our development by a universe |U :
-Set|. We have no reason to believe that there are
-fundamental size issues; we have made a pragmatic choice for the sake
-of presentation and ease of development.
+size. Yet some of our definitions, such as those for specifications
+and derivations, are too large to live in |Set|. In the accompanying
+Agda development, we show how a suitable choice of universe level can
+be used to stratify these definitions; for the sake of presentation,
+however, we have ommitted these annotations in the code in this paper.
 
 
 \subsection*{Related work}
@@ -2283,10 +2311,24 @@ this paper~\cite{gibbons, gibbons-hinze, hutton2008reasoning}.
 
 There is a great deal of work studying how to reason about effects in
 type theory~\cite{beauty, swierstra-phd, nanevski1, nanevski2,
-  nanevski3, brady-effects}. F$\star$ has introduced the
-notion of Dijkstra monads~\cite{fstar, dijkstra-monad} to collect the
+  nanevski3, brady-effects}. F$\star$ has introduced the notion of
+Dijkstra monads~\cite{fstar, dijkstra-monad} to collect the
 verification conditions arising from a program using a weakest
-precondition semantics.
+precondition semantics. The |wpSpec| function corresponds to the
+predicate transformer semantics that F$\star$ associates with
+specifications~\cite{dijkstra-free,multi-monadic}. The
+compositionality results presented here correspond to subtyping of the
+sequential composition in F$\star$. Where F$\star$ uses an SMT solver
+to resolve verification conditions, the use of an interactive theorem
+prover and higher-order logic may facilitate the verification of
+properties that are difficult to encode in the SMT solver's
+logic. More recently, \citet{maillard} have investigated the predicate
+transformer and specification semantics of effectful programs, similar
+to the effects presented here.
+
+
+% [4] K. Maillard et al: Dijkstra Monads for All, arXiv:1903.01237, 2019.
+
 
 There is also a great deal of existing work on using interactive
 theorem provers to perform program calculation. \citet{old-hol} have
@@ -2306,8 +2348,6 @@ specification. Their work
 on the Fiat framework is geared towards describing \emph{data refinement}
 and the synthesis of abstract datatypes, packaging methods and data.
 
-
-
 \subsection*{Further work}
 \label{sec:further-work}
 
@@ -2322,8 +2362,8 @@ and specifications from their constituent parts. Similar ideas have
 already been explored when embedding algebraic effects in Haskell by
 \citet{Wu2014}.
 
-\todo{Nail down theory further -- presheaves, contravariant Set-valued hom
-  functors, yoneda embedding, etc}
+%\todo{Nail down theory further -- presheaves, contravariant Set-valued hom
+%  functors, yoneda embedding, etc}
 
 There are well-known efficiency problems when working with free monads
 directly, as we have done here. While efficiency was never our primary
@@ -2348,9 +2388,9 @@ account of effects that is worth exploring further.
 % \item wp (s,q) or wp (s,p) implies wp(s,q or p) -- but not the other
 %   way around. The implication in the other direction only holds when
 %   the program is deterministic.
-\begin{acks}
-  Acknowledgements have been omitted for the sake of anonymity.
-\end{acks}
+% \begin{acks}
+%   Acknowledgements have been omitted for the sake of anonymity.
+% \end{acks}
 
 \DeclareRobustCommand{\tussenvoegsel}[2]{#2}
 \bibliography{handlers}
