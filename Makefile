@@ -16,8 +16,8 @@ check :
 #	rm -rf Check.agda*
 	echo 'Check succeeded'
 
-dist : handlers.lagda handlers.bib
+dist.zip : handlers.lagda handlers.bib
 	lhs2TeX --agda --poly handlers.lagda > dist/handlers.tex
-	cp handlers.bib dist
+	cp handlers.bib acmart.cls dist
 	zip -r dist.zip dist
 
