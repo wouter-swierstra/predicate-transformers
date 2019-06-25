@@ -17,7 +17,7 @@
   \country{The Netherlands}
 }
 \authorsaddresses{Authors' address: Wouter Swierstra, w.s.swierstra@@uu.nl; Tim Baanen, t.baanen@@uu.nl}
-\acmBadgeR{artifacts_evaluated_functional.jpg}
+% \acmBadgeR{artifacts_evaluated_functional.jpg}
 \begin{abstract}
   Reasoning about programs that use effects can be much harder than
   reasoning about their pure counterparts. This paper presents a
@@ -556,8 +556,8 @@ relating inputs that satisfy this precondition and the corresponding outputs:
   record Spec (hidden(l : Level)) (a : Set) (b : a -> Set) : (SetL(suc l)) where
     constructor [[_,_]]
     field
-      pre : a -> (SetL(l))
-      post : (x : a) -> b x -> (SetL(l))
+      pre   : a -> (SetL(l))
+      post  : (x : a) -> b x -> (SetL(l))
 \end{code}
 As is common in the refinement calculus literature, we will write |[[
 P , Q ]]| for the specification consisting of the precondition |P| and
@@ -688,7 +688,7 @@ The |wpDefault| function computes \emph{some} predicate on the
 function's input. But how do we know that this predicate is meaningful
 in any way? We could compute simply return a trivial predicate that is
 always holds. To relate the predicate transformer semantics to the
-|defaultHandler| we need to prove a simple soundness result:
+|defaultHandler| we need to prove the following soundness result:
 \begin{code}
   soundness : (Forall (a b)) (P : a -> b -> Set) -> (d : b) -> (c : a -> Partial b) ->
     forall x -> wpDefault d c P x -> P x (defaultHandler d (c x))
@@ -770,19 +770,19 @@ The usual handler for stateful computations maps our free monad,
 |State s|, to the state monad:
 \begin{code}
   run : (implicit(a : Set)) State a -> s -> a × s
-  run (Pure x)           s = (x , s)
-  run (Step Get k)       s = run (k s) s
-  run (Step (Put s) k)   _ = run (k tt) s
+  run (Pure x)           s  = (x , s)
+  run (Step Get k)       s  = run (k s) s
+  run (Step (Put s) k)   _  = run (k tt) s
 \end{code}
 Inspired by the previous section, we can define the following
 predicate transformer that for every stateful computation of type
 |State b|, maps a postcondition on |b × s| to the required
-precondition on |s|:
+precondition on the initial state of type |s|:
 \begin{code}
-  statePT : (Forall(l l')) (implicit(b : Set l)) State b -> (b × s -> (SetL(l'))) -> s -> (SetL(l'))
-  statePT (Pure x) P s          = P (x , s)
-  statePT (Step Get k) P s      = statePT (k s) P s
-  statePT (Step (Put s) k) P _  = statePT (k tt) P s
+  statePT : (Forall(l l')) (implicit(b : Set l)) (b × s -> (SetL(l'))) -> State b -> (s -> (SetL(l')))
+  statePT P (Pure x)               = \ s  -> P (x , s)
+  statePT P (Step Get k)           = \ s  -> statePT P (k s) s
+  statePT P (Step (Put s) k)       = \ _  -> statePT P (k tt) s
 \end{code}
 We can generalise this predicate transformer slightly. As we saw
 before, we sometimes describe postconditions as a \emph{relation}
@@ -796,8 +796,8 @@ initial state:
 %format statePTR = statePT'
 %endif
 \begin{code}
-  statePTR : (Forall(l l')) (implicit(b : Set l)) State b -> (s -> b × s -> (SetL(l'))) -> s -> (SetL(l'))
-  statePTR c P i = statePT c (P i) i
+  statePTR : (Forall(l l')) (implicit(b : Set l))  (s -> b × s -> (SetL(l'))) -> State b -> (s -> (SetL(l')))
+  statePTR P c i = statePT (P i) c i
 \end{code}
 In the remainder of this section, we will overload the variable name
 |statePT| to refer to both variations of the same function; the
@@ -808,7 +808,7 @@ morphisms of the form |a -> State b|:
 %}
 \begin{code}
   wpState : (Forall(l l' l'')) (implicit(a : Set l)) (implicit(b : Set l'))  (a -> State b) -> (P : a × s -> b × s -> (SetL(l''))) -> (a × s -> (SetL(l'')))
-  wpState f P (x , i) = wp f ((hiddenConst (\ c -> statePT' c (\ j -> P (x , j)) i))) x
+  wpState f P (x , i) = wp f ((hiddenConst (\ c -> statePT' (\ j -> P (x , j)) c i))) x
 \end{code}
 Given any predicate |P| relating the input, initial state, final state
 and result of the computation, the |wpState| function computes the
@@ -825,7 +825,7 @@ soundness of this semantics with respect to the |run| function:
 \begin{code}
   soundness {a} {b} P c i x H = lemma i (c x) H
     where
-    lemma : (st : s) -> (statec : State b) -> (statePT statec (P (x , i)) st) -> P (x , i) (run statec st)
+    lemma : (st : s) -> (statec : State b) -> (statePT (P (x , i)) statec st) -> P (x , i) (run statec st)
     lemma i (Pure y) H = H
     lemma i (Step Get k) H = lemma i (k i) H
     lemma i (Step (Put s) k) H = lemma s (k tt) H
@@ -935,7 +935,7 @@ arbitrary predicate |P|; the goal we wish to prove in the case for the
 |Node| constructor amounts to proving the following statement:
 \begin{center}
 \begin{spec}
-  statePT (relabel l >>= (\ l' → relabel r >>= (\ r' → Pure (Node l' r')))) (P (Node l r , i)) i
+  statePT (P (Node l r , i)) (relabel l >>= (\ l' → relabel r >>= (\ r' → Pure (Node l' r')))) i
 \end{spec}
 \end{center}
 At first glance, it is not at all obvious how to use our induction
@@ -950,7 +950,7 @@ prove a property of a composite computation, |c >>= f|, in terms of
 the semantics of |c| and |f|:
 \begin{code}
   compositionality : (Forall(a b : Set)) (c : State a) (f : a -> State b) ->
-    ∀ i P → statePT (c >>= f) P i == statePT c (wpState f (hiddenConst(P))) i
+    ∀ i P → statePT P (c >>= f) i == statePT (wpState f (hiddenConst(P))) c i
 \end{code}
 %if style == newcode
 \begin{code}
@@ -987,12 +987,12 @@ obligations.
     --  This is essentially the first law of consequence,
     --  specialized to the effects of State and Spec.
     prove-bind : ∀ {a b} (mx : State a) (f : a → State b) P i →
-      statePT mx (wpState f \ _ → P) i → statePT (mx >>= f) P i
+      statePT (wpState f \ _ → P) mx i → statePT P (mx >>= f) i
     prove-bind mx f P i x = coerce {zero} (sym (compositionality mx f i P)) x
     prove-bind-spec : ∀ {a b} (mx : State a) (f : a → State b) spec →
-      ∀ P i → (∀ Q → Spec.pre spec i × (Spec.post spec i ⊆ Q) → statePT mx Q i) →
+      ∀ P i → (∀ Q → Spec.pre spec i × (Spec.post spec i ⊆ Q) → statePT Q mx i) →
       Spec.pre spec i × (Spec.post spec i ⊆ wpState f (\ _ → P)) →
-      statePT (mx >>= f) P i
+      statePT P (mx >>= f) i
     prove-bind-spec mx f spec P i Hmx Hf = prove-bind mx f P i (Hmx (wpState f (\ _ → P)) Hf)
 
     --  Partially apply a specification.
@@ -1015,7 +1015,7 @@ obligations.
       (refl , refl) (refl , refl) = append-seq s sl sr , +-assoc s sl sr
 
     --  We have to rewrite the formulation of step2 slightly to make it acceptable for the termination checker.
-    step2' : ∀ {a} P (t : Tree a) s → wpSpec relabelSpec P (t , s) → statePT (relabel t) (P (t , s)) s
+    step2' : ∀ {a} P (t : Tree a) s → wpSpec relabelSpec P (t , s) → statePT (P (t , s)) (relabel t) s
     step2' P (Leaf x) s (fst , snd) = snd (Leaf s , Succ s) (refl , plus-one s)
     step2' P (Node l r) s (fst , snd) = prove-bind-spec (relabel l) _ (applySpec relabelSpec l) _ _
       (\ Q → step2' (\ _ → Q) l s)
@@ -1139,9 +1139,9 @@ reasoning found in the verification of imperative programs. Indeed, we
 can also show that the familiar laws for the weakening of preconditions and
 strengthening of postconditions also hold:
 \begin{code} 
-  weakenPre  : (implicit(a : Set)) (implicit(b : a -> Set)) (implicit(P P' : a -> Set)) (implicit(Q : (x : a) -> b x -> Set)) P ⊆ P' -> wpSpec [[ P , Q ]] ⊑ wpSpec [[ P' , Q ]]
+  weakenPre          : (implicit(a : Set)) (implicit(b : a -> Set)) (implicit(P P' : a -> Set)) (implicit(Q : (x : a) -> b x -> Set)) (P ⊆ P') -> (wpSpec [[ P , Q ]] ⊑ wpSpec [[ P' , Q ]])
 
-  strengthenPost     : (implicit(a : Set)) (implicit(b : a -> Set)) (implicit(P : a -> Set)) (implicit(Q Q' : (x : a) -> b x -> Set)) (forall (x : a) -> Q' x ⊆ Q x) -> wpSpec [[ P , Q ]] ⊑ wpSpec [[ P , Q' ]]
+  strengthenPost     : (implicit(a : Set)) (implicit(b : a -> Set)) (implicit(P : a -> Set)) (implicit(Q Q' : (x : a) -> b x -> Set)) (forall (x : a) -> Q' x ⊆ Q x) -> (wpSpec [[ P , Q ]] ⊑ wpSpec [[ P , Q' ]])
 \end{code}
 %if style == newcode
 \begin{code}
