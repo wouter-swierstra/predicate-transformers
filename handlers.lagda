@@ -705,7 +705,7 @@ precondition computed by |wpDefault| holds, the output returned by
 running the |defaultHandler| satisfies the desired postcondition.
 
 Now we can finally use our refinement relation to relate the
-|fastproduct| function to the original |product| function:
+|fastProduct| function to the original |product| function:
 \begin{code}
   correctnessProduct : wp product ⊑ wpDefault 0 fastProduct
 \end{code}
@@ -1528,7 +1528,7 @@ quite difficult at first glance. There are a variety of techniques
 that account for general recursion in type
 theory~\cite{bove_krauss_sozeau_2016}. Inspired
 by~\citet{mcbride2015turing}, however, we show how the call graph of a
-recursive functions can be described as a free monad, to which we can
+recursive function can be described as a free monad, to which we can
 in turn assign predicate transformer semantics.
 
 Suppose we wish to define a recursive function of type |(i : I) -> O
@@ -1712,7 +1712,7 @@ soundness result regarding our |wpRec| semantics:
     (∀ i -> wpRec spec f P i) -> ∀ n i → mayPT (P i) (petrol f (f i) n)
 \end{code}
 This lemma guarantees that---under the assumption that 
-|wpRec| holds for all inputs---whenever the petrol-driven semantics manage
+|wpRec| holds for all inputs---whenever the petrol-driven semantics manages
 to produce a result, this result is guaranteed to satisfy the predicate |P|.
 We could show similar soundness results for the other handlers that
 \citet{mcbride2015turing} proposes for general recursion; this soundness result,
@@ -2300,7 +2300,7 @@ size. Yet some of our definitions, such as those for specifications
 and derivations, are too large to live in |Set|. In the accompanying
 Agda development, we show how a suitable choice of universe level can
 be used to stratify these definitions; for the sake of presentation,
-however, we have ommitted these annotations in the code in this paper.
+however, we have omitted these annotations in the code in this paper.
 
 
 \subsection*{Related work}
@@ -2335,7 +2335,7 @@ given a formalisation of several notions, such as weakest precondition
 semantics and the refinement relation, in the interactive theorem
 prover HOL. This was later extended to the \emph{Refinement
   Calculator}~\cite{butler}, that built a new GUI on top of
-HOL. ~\citet{dongol} have extended these ideas even further in HOL,
+HOL. \citet{dongol} have extended these ideas even further in HOL,
 adding a separation logic and its associated algebraic
 structure. \citet{boulme} has given a direct embedding of the
 refinement calculus in Coq.
