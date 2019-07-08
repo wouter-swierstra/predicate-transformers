@@ -6,7 +6,7 @@
 %include preamble.tex
 
 \begin{document}
-\title[A predicate transformer semantics for effects]{A Predicate Transformer Semantics for Effects\\(Functional Pearl)}
+\title[A Predicate Transformer Semantics for Effects]{A Predicate Transformer Semantics for Effects\\(Functional Pearl)}
 
 \author{Wouter Swierstra}
 \email{w.s.swierstra@@uu.nl}
@@ -126,7 +126,7 @@ module Free where
 \end{code}
 %endif
 
-\subsection*{Free monads}
+\subsection{Free Monads}
 \label{sec:free-monads}
 
 We begin by defining a datatype for free monads in the style
@@ -171,7 +171,7 @@ algebraic effects---determines a syntax to which we must still assign
 semantics~\cite{tensor}.
 
 
-\subsection*{Weakest precondition semantics}
+\subsection{Weakest Precondition Semantics}
 
 The idea of of associating weakest precondition semantics with
 imperative programs has a rich history, dating back to
@@ -346,7 +346,7 @@ With the syntax in place, we can turn our attention to
 verifying programs using a suitable predicate transformer semantics.
 
 
-\subsection*{Example: division}
+\subsection{Example: Division}
 
 We begin by defining a small expression language, closed under
 division and natural numbers:
@@ -524,7 +524,7 @@ Both proofs proceed by induction on the argument expression; despite
 the necessity of a handful of auxiliary lemmas, they are
 fairly straightforward.
 
-\subsection*{Refinement}
+\subsection{Refinement}
 
 The weakest precondition semantics on partial computations defined
 above give rise to a refinement relation on Kleisli arrows of the
@@ -539,7 +539,7 @@ relate Kleisli morphisms, but it can also relate a program to a
 specification given by a pre- and postcondition, as we shall see
 shortly.
 
-\subsection*{Example: \textsc{Add}}
+\subsection{Example: \textsc{Add}}
 
 Suppose we are writing an interpreter for a simple stack machine. To
 interpret the |ADD| instruction, we replace the top two elements of
@@ -635,7 +635,7 @@ will explore several other effects, their semantics in terms of
 predicate transformers, and the refinement relation that arises from
 these semantics.
 
-\subsection*{Alternative semantics}
+\subsection{Alternative Semantics}
 \label{alternative-abort}
 
 The predicate transformers arising from the |wpPartial| function are
@@ -729,7 +729,7 @@ choices of handler may exist for the \emph{same} effect---a point we shall
 return to when discussing non-determinism (Section~\ref{sec:non-det}).
 
 
-\section{Mutable state}
+\section{Mutable State}
 \label{sec:state}
 
 %if style == newcode
@@ -832,7 +832,7 @@ soundness of this semantics with respect to the |run| function:
 \end{code}
 %endif
 
-\subsection*{Example: tree labelling}
+\subsection{Example: Tree Labelling}
 \label{sec:trees}
 %if style == newcode
 \begin{code}
@@ -943,7 +943,7 @@ hypothesis! Although we can use our induction hypothesis to show |P|
 holds for |l| and |r|---it is not clear how to use this information to
 prove the above goal, without knowing anything further about |P|.
 
-\subsection*{Compositionality}
+\subsection{Compositionality}
 \label{sec:compositionality}
 To complete the proof, we need an auxiliary lemma that enables us to
 prove a property of a composite computation, |c >>= f|, in terms of
@@ -1130,7 +1130,7 @@ following property:
   This monotonicity property holds of all the predicate transformers
   presented in this paper and is straightforward to prove for all of them.
 
-\subsection*{Rule of consequence}
+\subsection{Rule of Consequence}
 \label{sec:consequence}
 
 This example illustrates how reasoning about programs written using
@@ -1152,7 +1152,7 @@ strengthening of postconditions also hold:
 Such laws are particularly useful when `bookkeeping' large proof
 obligations that can sometimes arise during program verification.
 
-\subsection*{Equations}
+\subsection{Equations}
 
 %if style == newcode
 \begin{code}
@@ -1339,7 +1339,7 @@ example, this boils down to showing:
 %endif
   The predicate |All P xs| holds whenever the predicate |P|
   holds for all the elements of the list |xs|.
-\subsection*{Refinement}  
+\subsection{Refinement}  
 
 These two predicate transformer semantics give rise to two different
 refinement relations. To characterise both these refinement relations,
@@ -1405,7 +1405,7 @@ relation.  Intuitively, if you know that a predicate |P| holds for
 even `better' to know that |P| holds for a non-deterministic
 computation that returns fewer possible results.
 
-\subsection*{Example: non-deterministic deletion}
+\subsection{Example: Non-deterministic Deletion}
 
 To illustrate how to reason about such non-deterministic computations,
 we will define a function that non-deterministically removes a single
@@ -1500,7 +1500,7 @@ We can address this by proving an additional lemma, stating that the
 The proof proceeds by induction on the first component of the
 postcondition, |y ∈ xs|.
 
-\section{General recursion}
+\section{General Recursion}
 \label{sec:recursion}
 
 %if style == newcode
@@ -1741,7 +1741,7 @@ that the predicate transformer semantics for recursion, |wpRec|, is correct.
 \end{code}
 %endif
 
-\section{Stepwise refinement}
+\section{Stepwise Refinement}
 \label{sec:stepwise-refinement}
 
 %if style == newcode
@@ -1849,7 +1849,7 @@ The crucial step here is to transform the argument predicate |P| to
 work on specifications or values of type |I a|, using the |ptI|
 function defined above.
 
-\subsection*{Defining derivations}
+\subsection{Defining Derivations}
 \label{case-study}
 %if style == newcode
 \begin{code}
@@ -2111,7 +2111,7 @@ intended specification.
 \end{code}
 %endif
 
-\subsection*{Case study: calculating the maximum}
+\subsection{Case Study: Calculating the Maximum}
 \label{sec:maximum}
 
 With our definition of derivations in place, we can finally turn our
@@ -2303,7 +2303,7 @@ be used to stratify these definitions; for the sake of presentation,
 however, we have omitted these annotations in the code in this paper.
 
 
-\subsection*{Related work}
+\subsection{Related Work}
 \label{sec:related-work}
 
 Traditionally, reasoning about pure functional programs is done
@@ -2347,7 +2347,7 @@ specification. Their work
 on the Fiat framework is geared towards describing \emph{data refinement}
 and the synthesis of abstract datatypes, packaging methods and data.
 
-\subsection*{Further work}
+\subsection{Further Work}
 \label{sec:further-work}
 
 This paper does not yet consider \emph{combinations} of different
@@ -2369,7 +2369,7 @@ directly, as we have done here. While efficiency was never our primary
 concern, we hope that we might adapt existing solutions to avoid these
 issues~\cite{janis,freer}.
 
-\subsection*{Conclusions}
+\subsection{Conclusions}
 We have presented several small example
 programs and verified their correctness. The aim of these examples is
 to \emph{illustrate} our definitions and \emph{validate} our design
